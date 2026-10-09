@@ -17,6 +17,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "deepeval>=4.2.8",
     "httpx>=0.28.1",
     "pytest>=9.1.1",
     "ruff>=0.16.10",
@@ -32,6 +33,7 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "ANN"]  # ANN: type hints on every signature (CLAUDE.md)
+isort.known-first-party = ["steel", "evals", "tests"]
 ignore = [
     "E501",    # the formatter owns line length
     "ANN401",  # Any is still a type hint; needed for factory **overrides

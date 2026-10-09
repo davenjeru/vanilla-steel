@@ -1,0 +1,8 @@
+{
+  "version": "0",
+  "kind": "extraction",
+  "description": "Customer enquiry emails and attachments with the MaterialSpec a correct extractor must produce.",
+  "changelog": [
+    {"version": "0", "change": "First case: legacy DIN grade St37-2 normalises to S235JR."}
+  ]
+}

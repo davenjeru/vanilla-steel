@@ -8,3 +8,5 @@ data/
 # The global gitignore excludes *.sql; the schema is source code.
 !src/steel/storage/schema.sql
 .claude/worktrees/
+
+.deepeval/

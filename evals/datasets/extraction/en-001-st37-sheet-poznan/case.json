@@ -1,0 +1,21 @@
+{
+  "reason": "Legacy DIN grade must normalise to S235JR; full spec in English",
+  "verified": false,
+  "language": "en",
+  "source": "llm-drafted",
+  "expected_spec": {
+    "grade": "S235JR",
+    "grade_ambiguous": false,
+    "form": "sheet",
+    "thickness_mm": 3,
+    "width_mm": 1500,
+    "length_mm": 3000,
+    "quantity_t": 25,
+    "coating": null,
+    "quality": null,
+    "incoterm": "DAP",
+    "delivery_city": "Poznań",
+    "delivery_country": "PL",
+    "delivery_date": "2026-11-30"
+  }
+}

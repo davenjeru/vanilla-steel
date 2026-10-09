@@ -20,6 +20,9 @@ This plan describes the product side in detail and records evaluation decisions 
 | D8 | Run history and run comparison live in Confident AI; every eval run is uploaded. This replaces the earlier `results/runs.jsonl` and `scripts/compare_runs.py`. Each run is labelled with `hyperparameters` (model, temperature, prompt version/hash) and `identifier` (one string packing git SHA, dataset version, component version). |
 | D9 | The accepted baseline is marked `official=True` on Confident AI **and** written to a committed `evals/baseline.json` (run metadata plus per-case pass/fail) from the same run. The release gate reads only the committed file, so it works offline in CI and reviewers can see it. The README links to or screenshots the Confident AI runs. |
 | D10 | CI needs `CONFIDENT_API_KEY` as a secret to upload runs, but no LLM keys. |
+| D11 | Golden cases are stored one folder per case (`email.txt`, `case.json`, attachments as real files) under `evals/datasets/<dataset>/`, with the dataset version in `manifest.json`. `evals/golden_cases.py` validates on load and builds DeepEval goldens via `Golden(**case.as_golden_fields())`. Git is the source of truth; Confident AI is for viewing results. |
+| D12 | Every case records its `source`: `hand-written`, `llm-drafted` or `production`. |
+| D13 | Slice 4 adds a feedback-loop script: escalated or wrongly handled enquiries become candidate case folders (`verified: false`, `source: production`) with the system's extraction pre-filled for correction. Full production sampling (stratified, PII-scrubbed, tenant-consented) is described in the test strategy as a planned layer; a tenant's enquiry never enters a shared dataset unless anonymised and permitted. |
 
 ## Repo layout
 
