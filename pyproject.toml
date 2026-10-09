@@ -1,0 +1,38 @@
+[project]
+name = "steel"
+version = "0.1.0"
+description = "Replica of a European steel procurement pipeline under test"
+authors = [
+    { name = "davenjeru", email = "41262970+davenjeru@users.noreply.github.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.143.0",
+    "pydantic>=2.14.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.6,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "ruff>=0.16.10",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "--strict-markers"
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "ANN"]  # ANN: type hints on every signature (CLAUDE.md)
+ignore = [
+    "E501",    # the formatter owns line length
+    "ANN401",  # Any is still a type hint; needed for factory **overrides
+]
