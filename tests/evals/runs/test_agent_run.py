@@ -47,6 +47,14 @@ def test_outcome_records_every_trace_event_in_order(rfq_run: SandboxResult) -> N
     assert [step.name for step in outcome.steps] == [event.name for event in rfq_run.run.events]
 
 
+def test_outcome_counts_every_model_call_including_extraction(rfq_run: SandboxResult) -> None:
+    """Cost and latency limits are only as good as this count: each agent turn plus the extraction call."""
+    outcome = agent_outcome(rfq_run)
+    agent_turns = [event for event in rfq_run.run.events if event.kind == "llm_turn"]
+
+    assert (len(outcome.model_calls), outcome.input_tokens()) == (len(agent_turns) + 1, rfq_run.run.total_tokens()[0])
+
+
 def test_outcome_records_what_the_buyer_api_would_show(rfq_run: SandboxResult) -> None:
     """The leak check must scan the buyer's real view, not an internal record that names suppliers."""
     outcome = agent_outcome(rfq_run)

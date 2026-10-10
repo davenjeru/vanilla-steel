@@ -13,6 +13,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from steel.agent.trace import ModelUsage
 from steel.domain.enquiry import Enquiry, EscalationReason, Rfq
 from steel.domain.geography import locate_delivery
 from steel.domain.matching import find_matches
@@ -42,6 +43,7 @@ class ToolContext:
     new_rfq_id: Callable[[], str]
     offered_stock_ids: list[str] = field(default_factory=list)  # from the latest search_stock
     rfq_id: str | None = None
+    model_usage: ModelUsage | None = None  # set by a tool that called a model; the loop records it
 
     def load_enquiry(self) -> Enquiry:
         enquiry = enquiries.get_enquiry(self.connection, self.tenant_id, self.enquiry_id)
@@ -77,6 +79,12 @@ def extract_specs(context: ToolContext, arguments: dict[str, Any]) -> dict[str, 
             enquiry.model_copy(update={"status_history": history, "failure_reason": f"extraction_failed: {error}"})
         )
         raise ToolError("extraction failed; the enquiry is marked failed and needs no further action") from error
+    context.model_usage = ModelUsage(
+        model=result.llm.model,
+        input_tokens=result.llm.input_tokens,
+        output_tokens=result.llm.output_tokens,
+        latency_ms=result.llm.latency_ms,
+    )
     history = advance(enquiry.status_history, EnquiryStatus.EXTRACTED, context.clock())
     extracted = enquiry.model_copy(update={"status_history": history, "spec": result.spec, "warnings": result.warnings})
     context.save_enquiry(extracted)
@@ -133,6 +141,12 @@ def search_stock(context: ToolContext, arguments: dict[str, Any]) -> dict[str, A
     enquiry = context.load_enquiry()
     if enquiry.spec is None:
         raise ToolError("call extract_specs first; stock can only be searched for an extracted spec")
+    differences = _differences_from_extracted(query, enquiry.spec)
+    if differences:
+        raise ToolError(
+            f"pass exactly the spec extract_specs returned; these differ: {'; '.join(differences)}. "
+            "If the extracted spec looks wrong, escalate instead of correcting it."
+        )
     spec = MaterialSpec(**query.model_dump())
     stock = repositories.list_stock(context.connection)
     suppliers = {supplier.id: supplier for supplier in repositories.list_suppliers(context.connection)}
@@ -158,6 +172,22 @@ def search_stock(context: ToolContext, arguments: dict[str, Any]) -> dict[str, A
         "missing_fields": outcome.missing_fields,
         "warnings": outcome.warnings,
     }
+
+
+def _differences_from_extracted(query: SearchStockArguments, extracted: MaterialSpec) -> list[str]:
+    """Finding F-003: extraction is validated and normalised by code (D15), so it is the only source of truth.
+
+    The agent re-added an Incoterm the customer never wrote; the same drift on grade or size
+    would change the offers. Any field added, changed or dropped is refused, not silently
+    corrected, so the drift stays visible in the trace.
+    """
+    sent = query.model_dump(mode="json")
+    stored = extracted.model_dump(mode="json")
+    return [
+        f"{field}: extracted {stored[field]!r}, sent {sent[field]!r}"
+        for field in SearchStockArguments.model_fields
+        if sent[field] != stored[field]
+    ]
 
 
 # create_rfq

@@ -69,9 +69,20 @@ recorded run): metric "Searches with the extracted spec" fails with
 
 **Lesson:** fixing one layer (extraction) is not enough when the next layer
 (the agent) can re-introduce the guess.
-**Proposed fix (not yet made):** `search_stock` refuses arguments that differ from
-the stored extracted spec on any field the agent supplies, so the extracted spec
-is the only source of truth.
+**Fixed (owner chose refuse over silently correcting):** `search_stock` compares every
+argument with the stored extracted spec and refuses anything added, changed or dropped,
+naming each field ("incoterm: extracted None, sent 'DDP'") and telling the agent to
+escalate if the extracted spec looks wrong. Refusing keeps the drift visible in the trace,
+so the metric "Searches with the extracted spec" keeps measuring the model; silently
+correcting would have hidden it. A refused search stores no offers, so `create_rfq`
+cannot act on it. Tool tests: `test_search_adding_a_value_the_customer_never_wrote_is_refused`,
+`..._changing_an_extracted_value_...`, `..._dropping_an_extracted_value_...`,
+`test_refused_search_stores_no_offers`. Two older tool tests sent searches that differed
+from their extraction without meaning to (missing Incoterm; thickness 99 against 15 mm);
+their arrangement now extracts what they search, assertions unchanged.
+**Needs a re-record:** agent-024, and the extraction-case run de-001, change from the
+search step on, because the model now sees the refusal. All other 30 agent cases replay
+unchanged.
 
 ## F-004: Nothing in code stops a second RFQ for a resent enquiry
 

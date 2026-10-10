@@ -3,7 +3,7 @@ from typing import Any, Literal
 
 from deepeval.test_case import LLMTestCase
 
-from evals.metrics.agent.agent_outcome import AgentOutcome, AgentStep
+from evals.metrics.agent.agent_outcome import AgentOutcome, AgentStep, ModelCall
 from evals.metrics.agent.counterfactual_groups import GroupMember
 from evals.runs.shared.golden_cases import AgentExpectations
 from steel.agent.tools import AgentEscalationReason
@@ -102,8 +102,9 @@ def agent_outcome(
     escalation_reason: str | None = None,
     steps: list[AgentStep] | None = None,
     visible_to_buyer: dict[str, Any] | None = None,
+    model_calls: list[ModelCall] | None = None,
 ) -> AgentOutcome:
-    """What the runner records for one run; defaults to a clean RFQ for stk_058."""
+    """What the runner records for one run; defaults to a clean RFQ for stk_058 at today's typical cost."""
     return AgentOutcome(
         enquiry_tenant_id=BUYER_TENANT,
         decision=decision,
@@ -111,7 +112,26 @@ def agent_outcome(
         escalation_reason=escalation_reason,
         steps=rfq_run_steps() if steps is None else steps,
         buyer_view=visible_to_buyer or buyer_view(),
+        model_calls=typical_rfq_model_calls() if model_calls is None else model_calls,
     )
+
+
+HAIKU = "claude-haiku-4-5-20251001"
+
+
+def model_call(input_tokens: int, output_tokens: int, latency_ms: float = 1_500.0, model: str = HAIKU) -> ModelCall:
+    return ModelCall(model=model, input_tokens=input_tokens, output_tokens=output_tokens, latency_ms=latency_ms)
+
+
+def typical_rfq_model_calls() -> list[ModelCall]:
+    """Shaped like a recorded live RFQ run: one extraction call, four agent turns; 11,500 in, 600 out, 7.2 s."""
+    return [
+        model_call(2_200, 270, latency_ms=2_400.0),
+        model_call(2_100, 50, latency_ms=1_300.0),
+        model_call(2_300, 90, latency_ms=1_100.0),
+        model_call(2_400, 90, latency_ms=1_200.0),
+        model_call(2_500, 100, latency_ms=1_200.0),
+    ]
 
 
 def agent_test_case(expected: AgentExpectations, outcome: AgentOutcome) -> LLMTestCase:

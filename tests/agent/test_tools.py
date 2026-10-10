@@ -31,12 +31,13 @@ S355_PLATE_READING = {
     "delivery_city": "Poznań",
     "delivery_country": "PL",
 }
-S355_PLATE_SEARCH = {
+S355_PLATE_SEARCH = {  # exactly what extraction returns for S355_PLATE_READING
     "grade": "S355J2",
     "form": "plate",
     "thickness_mm": 15,
     "width_mm": 1250,
     "quantity_t": 30,
+    "incoterm": "DAP",
     "delivery_city": "Poznań",
     "delivery_country": "PL",
 }
@@ -150,11 +151,48 @@ def test_search_accepts_the_spec_exactly_as_extract_specs_returned_it(seeded_con
 
 
 def test_search_without_offers_leaves_the_enquiry_extracted(seeded_connection: sqlite3.Connection) -> None:
-    context = extracted_context(seeded_connection)
+    context = extracted_context(seeded_connection, S355_PLATE_READING | {"thickness": {"value": 99, "unit": "mm"}})
 
     result = search_stock(context, S355_PLATE_SEARCH | {"thickness_mm": 99})
 
     assert (result["offers"], status_of(seeded_connection)) == ([], EnquiryStatus.EXTRACTED)
+
+
+# search_stock takes the extracted spec unchanged (finding F-003)
+
+
+def test_search_adding_a_value_the_customer_never_wrote_is_refused(seeded_connection: sqlite3.Connection) -> None:
+    """Finding F-003: extraction left the Incoterm empty ("frei Haus" is not one); the agent searched with DDP."""
+    reading_without_incoterm = {key: value for key, value in S355_PLATE_READING.items() if key != "incoterm"}
+    context = extracted_context(seeded_connection, reading_without_incoterm)
+
+    with pytest.raises(ToolError, match="incoterm: extracted None, sent 'DDP'"):
+        search_stock(context, S355_PLATE_SEARCH | {"incoterm": "DDP"})
+
+
+def test_search_changing_an_extracted_value_is_refused(seeded_connection: sqlite3.Connection) -> None:
+    context = extracted_context(seeded_connection)
+
+    with pytest.raises(ToolError, match="grade: extracted 'S355J2', sent 'S355J0'"):
+        search_stock(context, S355_PLATE_SEARCH | {"grade": "S355J0"})
+
+
+def test_search_dropping_an_extracted_value_is_refused(seeded_connection: sqlite3.Connection) -> None:
+    """Dropping hot_rolled would widen the search to cold-rolled steel the customer did not ask for."""
+    context = extracted_context(seeded_connection, S355_PLATE_READING | {"rolling": "hot_rolled"})
+
+    with pytest.raises(ToolError, match="rolling: extracted 'hot_rolled', sent None"):
+        search_stock(context, S355_PLATE_SEARCH)
+
+
+def test_refused_search_stores_no_offers(seeded_connection: sqlite3.Connection) -> None:
+    """A refused search must not leave offers behind that create_rfq would then accept."""
+    context = extracted_context(seeded_connection)
+
+    with pytest.raises(ToolError):
+        search_stock(context, S355_PLATE_SEARCH | {"grade": "S355J0"})
+
+    assert (context.offered_stock_ids, status_of(seeded_connection)) == ([], EnquiryStatus.EXTRACTED)
 
 
 def test_search_results_never_name_a_supplier(seeded_connection: sqlite3.Connection) -> None:

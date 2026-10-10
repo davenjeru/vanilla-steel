@@ -25,6 +25,15 @@ class AgentStep(BaseModel):
     result: dict[str, Any] = {}
 
 
+class ModelCall(BaseModel):
+    """One model call during the run: an agent turn, or the extraction call inside extract_specs."""
+
+    model: str
+    input_tokens: int
+    output_tokens: int
+    latency_ms: float
+
+
 class AgentOutcome(BaseModel):
     """What the agent did with one enquiry. "failed" means the run ended without an RFQ or an escalation."""
 
@@ -34,6 +43,16 @@ class AgentOutcome(BaseModel):
     escalation_reason: str | None = None
     steps: list[AgentStep]
     buyer_view: dict[str, Any]  # the enquiry exactly as the buyer API returns it after the run
+    model_calls: list[ModelCall] = []
+
+    def input_tokens(self) -> int:
+        return sum(call.input_tokens for call in self.model_calls)
+
+    def output_tokens(self) -> int:
+        return sum(call.output_tokens for call in self.model_calls)
+
+    def model_seconds(self) -> float:
+        return sum(call.latency_ms for call in self.model_calls) / 1000
 
     def tool_calls(self) -> list[AgentStep]:
         """Tools the agent chose, in order. System steps (code escalating a stalled run) are not the agent's choice."""

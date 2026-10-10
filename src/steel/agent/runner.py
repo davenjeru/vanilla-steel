@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from steel.agent.tools import TOOLS, ToolContext, ToolError, escalate_enquiry
-from steel.agent.trace import AgentRun, TraceRecorder
+from steel.agent.trace import AgentRun, ModelUsage, TraceRecorder
 from steel.domain.enquiry import Enquiry, EscalationReason
 from steel.domain.models import EnquiryStatus
 from steel.domain.status import advance
@@ -91,6 +91,7 @@ def _request(model: str, messages: list[dict[str, Any]]) -> ConversationRequest:
 def _run_tool(context: ToolContext, use: ToolUse, recorder: TraceRecorder) -> dict[str, Any]:
     """Run one tool call and return the tool_result block for the model. Refusals are errors, not crashes."""
     started = time.perf_counter()
+    context.model_usage = None
     try:
         tool = TOOLS.get(use.name)
         if tool is None:
@@ -99,8 +100,28 @@ def _run_tool(context: ToolContext, use: ToolUse, recorder: TraceRecorder) -> di
     except ToolError as refusal:
         result, is_error = {"error": str(refusal)}, True
     latency_ms = round((time.perf_counter() - started) * 1000, 1)
-    recorder.record("tool_call", use.name, arguments=use.input, result=result, is_error=is_error, latency_ms=latency_ms)
+    recorder.record(
+        "tool_call",
+        use.name,
+        arguments=use.input,
+        result=result,
+        is_error=is_error,
+        latency_ms=latency_ms,
+        **_model_usage_fields(context.model_usage),
+    )
     return {"type": "tool_result", "tool_use_id": use.id, "content": json.dumps(result), "is_error": is_error}
+
+
+def _model_usage_fields(usage: ModelUsage | None) -> dict[str, Any]:
+    """Trace fields for a model the tool called itself; none for tools that call no model."""
+    if usage is None:
+        return {}
+    return {
+        "model": usage.model,
+        "input_tokens": usage.input_tokens,
+        "output_tokens": usage.output_tokens,
+        "model_latency_ms": usage.latency_ms,
+    }
 
 
 def _fail(context: ToolContext, reason: str, recorder: TraceRecorder) -> None:

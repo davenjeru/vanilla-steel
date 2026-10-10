@@ -24,7 +24,7 @@ from collections.abc import Callable
 from typing import Any, Literal
 
 from deepeval.dataset import EvaluationDataset, Golden
-from deepeval.metrics import AgentLoopDetectionMetric, ToolCorrectnessMetric
+from deepeval.metrics import AgentLoopDetectionMetric, BaseMetric, ToolCorrectnessMetric
 from deepeval.test_case import ToolCall
 from deepeval.tracing import (
     current_span_context,
@@ -36,12 +36,15 @@ from deepeval.tracing import (
 )
 
 from evals.metrics.agent.acts_only_for_its_own_tenant import ActsOnlyForItsOwnTenant
-from evals.metrics.agent.agent_outcome import AgentOutcome, AgentStep
+from evals.metrics.agent.agent_outcome import AgentOutcome, AgentStep, ModelCall
 from evals.metrics.agent.calls_no_forbidden_tool import CallsNoForbiddenTool
 from evals.metrics.agent.counterfactual_groups import GroupMember, GroupVerdict, judge_counterfactual_groups
+from evals.metrics.agent.latency import LatencyVerdict, judge_latency
 from evals.metrics.agent.reaches_the_right_decision import ReachesTheRightDecision
 from evals.metrics.agent.reveals_no_supplier_to_the_buyer import RevealsNoSupplierToTheBuyer
 from evals.metrics.agent.searches_with_the_extracted_spec import SearchesWithTheExtractedSpec
+from evals.metrics.agent.stays_within_the_cost_limit import StaysWithinTheCostLimit
+from evals.metrics.agent.stays_within_the_token_budget import StaysWithinTheTokenBudget
 from evals.runs.shared.golden_cases import DATASETS_DIR, GoldenCase, load_dataset, load_manifest
 from evals.runs.shared.run_labels import current_git_revision, run_identifier
 from steel.agent.runner import MAX_TURNS, PROMPT_VERSION
@@ -130,6 +133,24 @@ def agent_outcome(result: SandboxResult) -> AgentOutcome:
             for event in result.run.events
         ],
         buyer_view=EnquiryOut.from_enquiry(result.enquiry).model_dump(mode="json"),
+        model_calls=model_calls(result.run.events),
+    )
+
+
+def model_calls(events: list[TraceEvent]) -> list[ModelCall]:
+    """Every model call: agent turns, and the calls tools make themselves (extract_specs' extraction)."""
+    calls = []
+    for event in events:
+        if event.kind == "llm_turn":
+            calls.append(_model_call(event.name, event, event.latency_ms))
+        elif event.model is not None:
+            calls.append(_model_call(event.model, event, event.model_latency_ms))
+    return calls
+
+
+def _model_call(model: str, event: TraceEvent, latency_ms: float) -> ModelCall:
+    return ModelCall(
+        model=model, input_tokens=event.input_tokens, output_tokens=event.output_tokens, latency_ms=latency_ms
     )
 
 
@@ -274,15 +295,7 @@ def main() -> None:
     dataset = EvaluationDataset(goldens=[Golden(**case.as_golden_fields()) for case in cases if case.name in results])
 
     for golden in dataset.evals_iterator(
-        metrics=[
-            ReachesTheRightDecision(),
-            ToolCorrectnessMetric(should_exact_match=True, threshold=1.0),
-            CallsNoForbiddenTool(),
-            SearchesWithTheExtractedSpec(),
-            ActsOnlyForItsOwnTenant(),
-            RevealsNoSupplierToTheBuyer(),
-            AgentLoopDetectionMetric(threshold=1.0),
-        ],
+        metrics=agent_metrics(),
         hyperparameters={
             "model": SETTINGS.agent_model,
             "extraction_model": SETTINGS.extraction_model,
@@ -295,6 +308,31 @@ def main() -> None:
         trace_agent_run(golden, results[golden.name])
 
     print_counterfactual_report(judge_counterfactual_groups(group_members(cases, results)))
+    print_latency_report(judge_latency(model_seconds_by_case(results), live))
+
+
+def agent_metrics() -> list[BaseMetric]:
+    """Per-case metrics, all deterministic: none calls a judge model."""
+    return [
+        ReachesTheRightDecision(),
+        ToolCorrectnessMetric(should_exact_match=True, threshold=1.0),
+        CallsNoForbiddenTool(),
+        SearchesWithTheExtractedSpec(),
+        ActsOnlyForItsOwnTenant(),
+        RevealsNoSupplierToTheBuyer(),
+        AgentLoopDetectionMetric(threshold=1.0),
+        StaysWithinTheTokenBudget(),
+        StaysWithinTheCostLimit(),
+    ]
+
+
+def model_seconds_by_case(results: dict[str, SandboxResult]) -> dict[str, float]:
+    return {name: agent_outcome(result).model_seconds() for name, result in results.items()}
+
+
+def print_latency_report(verdict: LatencyVerdict) -> None:
+    """Printed, not uploaded: a run-wide check, read later by the release gate."""
+    print(f"\nLatency: model time per enquiry\n  {verdict.verdict.upper():<9} {verdict.reason}")
 
 
 def group_members(cases: list[GoldenCase], results: dict[str, SandboxResult]) -> list[GroupMember]:

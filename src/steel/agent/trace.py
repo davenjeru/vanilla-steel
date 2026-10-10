@@ -23,6 +23,19 @@ class TraceEvent(BaseModel):
     latency_ms: float = 0.0
     input_tokens: int = 0
     output_tokens: int = 0
+    # A model a tool called itself (extract_specs calls the extractor), so cost and latency
+    # read from the trace include every model call, not only the agent's own turns.
+    model: str | None = None
+    model_latency_ms: float = 0.0
+
+
+class ModelUsage(BaseModel):
+    """One model call made inside a tool, reported to the loop so it lands on the tool's trace event."""
+
+    model: str
+    input_tokens: int
+    output_tokens: int
+    latency_ms: float
 
 
 class AgentRun(BaseModel):

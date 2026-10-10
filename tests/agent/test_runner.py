@@ -111,6 +111,32 @@ def test_trace_records_arguments_results_and_token_use(seeded_connection: sqlite
     assert agent_run.total_tokens()[0] > 0
 
 
+def test_trace_records_the_extraction_call_made_inside_extract_specs(seeded_connection: sqlite3.Connection) -> None:
+    """Without it the trace under-counted every enquiry by the extraction call (about 2.2k tokens, 2.5 s live),
+    so cost and latency checks read from the trace would pass on numbers that were too low."""
+    stored_enquiry(seeded_connection)
+
+    agent_run = run(seeded_connection, FakeLLMClient(output=S355_PLATE_READING))
+    [extraction] = [event for event in agent_run.tool_calls() if event.name == "extract_specs"]
+
+    # FakeLLMClient answers extraction with 120 tokens in, 40 out, 850 ms (tests/factories/llm.py).
+    assert (extraction.model, extraction.input_tokens, extraction.output_tokens, extraction.model_latency_ms) == (
+        "claude-test-model",
+        120,
+        40,
+        850.0,
+    )
+
+
+def test_tools_that_call_no_model_record_no_model_use(seeded_connection: sqlite3.Connection) -> None:
+    stored_enquiry(seeded_connection)
+
+    agent_run = run(seeded_connection, FakeLLMClient(output=S355_PLATE_READING))
+    [search] = [event for event in agent_run.tool_calls() if event.name == "search_stock"]
+
+    assert (search.model, search.input_tokens, search.model_latency_ms) == (None, 0, 0.0)
+
+
 def test_trace_events_are_numbered_in_order(seeded_connection: sqlite3.Connection) -> None:
     stored_enquiry(seeded_connection)
 
