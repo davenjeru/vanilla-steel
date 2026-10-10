@@ -271,7 +271,7 @@
       },
       {
         "type": "tool_use",
-        "id": "toolu_01B99qsmemtye2c4VP6yz2ia",
+        "id": "toolu_01AEDnVPtRgBrxt5Lfg6jyyg",
         "name": "extract_specs",
         "input": {}
       }
@@ -280,6 +280,6 @@
     "model": "claude-haiku-4-5-20251001",
     "input_tokens": 2118,
     "output_tokens": 68,
-    "latency_ms": 1282.5
+    "latency_ms": 1279.2
   }
 }

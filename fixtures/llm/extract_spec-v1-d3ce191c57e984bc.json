@@ -251,6 +251,6 @@
     "model": "claude-haiku-4-5-20251001",
     "input_tokens": 2123,
     "output_tokens": 201,
-    "latency_ms": 1535.1
+    "latency_ms": 1580.8
   }
 }
