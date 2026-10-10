@@ -23,7 +23,7 @@ from steel.llm.replay import ReplayLLMClient
 from steel.settings import Settings
 
 DATASET = "extraction"
-COMPONENT_VERSION = "extractor-v2"  # v2: incoterm evidence check
+COMPONENT_VERSION = "extractor-v3"  # v2: incoterm evidence check; v3: conflicts left empty (F-008), fence (F-009)
 SETTINGS = Settings()
 
 

@@ -1,9 +1,10 @@
 {
-  "version": "1",
+  "version": "2",
   "kind": "extraction",
   "description": "Customer enquiry emails and attachments with the MaterialSpec a correct extractor must produce.",
   "changelog": [
     {"version": "0", "change": "First case: legacy DIN grade St37-2 normalises to S235JR."},
-    {"version": "1", "change": "Added 8 hard cases (llm-drafted, unverified): German decimal comma and exonym, Polish units and declined city, ambiguous grade S355, missing incoterm and date, German thousands dot in kg, Excel-only order, prompt injection, relative date."}
+    {"version": "1", "change": "Added 8 hard cases (llm-drafted, unverified): German decimal comma and exonym, Polish units and declined city, ambiguous grade S355, missing incoterm and date, German thousands dot in kg, Excel-only order, prompt injection, relative date."},
+    {"version": "2", "change": "Added en-006: subject and body give different quantities, so quantity must stay empty (finding F-008); prompt v2 reports conflicts."}
   ]
 }

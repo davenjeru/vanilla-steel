@@ -13,6 +13,7 @@ from typing import Any
 from steel.agent.tools import TOOLS, ToolContext, ToolError, escalate_enquiry
 from steel.agent.trace import AgentRun, ModelUsage, TraceRecorder
 from steel.domain.enquiry import Enquiry, EscalationReason
+from steel.domain.injection import remove_boundary_tags
 from steel.domain.models import EnquiryStatus
 from steel.domain.status import advance
 from steel.llm.client import ConversationRequest, LLMError, ToolUse
@@ -70,10 +71,12 @@ def run_agent(context: ToolContext, model: str) -> AgentRun:
 def opening_message(context: ToolContext, enquiry: Enquiry) -> str:
     attachments = enquiries.list_attachments(context.connection, context.tenant_id, enquiry.id)
     attachment_note = ", ".join(item.filename for item in attachments) or "none"
+    # Subject, body and file names are written by the customer, so none of them may close the fence (F-009).
+    customer_text = remove_boundary_tags(f"Subject: {enquiry.subject}\n\n{enquiry.body}")
     return (
         f"Handle enquiry {enquiry.id}.\n"
-        f"<enquiry>\nSubject: {enquiry.subject}\n\n{enquiry.body}\n</enquiry>\n"
-        f"Attachments (extract_specs reads them): {attachment_note}"
+        f"<enquiry>\n{customer_text}\n</enquiry>\n"
+        f"Attachments (extract_specs reads them): {remove_boundary_tags(attachment_note)}"
     )
 
 

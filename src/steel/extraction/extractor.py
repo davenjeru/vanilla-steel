@@ -4,15 +4,17 @@ from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
 
+from steel.domain.injection import remove_boundary_tags
 from steel.domain.models import MaterialSpec
 from steel.extraction.attachments import Attachment, UnsupportedAttachment, attachment_as_text
+from steel.extraction.conflicts import drop_conflicting_fields
 from steel.extraction.evidence import drop_unstated_claims
 from steel.extraction.normalise import normalise_spec
 from steel.extraction.raw_spec import RawSpec
 from steel.llm.client import LLMClient, LLMError, LLMRequest, LLMResponse
 
 PROMPT_ID = "extract_spec"
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"  # v2: reports conflicting values (finding F-008)
 PROMPT_PATH = Path(__file__).parent / "prompts" / f"{PROMPT_ID}_{PROMPT_VERSION}.md"
 OUTPUT_NAME = "record_spec"
 
@@ -52,7 +54,8 @@ def extract_spec(document: EnquiryDocument, llm: LLMClient, model: str) -> Extra
     response = llm.complete(request)
     raw = _parse_raw_spec(response)
     supported = drop_unstated_claims(raw, enquiry_text=request.user, warnings=warnings)
-    normalised = normalise_spec(supported)
+    unambiguous = drop_conflicting_fields(supported, warnings)
+    normalised = normalise_spec(unambiguous)
     return ExtractionResult(spec=normalised.spec, raw=raw, warnings=warnings + normalised.warnings, llm=response)
 
 
@@ -90,7 +93,7 @@ def _enquiry_message(document: EnquiryDocument, warnings: list[str]) -> str:
             parts.append(attachment_as_text(attachment))
         except UnsupportedAttachment as error:
             warnings.append(f"attachment skipped: {error}")
-    return "<enquiry>\n" + "\n\n".join(parts) + "\n</enquiry>"
+    return "<enquiry>\n" + remove_boundary_tags("\n\n".join(parts)) + "\n</enquiry>"
 
 
 def _parse_raw_spec(response: LLMResponse) -> RawSpec:

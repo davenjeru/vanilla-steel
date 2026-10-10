@@ -5,6 +5,7 @@ codes are normalised afterwards by deterministic code that unit tests cover.
 """
 
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -14,6 +15,31 @@ from steel.domain.models import Incoterm, ProductForm, Quality, Rolling
 class Measurement(BaseModel):
     value: float = Field(gt=0)
     unit: str = Field(description="As written, e.g. mm, cm, t, kg, Tonnen")
+
+
+# The RawSpec fields an enquiry can state twice with different values.
+ConflictingField = Literal[
+    "grade_written",
+    "form",
+    "rolling",
+    "quality",
+    "coating",
+    "thickness",
+    "width",
+    "length",
+    "quantity",
+    "incoterm",
+    "delivery_city",
+    "delivery_country",
+    "delivery_date",
+]
+
+
+class Conflict(BaseModel):
+    """The enquiry states one field twice with different values, e.g. subject 25 t, body 30 t (finding F-008)."""
+
+    field: ConflictingField
+    values: list[str] = Field(min_length=2, description="Each different value as written, e.g. ['25 t', '30 t']")
 
 
 class RawSpec(BaseModel):
@@ -30,3 +56,7 @@ class RawSpec(BaseModel):
     delivery_city: str | None = Field(default=None, description="Official local name, e.g. Poznań for Posen")
     delivery_country: str | None = Field(default=None, description="ISO 3166-1 alpha-2 code, e.g. PL")
     delivery_date: date | None = Field(default=None, description="Latest acceptable delivery date")
+    conflicts: list[Conflict] = Field(
+        default=[],
+        description="Fields stated with different values in different places; do not choose between them",
+    )

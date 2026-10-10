@@ -78,6 +78,13 @@ def suspicious_content_warning(signal: InjectionSignal) -> str:
     return f"{SUSPICIOUS_CONTENT_WARNING}: {signal.kind}"
 
 
+def remove_boundary_tags(customer_text: str) -> str:
+    """Finding F-009: an email writing </enquiry> closed the fence around customer data early, so the text
+    after it reached the model as if it were ours. Customer text is cleaned before it is fenced; the scan
+    for instruction-like text still reads the original, so the attempt is flagged all the same."""
+    return ENQUIRY_BOUNDARY_TAG.sub("[enquiry tag removed]", customer_text)
+
+
 def _tool_name_pattern(tool_names: Iterable[str]) -> re.Pattern[str]:
     return re.compile(r"\b(?:" + "|".join(re.escape(name) for name in tool_names) + r")\b", re.IGNORECASE)
 

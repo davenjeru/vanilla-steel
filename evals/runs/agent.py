@@ -62,7 +62,7 @@ from steel.sandbox import SandboxResult, handle_in_sandbox
 from steel.settings import Settings
 
 DATASET = "agent"
-COMPONENT_VERSION = "agent-v1"
+COMPONENT_VERSION = "agent-v2"  # v2: code safety nets for F-002, F-003, F-004, F-009; extraction v3
 SETTINGS = Settings()
 
 

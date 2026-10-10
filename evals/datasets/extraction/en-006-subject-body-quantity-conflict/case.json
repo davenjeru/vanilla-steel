@@ -1,0 +1,22 @@
+{
+  "reason": "Finding F-008 at the layer where it starts: the subject says 25 t, the body 30 t. Choosing either could order the wrong amount, so quantity must stay null (with a 'conflicting quantity' warning) and every other field is read as usual. Same email as agent case agent-022.",
+  "verified": false,
+  "language": "en",
+  "source": "llm-drafted",
+  "expected_spec": {
+    "grade": "S355J2",
+    "grade_ambiguous": false,
+    "form": "plate",
+    "rolling": null,
+    "quality": null,
+    "coating": null,
+    "thickness_mm": 15,
+    "width_mm": 1250,
+    "length_mm": null,
+    "quantity_t": null,
+    "incoterm": "DAP",
+    "delivery_city": "Poznań",
+    "delivery_country": "PL",
+    "delivery_date": null
+  }
+}
