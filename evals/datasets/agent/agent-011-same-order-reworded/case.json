@@ -19,7 +19,6 @@
       "create_rfq"
     ]
   },
-  "known_limitation": "Reworded duplicates need near-duplicate detection (Slice 3).",
   "earlier_enquiries": [
     {
       "tenant": "same",

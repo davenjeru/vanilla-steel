@@ -43,6 +43,9 @@ class EnquiryOut(BaseModel):
         description="Stock lots meeting every requirement. Which suppliers and at what cost stays internal."
     )
     quote_id: str | None = Field(default=None, description="Where to read the quote, once the enquiry is quoted")
+    duplicate_of: str | None = Field(
+        default=None, description="Your earlier enquiry this one repeats; that enquiry carries the order"
+    )
     created_at: datetime
 
     @classmethod
@@ -57,6 +60,7 @@ class EnquiryOut(BaseModel):
             escalation_reason=enquiry.escalation_reason,
             offers_available=len(enquiry.matches),
             quote_id=quote_id,
+            duplicate_of=enquiry.duplicate_of,
             created_at=enquiry.created_at,
         )
 

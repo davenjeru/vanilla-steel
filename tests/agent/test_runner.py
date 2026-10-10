@@ -130,6 +130,23 @@ def test_resent_enquiry_escalates_as_duplicate_without_an_rfq(seeded_connection:
     assert enquiry is not None and enquiry.escalation_reason == "duplicate"
 
 
+def test_reworded_resend_escalates_as_duplicate_without_an_rfq(seeded_connection: sqlite3.Connection) -> None:
+    """Duplication (D36): the first enquiry was quoted; the same order in new words must not become a second RFQ."""
+    stored_enquiry(seeded_connection, enquiry_id="enq_0001")
+    run(seeded_connection, FakeLLMClient(output=S355_PLATE_READING), enquiry_id="enq_0001")
+    stored_enquiry(
+        seeded_connection,
+        enquiry_id="enq_0002",
+        subject="Plates S355J2",
+        body="Dear team, kindly send an offer for S355J2 plates 15x1250mm, 30 tonnes, DAP Poznań.",
+    )
+
+    second = run(seeded_connection, FakeLLMClient(output=S355_PLATE_READING), enquiry_id="enq_0002")
+
+    assert "create_rfq" not in tool_path(second)
+    assert rfqs.get_rfq_for_enquiry(seeded_connection, "tnt_bauer", "enq_0002") is None
+
+
 # The trace
 
 

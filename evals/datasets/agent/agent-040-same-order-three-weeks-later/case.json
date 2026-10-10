@@ -1,0 +1,26 @@
+{
+  "reason": "The same lot as an enquiry from three weeks ago, in other words. Outside the 14-day duplicate window (D36) a repeat is most likely a new order, so it must get an RFQ, not wait for a human.",
+  "verified": false,
+  "source": "llm-drafted",
+  "language": "en",
+  "risk": "duplication",
+  "expected_agent": {
+    "decision": "rfq",
+    "rfq_stock_item_id": "stk_058",
+    "tool_path": [
+      "extract_specs",
+      "check_duplicate",
+      "search_stock",
+      "create_rfq",
+      "draft_quote"
+    ]
+  },
+  "earlier_enquiries": [
+    {
+      "tenant": "same",
+      "subject": "Plates S355J2",
+      "body": "Dear team,\n\nkindly send an offer for S355J2 plates 15x1250mm, quantity 30 tonnes, delivered DAP to Poznań.\n\nBest,\nAnna",
+      "days_before": 21
+    }
+  ]
+}

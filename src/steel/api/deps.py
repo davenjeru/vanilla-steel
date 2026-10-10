@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import Depends, Header, HTTPException, Request
 
 from steel.domain.models import Tenant
-from steel.storage import repositories
+from steel.storage import api_keys
 from steel.storage.db import connect
 
 
@@ -22,15 +22,14 @@ def database_connection(request: Request) -> Iterator[sqlite3.Connection]:
 Connection = Annotated[sqlite3.Connection, Depends(database_connection)]
 
 
-def current_tenant(connection: Connection, x_tenant_id: Annotated[str | None, Header()] = None) -> Tenant:
-    """Temporary: Slice 3 replaces this header with per-tenant API keys.
+def current_tenant(connection: Connection, x_api_key: Annotated[str | None, Header()] = None) -> Tenant:
+    """The caller's tenant comes from its API key alone; no header can name a tenant directly.
 
-    An unknown tenant gets the same answer as a missing one, so the API
-    does not reveal which tenant IDs exist.
+    An unknown key gets the same answer as a missing one, so the API reveals nothing about which keys exist.
     """
-    tenant = repositories.get_tenant(connection, x_tenant_id) if x_tenant_id else None
+    tenant = api_keys.find_tenant_by_api_key(connection, x_api_key) if x_api_key else None
     if tenant is None:
-        raise api_error(401, "UNKNOWN_TENANT", "send a known tenant ID in the X-Tenant-ID header")
+        raise api_error(401, "INVALID_API_KEY", "send your API key in the X-API-Key header")
     return tenant
 
 

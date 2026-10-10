@@ -1,9 +1,11 @@
 import base64
 from typing import Any
 
-# Temporary tenant header until Slice 3 introduces API keys.
-BAUER = {"X-Tenant-ID": "tnt_bauer"}
-KOWALSKI = {"X-Tenant-ID": "tnt_kowalski"}
+from steel.storage.seed import DEVELOPMENT_API_KEYS
+
+# Each tenant calls the API with its own key; the key alone decides the tenant.
+BAUER = {"X-API-Key": DEVELOPMENT_API_KEYS["tnt_bauer"]}
+KOWALSKI = {"X-API-Key": DEVELOPMENT_API_KEYS["tnt_kowalski"]}
 
 
 def enquiry_payload(**overrides: Any) -> dict[str, Any]:

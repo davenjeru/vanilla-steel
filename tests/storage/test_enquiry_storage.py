@@ -20,7 +20,7 @@ def bauer_enquiry() -> Enquiry:
         sender="anna@bauer-metallbau.example",
         subject="Enquiry",
         body="25 t St37-2",
-        fingerprint=enquiry_fingerprint("Enquiry", "25 t St37-2"),
+        fingerprint=enquiry_fingerprint("Enquiry", "25 t St37-2", []),
         status_history=start_history(FIXED_NOW),
         created_at=FIXED_NOW,
     )

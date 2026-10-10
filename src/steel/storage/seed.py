@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from steel.domain.models import ProductForm, Quality, Rolling, StockItem, Supplier, Tenant
-from steel.storage import repositories
+from steel.storage import api_keys, repositories
 
 DEFAULT_SEED = 20261009
 STOCK_ITEM_COUNT = 150
@@ -20,6 +20,14 @@ TENANTS = [
     Tenant(id="tnt_kowalski", name="Kowalski Konstrukcje Sp. z o.o.", country="PL"),
     Tenant(id="tnt_vandijk", name="Van Dijk Engineering B.V.", country="NL"),
 ]
+
+# Development and test keys only, published here on purpose so tests and local runs can call the API.
+# A real deployment issues each tenant a random key and stores only its hash.
+DEVELOPMENT_API_KEYS = {
+    "tnt_bauer": "dev-key-bauer-0c1f6a",
+    "tnt_kowalski": "dev-key-kowalski-7d2e9b",
+    "tnt_vandijk": "dev-key-vandijk-3a8c41",
+}
 
 # Supplier names are fictional. Cities are real steel locations, so distances are realistic.
 SUPPLIERS = [
@@ -154,5 +162,7 @@ def _price(rng: random.Random, profile: GradeProfile, quality: Quality) -> Decim
 def seed_database(connection: sqlite3.Connection, seed: int = DEFAULT_SEED) -> None:
     with connection:
         repositories.insert_tenants(connection, TENANTS)
+        for tenant_id, api_key in DEVELOPMENT_API_KEYS.items():
+            api_keys.insert_api_key(connection, tenant_id, api_key)
         repositories.insert_suppliers(connection, SUPPLIERS)
         repositories.insert_stock(connection, build_stock(seed))

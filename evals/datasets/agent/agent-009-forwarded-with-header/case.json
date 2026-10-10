@@ -19,7 +19,6 @@
       "create_rfq"
     ]
   },
-  "known_limitation": "Exact fingerprints miss forwards that add a header block; near-duplicate detection is Slice 3.",
   "earlier_enquiries": [
     {
       "tenant": "same",

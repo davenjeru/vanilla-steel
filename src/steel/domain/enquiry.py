@@ -40,6 +40,7 @@ class Enquiry(BaseModel):
     escalation_reason: EscalationReason | None = None
     escalation_detail: str | None = None
     language: str | None = None  # ISO 639-1, from extraction; the quote letter is written in it
+    duplicate_of: str | None = None  # the same tenant's earlier enquiry this one repeats (D36)
     created_at: datetime
 
     @property

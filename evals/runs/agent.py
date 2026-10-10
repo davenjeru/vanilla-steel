@@ -57,6 +57,7 @@ from steel.agent.runner import MAX_TURNS, PROMPT_VERSION
 from steel.agent.tools import TOOLS
 from steel.agent.trace import TraceEvent
 from steel.api.schemas import BuyerQuote, EnquiryOut
+from steel.domain.duplicates import DUPLICATE_WINDOW
 from steel.domain.enquiry import Enquiry
 from steel.domain.models import EnquiryStatus
 from steel.extraction.extractor import EnquiryDocument
@@ -255,9 +256,12 @@ def trace_tool_call(event: TraceEvent, enquiry: Enquiry) -> dict[str, Any]:
 def _context_supplied_by_code(event: TraceEvent, enquiry: Enquiry) -> dict[str, str]:
     context = {"tenant_id": event.tenant_id, "enquiry_id": enquiry.id}
     if event.name == "check_duplicate":
-        # What the duplicate check compared: this fingerprint against the tenant's earlier enquiries (D26).
+        # What the duplicate check compared against the tenant's earlier enquiries (D26, D36).
         context["fingerprint"] = enquiry.fingerprint
-        context["compared_with"] = f"earlier enquiries of {event.tenant_id} with the same fingerprint"
+        context["compared_with"] = (
+            f"earlier enquiries of {event.tenant_id} with the same fingerprint,"
+            f" or the same extracted order received within {DUPLICATE_WINDOW.days} days"
+        )
     return context
 
 

@@ -51,7 +51,7 @@ def receive_enquiry(pipeline: Pipeline, tenant_id: str, submission: EnquirySubmi
         sender=submission.sender,
         subject=submission.subject,
         body=submission.body,
-        fingerprint=enquiry_fingerprint(submission.subject, submission.body),
+        fingerprint=enquiry_fingerprint(submission.subject, submission.body, submission.attachments),
         status_history=start_history(received_at),
         created_at=received_at,
     )

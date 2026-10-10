@@ -20,7 +20,6 @@
       "create_rfq"
     ]
   },
-  "known_limitation": "A follow-up quoting the original is not an exact duplicate; detecting it is Slice 3.",
   "earlier_enquiries": [
     {
       "tenant": "same",

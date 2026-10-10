@@ -18,6 +18,7 @@
             email.txt                the email exactly as received
             case.json                reason, verified, source, language, risk, expected_agent,
                                      optionally earlier_enquiries, counterfactual_group, known_limitation
+            earlier/                 optional: attachments of earlier enquiries, named in their labels
             <anything else>          attachments
 
 Everything is validated on load. Pydantic forbids unknown fields, so a typo
@@ -46,6 +47,7 @@ DATASETS_DIR = REPO_ROOT / "evals" / "datasets"
 MANIFEST_FILE = "manifest.json"
 CASE_FILE = "case.json"
 EMAIL_FILE = "email.txt"
+EARLIER_DIR = "earlier"  # attachments of earlier enquiries; never attached to the email under test
 EXTRACTION_NAME_PATTERN = re.compile(r"^(?P<language>[a-z]{2})-\d{3}-[a-z0-9-]+$")
 MATCHING_NAME_PATTERN = re.compile(r"^match-\d{3}-[a-z0-9-]+$")
 AGENT_NAME_PATTERN = re.compile(r"^agent-\d{3}-[a-z0-9-]+$")
@@ -94,6 +96,8 @@ class EarlierEnquiryLabel(BaseModel):
     tenant: Literal["same", "other"]
     subject: str = Field(min_length=1)
     body: str = Field(min_length=1)
+    attachments: list[str] = Field(default=[], description=f"file names in the case's {EARLIER_DIR}/ folder")
+    days_before: int = Field(default=0, ge=0, description="received this many days before the email under test")
 
 
 class AgentExpectations(BaseModel):
@@ -177,6 +181,7 @@ class GoldenCase(BaseModel):
     email: str | None  # extraction and agent cases
     attachments: list[Path]
     labels: CaseLabels
+    directory: Path
 
     @property
     def counts_toward_gate(self) -> bool:
@@ -187,20 +192,19 @@ class GoldenCase(BaseModel):
         """The case's earlier enquiries, with "same" and "other" turned into the sandbox's tenants."""
         tenants = {"same": SANDBOX_TENANT, "other": OTHER_TENANT}
         return [
-            EarlierEnquiry(tenant_id=tenants[earlier.tenant], subject=earlier.subject, body=earlier.body)
+            EarlierEnquiry(
+                tenant_id=tenants[earlier.tenant],
+                subject=earlier.subject,
+                body=earlier.body,
+                attachments=[_read_attachment(self.directory / EARLIER_DIR / name) for name in earlier.attachments],
+                days_before=earlier.days_before,
+            )
             for earlier in self.labels.earlier_enquiries or []
         ]
 
     def load_attachments(self) -> list[Attachment]:
         """The case's attachment files, ready to pass to the extractor."""
-        return [
-            Attachment(
-                filename=path.name,
-                content_type=mimetypes.guess_type(path.name)[0] or "application/octet-stream",
-                content=path.read_bytes(),
-            )
-            for path in self.attachments
-        ]
+        return [_read_attachment(path) for path in self.attachments]
 
     def as_golden_fields(self) -> dict[str, Any]:
         """Keyword arguments for deepeval's Golden: Golden(**case.as_golden_fields()).
@@ -298,6 +302,7 @@ def load_case(case_dir: Path, manifest: DatasetManifest) -> GoldenCase:
         email=email,
         attachments=_attachments(case_dir),
         labels=labels,
+        directory=case_dir,
     )
 
 
@@ -373,6 +378,14 @@ def _validate_agent_case(case_dir: Path, labels: CaseLabels) -> None:
     expected = labels.expected_agent
     if expected is not None and expected.rfq_stock_item_id is not None:
         _require_consistent_offer_labels(case_dir, [expected.rfq_stock_item_id], [])
+    _require_earlier_attachments_exist(case_dir, labels)
+
+
+def _require_earlier_attachments_exist(case_dir: Path, labels: CaseLabels) -> None:
+    for earlier in labels.earlier_enquiries or []:
+        for name in earlier.attachments:
+            if not (case_dir / EARLIER_DIR / name).is_file():
+                raise InvalidGoldenCase(f"{case_dir}: earlier enquiry attachment {EARLIER_DIR}/{name} does not exist")
 
 
 # Quote-letter cases
@@ -420,6 +433,14 @@ def _require_material_spec(case_dir: Path, label: str, spec: dict[str, Any]) -> 
         MaterialSpec(**spec)
     except ValidationError as error:
         raise InvalidGoldenCase(f"{case_dir}: {label} is not a valid MaterialSpec: {error}") from error
+
+
+def _read_attachment(path: Path) -> Attachment:
+    return Attachment(
+        filename=path.name,
+        content_type=mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+        content=path.read_bytes(),
+    )
 
 
 def _attachments(case_dir: Path) -> list[Path]:

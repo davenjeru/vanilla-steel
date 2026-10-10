@@ -183,7 +183,10 @@ def test_confident_ai_shows_what_the_duplicate_check_compared(
             "tenant_id": "tnt_bauer",
             "enquiry_id": rfq_run.enquiry.id,
             "fingerprint": rfq_run.enquiry.fingerprint,
-            "compared_with": "earlier enquiries of tnt_bauer with the same fingerprint",
+            "compared_with": (
+                "earlier enquiries of tnt_bauer with the same fingerprint,"
+                " or the same extracted order received within 14 days"
+            ),
         },
     )
 

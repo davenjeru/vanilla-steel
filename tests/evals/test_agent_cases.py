@@ -140,6 +140,40 @@ def test_rejects_agent_folder_name_without_the_agent_prefix(agent_dataset_dir: P
         load_dataset(agent_dataset_dir)
 
 
+def test_earlier_enquiry_attachments_come_from_the_earlier_folder(agent_dataset_dir: Path) -> None:
+    """Last week's spreadsheet belongs to last week's enquiry only, never to the email under test."""
+    earlier = [{"tenant": "same", "subject": "Weekly order", "body": "See attached.", "attachments": ["week-40.csv"]}]
+    case_dir = write_agent_case(agent_dataset_dir, earlier_enquiries=earlier)
+    (case_dir / "earlier").mkdir()
+    (case_dir / "earlier" / "week-40.csv").write_bytes(b"S235JR;sheet;3;1500;25")
+
+    [case] = load_dataset(agent_dataset_dir)
+    [on_file] = case.earlier_enquiries_for_sandbox()
+
+    assert [(item.filename, item.content) for item in on_file.attachments] == [
+        ("week-40.csv", b"S235JR;sheet;3;1500;25")
+    ]
+    assert case.load_attachments() == []
+
+
+def test_rejects_earlier_attachment_that_is_not_in_the_earlier_folder(agent_dataset_dir: Path) -> None:
+    earlier = [{"tenant": "same", "subject": "Weekly order", "body": "See attached.", "attachments": ["missing.csv"]}]
+    write_agent_case(agent_dataset_dir, earlier_enquiries=earlier)
+
+    with pytest.raises(InvalidGoldenCase, match="missing.csv"):
+        load_dataset(agent_dataset_dir)
+
+
+def test_earlier_enquiry_can_be_dated_days_before(agent_dataset_dir: Path) -> None:
+    """Needed to test the 14-day duplicate window (D36)."""
+    earlier = [{"tenant": "same", "subject": "Plates", "body": "30 t S355J2", "days_before": 15}]
+    write_agent_case(agent_dataset_dir, earlier_enquiries=earlier)
+
+    [case] = load_dataset(agent_dataset_dir)
+
+    assert case.earlier_enquiries_for_sandbox()[0].days_before == 15
+
+
 def test_rejects_earlier_enquiry_with_an_unknown_tenant_choice(agent_dataset_dir: Path) -> None:
     write_agent_case(agent_dataset_dir, earlier_enquiries=[{"tenant": "tnt_kowalski", "subject": "a", "body": "b"}])
 

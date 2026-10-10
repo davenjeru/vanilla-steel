@@ -127,9 +127,9 @@ def _spec_summary(enquiry: Enquiry) -> dict[str, Any]:
 
 def check_duplicate(context: ToolContext, arguments: dict[str, Any]) -> dict[str, Any]:
     enquiry = context.load_enquiry()
-    duplicate_of = enquiries.find_earlier_duplicate(
-        context.connection, context.tenant_id, enquiry.fingerprint, enquiry.id
-    )
+    duplicate_of = enquiries.find_earlier_duplicate(context.connection, context.tenant_id, enquiry)
+    # Kept on the enquiry so the buyer learns which earlier enquiry is already handling the order.
+    context.save_enquiry(enquiry.model_copy(update={"duplicate_of": duplicate_of}))
     return {"duplicate_of": duplicate_of}
 
 
@@ -248,10 +248,8 @@ def create_rfq(context: ToolContext, arguments: dict[str, Any]) -> dict[str, Any
 
 def _refuse_if_duplicate(context: ToolContext, enquiry: Enquiry) -> None:
     """Finding F-004: a resend must never become a second RFQ, so code checks again here instead of
-    trusting the model to have called check_duplicate and obeyed it. Same tenant only (D26)."""
-    duplicate_of = enquiries.find_earlier_duplicate(
-        context.connection, context.tenant_id, enquiry.fingerprint, enquiry.id
-    )
+    trusting the model to have called check_duplicate and obeyed it. Same tenant only (D26, D36)."""
+    duplicate_of = enquiries.find_earlier_duplicate(context.connection, context.tenant_id, enquiry)
     if duplicate_of is not None:
         raise ToolError(f"this enquiry duplicates {duplicate_of}; escalate it as duplicate instead of creating an RFQ")
 

@@ -145,8 +145,13 @@ conversation changed (no recorded run called `create_rfq` on a detected duplicat
 Played with the reference policy: `check_duplicate` returns `enq_0001` and the enquiry
 is escalated as `duplicate`, where one RFQ for `stk_058` is expected. Needs a live
 recording to run in the eval.
-**Proposed fix (not yet made):** include attachment content (the text tables extraction
-already builds) in the fingerprint, as Slice 3's `fingerprint(doc)` interface suggests.
+**Fixed (Slice 3, D36):** `enquiry_fingerprint` now includes a hash of each attachment's
+content, ignoring file names and attachment order, so a new spreadsheet makes a new
+fingerprint while a forward that renames the file does not. Raw bytes rather than the
+text tables: a re-saved spreadsheet with the same rows is caught by the order-based
+duplicate check instead. Regression tests: `tests/unit/test_fingerprint.py`
+(`test_same_email_with_a_new_attachment_is_a_different_enquiry` and four more).
+Agent case 031 keeps its known-limitation marker until it is re-recorded live.
 
 ## F-006: Agent eval uploaded internal match data to Confident AI
 

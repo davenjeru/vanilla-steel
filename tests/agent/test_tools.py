@@ -1,6 +1,7 @@
 """Each tool enforces its own rules, so a confused or manipulated model cannot break them."""
 
 import sqlite3
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -16,12 +17,19 @@ from steel.agent.tools import (
     extract_specs,
     search_stock,
 )
-from steel.domain.models import EnquiryStatus
+from steel.domain.models import EnquiryStatus, MaterialSpec, ProductForm
 from steel.domain.quote import quoted_price_per_tonne
 from steel.llm.client import LLMError
 from steel.storage import enquiries, quotes, rfqs
 from steel.storage.seed import SUPPLIERS
-from tests.factories.agent import STANDARD_BODY, STANDARD_SUBJECT, stored_enquiry, tool_context
+from tests.conftest import FIXED_NOW
+from tests.factories.agent import (
+    STANDARD_BODY,
+    STANDARD_SUBJECT,
+    earlier_enquiry_for_order,
+    stored_enquiry,
+    tool_context,
+)
 from tests.factories.llm import PLAIN_COVER_LETTER, FakeLLMClient
 from tests.factories.spreadsheets import xlsx_attachment
 
@@ -45,6 +53,16 @@ S355_PLATE_SEARCH = {  # exactly what extraction returns for S355_PLATE_READING
     "delivery_city": "Poznań",
     "delivery_country": "PL",
 }
+
+S355_PLATE_ORDER = MaterialSpec(  # the order S355_PLATE_READING extracts to
+    grade="S355J2",
+    form=ProductForm.PLATE,
+    thickness_mm=15,
+    width_mm=1250,
+    quantity_t=30,
+    delivery_city="Poznań",
+    delivery_country="PL",
+)
 
 
 def status_of(connection: sqlite3.Connection, enquiry_id: str = "enq_0001") -> EnquiryStatus:
@@ -181,6 +199,36 @@ def test_identical_enquiry_from_another_tenant_is_not_a_duplicate(seeded_connect
     assert check_duplicate(context, {}) == {"duplicate_of": None}
 
 
+def test_reworded_resend_of_the_same_order_is_a_duplicate(seeded_connection: sqlite3.Connection) -> None:
+    """D36: different words, same extracted order, so the exact fingerprint misses it and the order check must not."""
+    earlier_enquiry_for_order(seeded_connection, S355_PLATE_ORDER)
+    resend = extracted_context(seeded_connection)
+
+    assert check_duplicate(resend, {}) == {"duplicate_of": "enq_0000"}
+
+
+def test_same_order_from_another_tenant_is_not_a_duplicate(seeded_connection: sqlite3.Connection) -> None:
+    """Data separation: another tenant ordering the same lot must neither block this order nor be revealed."""
+    earlier_enquiry_for_order(seeded_connection, S355_PLATE_ORDER, tenant_id="tnt_kowalski")
+    resend = extracted_context(seeded_connection)
+
+    assert check_duplicate(resend, {}) == {"duplicate_of": None}
+
+
+def test_same_order_sent_more_than_14_days_ago_is_not_a_duplicate(seeded_connection: sqlite3.Connection) -> None:
+    earlier_enquiry_for_order(seeded_connection, S355_PLATE_ORDER, received_at=FIXED_NOW - timedelta(days=15))
+    repeat_order = extracted_context(seeded_connection)
+
+    assert check_duplicate(repeat_order, {}) == {"duplicate_of": None}
+
+
+def test_different_order_is_not_a_duplicate(seeded_connection: sqlite3.Connection) -> None:
+    earlier_enquiry_for_order(seeded_connection, S355_PLATE_ORDER.model_copy(update={"quantity_t": 60}))
+    new_order = extracted_context(seeded_connection)
+
+    assert check_duplicate(new_order, {}) == {"duplicate_of": None}
+
+
 # search_stock
 
 
@@ -313,6 +361,15 @@ def test_rfq_for_a_resent_enquiry_is_refused_and_not_stored(seeded_connection: s
         create_rfq(resend, {"stock_item_id": "stk_058"})
 
     assert rfqs.get_rfq_for_enquiry(seeded_connection, "tnt_bauer", "enq_0001") is None
+
+
+def test_rfq_for_a_reworded_resend_is_refused(seeded_connection: sqlite3.Connection) -> None:
+    """F-004 applies to the order check too: code refuses even if the model skipped or ignored check_duplicate."""
+    earlier_enquiry_for_order(seeded_connection, S355_PLATE_ORDER)
+    resend = searched_context(seeded_connection)
+
+    with pytest.raises(ToolError, match="duplicates enq_0000"):
+        create_rfq(resend, {"stock_item_id": "stk_058"})
 
 
 def test_identical_enquiry_from_another_tenant_does_not_block_an_rfq(seeded_connection: sqlite3.Connection) -> None:

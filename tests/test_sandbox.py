@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from steel.extraction.attachments import Attachment
 from steel.llm.replay import RecordingLLMClient, ReplayLLMClient
 from steel.sandbox import EarlierEnquiry, handle_in_sandbox
 from steel.settings import Settings
@@ -74,6 +75,42 @@ def test_earlier_enquiry_from_the_same_tenant_is_found_as_a_duplicate() -> None:
     )
 
     assert (result.enquiry.id, result.enquiry.escalation_reason, result.rfq) == ("enq_0002", "duplicate", None)
+
+
+REWORDED_EARLIER = EarlierEnquiry(
+    tenant_id="tnt_bauer", subject="Plates S355J2", body="Kindly offer S355J2 plates 15x1250mm, 30 tonnes."
+)
+
+
+def test_earlier_enquiry_in_other_words_is_found_as_a_duplicate() -> None:
+    """Earlier enquiries are extracted, as the pipeline did when they arrived, so the order check (D36) sees them."""
+    result = handle_in_sandbox(
+        "Plates", "30 t S355J2 15 x 1250", [], FakeLLMClient(output=S355_PLATE_READING), SETTINGS, [REWORDED_EARLIER]
+    )
+
+    assert (result.enquiry.escalation_reason, result.rfq) == ("duplicate", None)
+
+
+def test_same_order_received_beyond_the_duplicate_window_gets_an_rfq() -> None:
+    three_weeks_ago = REWORDED_EARLIER.model_copy(update={"days_before": 21})
+
+    result = handle_in_sandbox(
+        "Plates", "30 t S355J2 15 x 1250", [], FakeLLMClient(output=S355_PLATE_READING), SETTINGS, [three_weeks_ago]
+    )
+
+    assert result.rfq is not None
+
+
+def test_earlier_enquiry_is_extracted_with_its_attachments() -> None:
+    last_weeks_order = Attachment(filename="week-40.csv", content_type="text/csv", content=b"S235JR;sheet;3;1500;25")
+    earlier = REWORDED_EARLIER.model_copy(update={"attachments": [last_weeks_order]})
+    llm = FakeLLMClient(output=S355_PLATE_READING)
+
+    handle_in_sandbox("Plates", "30 t S355J2 15 x 1250", [], llm, SETTINGS, [earlier])
+
+    earlier_extraction = llm.requests[0]
+    assert "week-40.csv" in earlier_extraction.model_dump_json()
+    assert "S235JR" in earlier_extraction.model_dump_json()
 
 
 def test_earlier_enquiry_from_another_tenant_is_not_a_duplicate() -> None:

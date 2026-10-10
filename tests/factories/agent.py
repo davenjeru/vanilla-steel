@@ -2,6 +2,7 @@
 
 import itertools
 import sqlite3
+from datetime import datetime
 from typing import Any
 
 from steel.agent.tools import ToolContext
@@ -25,6 +26,7 @@ def stored_enquiry(
     subject: str = STANDARD_SUBJECT,
     body: str = STANDARD_BODY,
     attachments: list[Attachment] | None = None,
+    received_at: datetime = FIXED_NOW,
 ) -> Enquiry:
     enquiry = Enquiry(
         id=enquiry_id,
@@ -32,9 +34,9 @@ def stored_enquiry(
         sender="buyer@example.com",
         subject=subject,
         body=body,
-        fingerprint=enquiry_fingerprint(subject, body),
-        status_history=start_history(FIXED_NOW),
-        created_at=FIXED_NOW,
+        fingerprint=enquiry_fingerprint(subject, body, attachments or []),
+        status_history=start_history(received_at),
+        created_at=received_at,
     )
     enquiries.insert_enquiry(connection, enquiry, attachments=attachments or [])
     return enquiry
@@ -56,6 +58,29 @@ def handled_enquiry(
     handled = enquiry.model_copy(update={"status_history": history, "spec": spec, **outcome})
     enquiries.update_pipeline_state(connection, handled.tenant_id, handled)
     return handled
+
+
+def earlier_enquiry_for_order(
+    connection: sqlite3.Connection,
+    order: MaterialSpec,
+    enquiry_id: str = "enq_0000",
+    tenant_id: str = "tnt_bauer",
+    received_at: datetime = FIXED_NOW,
+) -> Enquiry:
+    """An enquiry already on file whose order was extracted, worded differently from the standard enquiry,
+    so only the order-based duplicate check (D36) can connect the two."""
+    enquiry = stored_enquiry(
+        connection,
+        enquiry_id=enquiry_id,
+        tenant_id=tenant_id,
+        subject="Plates S355J2",
+        body="Dear team, kindly send an offer for S355J2 plates 15x1250mm, 30 tonnes, DAP Poznań.",
+        received_at=received_at,
+    )
+    history = advance(enquiry.status_history, EnquiryStatus.EXTRACTED, received_at)
+    extracted = enquiry.model_copy(update={"status_history": history, "spec": order})
+    enquiries.update_pipeline_state(connection, tenant_id, extracted)
+    return extracted
 
 
 def tool_context(

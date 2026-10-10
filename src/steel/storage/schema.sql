@@ -7,6 +7,12 @@ CREATE TABLE IF NOT EXISTS tenants (
     country TEXT NOT NULL
 );
 
+-- Slice 3: each tenant calls the API with its own key. Only a hash is stored, never the key.
+CREATE TABLE IF NOT EXISTS api_keys (
+    key_hash  TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL REFERENCES tenants (id)
+);
+
 CREATE TABLE IF NOT EXISTS suppliers (
     id        TEXT PRIMARY KEY,
     name      TEXT NOT NULL UNIQUE,
@@ -47,6 +53,7 @@ CREATE TABLE IF NOT EXISTS enquiries (
     escalation_reason TEXT,        -- why a human must take over (Slice 4)
     escalation_detail TEXT,        -- internal explanation from the agent
     language       TEXT,           -- the customer's ISO 639-1 code, for the quote letter (Slice 5)
+    duplicate_of   TEXT,           -- the same tenant's earlier enquiry this one repeats (Slice 3)
     created_at     TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS enquiries_by_tenant ON enquiries (tenant_id);
@@ -58,6 +65,17 @@ CREATE TABLE IF NOT EXISTS enquiry_attachments (
     filename     TEXT NOT NULL,
     content_type TEXT NOT NULL,
     content      BLOB NOT NULL
+);
+
+-- Slice 3: a retried POST with the same Idempotency-Key replays the stored response.
+-- The key is reserved before the enquiry is handled (response still NULL), so two simultaneous
+-- retries can never both run the agent.
+CREATE TABLE IF NOT EXISTS idempotency_keys (
+    tenant_id       TEXT NOT NULL REFERENCES tenants (id),
+    idempotency_key TEXT NOT NULL,
+    request_hash    TEXT NOT NULL,  -- SHA-256 of the request body; a different body under the same key is refused
+    response        TEXT,           -- JSON response body; NULL while the first request is still running
+    PRIMARY KEY (tenant_id, idempotency_key)
 );
 
 -- Slice 4: at most one RFQ per enquiry, enforced by the database, not only by the agent.

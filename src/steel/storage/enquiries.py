@@ -5,6 +5,7 @@ import sqlite3
 
 from pydantic import TypeAdapter
 
+from steel.domain.duplicates import is_same_order, is_within_duplicate_window
 from steel.domain.enquiry import Enquiry
 from steel.domain.matching import Match
 from steel.domain.models import MaterialSpec
@@ -22,8 +23,8 @@ def insert_enquiry(connection: sqlite3.Connection, enquiry: Enquiry, attachments
             INSERT INTO enquiries (
                 id, tenant_id, sender, subject, body, fingerprint, created_at,
                 status_history, spec, warnings, failure_reason, matches, escalation_reason, escalation_detail,
-                language
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                language, duplicate_of
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 enquiry.id,
@@ -49,7 +50,7 @@ def update_pipeline_state(connection: sqlite3.Connection, tenant_id: str, enquir
             """
             UPDATE enquiries SET
                 status_history = ?, spec = ?, warnings = ?, failure_reason = ?, matches = ?,
-                escalation_reason = ?, escalation_detail = ?, language = ?
+                escalation_reason = ?, escalation_detail = ?, language = ?, duplicate_of = ?
             WHERE id = ? AND tenant_id = ?
             """,
             (*_pipeline_values(enquiry), enquiry.id, tenant_id),
@@ -85,10 +86,20 @@ def list_attachments(connection: sqlite3.Connection, tenant_id: str, enquiry_id:
     return [Attachment(filename=row[0], content_type=row[1], content=row[2]) for row in rows]
 
 
-def find_earlier_duplicate(
-    connection: sqlite3.Connection, tenant_id: str, fingerprint: str, enquiry_id: str
-) -> str | None:
-    """The oldest other enquiry of this tenant with the same fingerprint. Other tenants' enquiries never count."""
+def find_earlier_duplicate(connection: sqlite3.Connection, tenant_id: str, enquiry: Enquiry) -> str | None:
+    """The earlier enquiry this one repeats (D36), or None. Other tenants' enquiries never count.
+
+    First the same fingerprint, at any time; then the same extracted order within the duplicate window.
+    """
+    same_text = _oldest_with_fingerprint(connection, tenant_id, enquiry)
+    if same_text is not None:
+        return same_text
+    if enquiry.spec is None:
+        return None
+    return _oldest_with_same_order(connection, tenant_id, enquiry, enquiry.spec)
+
+
+def _oldest_with_fingerprint(connection: sqlite3.Connection, tenant_id: str, enquiry: Enquiry) -> str | None:
     row = connection.execute(
         """
         SELECT id FROM enquiries
@@ -96,9 +107,32 @@ def find_earlier_duplicate(
         ORDER BY created_at, id
         LIMIT 1
         """,
-        (tenant_id, fingerprint, enquiry_id),
+        (tenant_id, enquiry.fingerprint, enquiry.id),
     ).fetchone()
     return row["id"] if row else None
+
+
+def _oldest_with_same_order(
+    connection: sqlite3.Connection, tenant_id: str, enquiry: Enquiry, order: MaterialSpec
+) -> str | None:
+    for earlier in _earlier_extracted_enquiries(connection, tenant_id, enquiry):
+        received_in_window = is_within_duplicate_window(earlier.created_at, enquiry.created_at)
+        if received_in_window and earlier.spec is not None and is_same_order(order, earlier.spec):
+            return earlier.id
+    return None
+
+
+def _earlier_extracted_enquiries(connection: sqlite3.Connection, tenant_id: str, enquiry: Enquiry) -> list[Enquiry]:
+    """Oldest first, so a chain of resends always points back to the original."""
+    rows = connection.execute(
+        """
+        SELECT * FROM enquiries
+        WHERE tenant_id = ? AND id != ? AND spec IS NOT NULL AND created_at <= ?
+        ORDER BY created_at, id
+        """,
+        (tenant_id, enquiry.id, enquiry.created_at.isoformat()),
+    ).fetchall()
+    return [_enquiry_from_row(row) for row in rows]
 
 
 def _pipeline_values(enquiry: Enquiry) -> tuple[str | None, ...]:
@@ -111,6 +145,7 @@ def _pipeline_values(enquiry: Enquiry) -> tuple[str | None, ...]:
         enquiry.escalation_reason,
         enquiry.escalation_detail,
         enquiry.language,
+        enquiry.duplicate_of,
     )
 
 
@@ -130,5 +165,6 @@ def _enquiry_from_row(row: sqlite3.Row) -> Enquiry:
         escalation_reason=row["escalation_reason"],
         escalation_detail=row["escalation_detail"],
         language=row["language"],
+        duplicate_of=row["duplicate_of"],
         created_at=row["created_at"],
     )

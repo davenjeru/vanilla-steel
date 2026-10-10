@@ -1,7 +1,6 @@
 """POST /v1/enquiries and GET /v1/enquiries/{id}: contract, tenancy, invalid input, status.
 
-Runs on a fake LLM: no API key, no network. Tenancy uses a temporary
-X-Tenant-ID header until Slice 3 replaces it with API keys.
+Runs on a fake LLM: no LLM key, no network. Each tenant calls with its own X-API-Key (Slice 3).
 """
 
 import sqlite3
@@ -40,6 +39,7 @@ def test_response_contract_has_exactly_the_documented_fields(api_client: TestCli
         "escalation_reason",
         "offers_available",
         "quote_id",  # Slice 5: where the buyer reads the quote, once quoted
+        "duplicate_of",  # Slice 3: the buyer's own earlier enquiry this one repeats
         "created_at",
     }
 
@@ -140,6 +140,43 @@ def test_agent_failure_still_stores_the_enquiry_as_failed(
     assert (response.json()["status"], response.json()["failure_code"]) == ("failed", "agent_failed")
 
 
+# Duplicates (D36)
+
+
+def test_new_enquiry_repeats_no_earlier_one(api_client: TestClient) -> None:
+    response = api_client.post("/v1/enquiries", json=enquiry_payload(), headers=BAUER)
+
+    assert response.json()["duplicate_of"] is None
+
+
+def test_resent_enquiry_names_the_earlier_one(api_client: TestClient) -> None:
+    """The buyer learns why no quote follows: the order is already being handled under its first enquiry."""
+    first = api_client.post("/v1/enquiries", json=enquiry_payload(), headers=BAUER).json()
+
+    resend = api_client.post("/v1/enquiries", json=enquiry_payload(subject="Fwd: Enquiry St37 sheets"), headers=BAUER)
+
+    assert (resend.json()["escalation_reason"], resend.json()["duplicate_of"]) == ("duplicate", first["id"])
+
+
+def test_reworded_resend_names_the_earlier_one(api_client: TestClient) -> None:
+    """The fake LLM reads both emails as the same St37 order, as a real extractor would for a rewording."""
+    first = api_client.post("/v1/enquiries", json=enquiry_payload(), headers=BAUER).json()
+    reworded = enquiry_payload(subject="St37 sheet", body="Please offer St37-2 HR sheet 3x1500x3000, 25 tonnes, Posen.")
+
+    resend = api_client.post("/v1/enquiries", json=reworded, headers=BAUER)
+
+    assert resend.json()["duplicate_of"] == first["id"]
+
+
+def test_same_enquiry_from_another_tenant_is_handled_as_new(api_client: TestClient) -> None:
+    """D6: a cross-tenant duplicate behaves exactly like a fresh enquiry, so it reveals nothing about the other tenant."""
+    api_client.post("/v1/enquiries", json=enquiry_payload(), headers=KOWALSKI)
+
+    response = api_client.post("/v1/enquiries", json=enquiry_payload(), headers=BAUER)
+
+    assert (response.json()["escalation_reason"], response.json()["duplicate_of"]) == ("no_stock", None)
+
+
 # Reading back
 
 
@@ -190,21 +227,37 @@ def test_enquiry_is_stored_under_the_callers_tenant(
     assert row["tenant_id"] == "tnt_kowalski"
 
 
-def test_rejects_request_without_tenant(api_client: TestClient) -> None:
+def test_rejects_request_without_api_key(api_client: TestClient) -> None:
     response = api_client.post("/v1/enquiries", json=enquiry_payload())
 
-    assert (response.status_code, response.json()["detail"]["code"]) == (401, "UNKNOWN_TENANT")
+    assert (response.status_code, response.json()["detail"]["code"]) == (401, "INVALID_API_KEY")
 
 
-def test_unknown_tenant_gets_the_same_answer_as_a_missing_one(api_client: TestClient) -> None:
+def test_unknown_api_key_gets_the_same_answer_as_a_missing_one(api_client: TestClient) -> None:
     missing = api_client.post("/v1/enquiries", json=enquiry_payload())
-    unknown = api_client.post("/v1/enquiries", json=enquiry_payload(), headers={"X-Tenant-ID": "tnt_nobody"})
+    unknown = api_client.post("/v1/enquiries", json=enquiry_payload(), headers={"X-API-Key": "not-a-key"})
 
     assert (unknown.status_code, unknown.json()) == (missing.status_code, missing.json())
 
 
-def test_rejected_tenant_triggers_no_llm_call(api_client: TestClient, fake_llm: FakeLLMClient) -> None:
-    api_client.post("/v1/enquiries", json=enquiry_payload(), headers={"X-Tenant-ID": "tnt_nobody"})
+def test_tenant_id_header_no_longer_identifies_a_tenant(api_client: TestClient) -> None:
+    """The Slice 1 header named the tenant outright; anyone could claim to be anyone. It must not still work."""
+    response = api_client.post("/v1/enquiries", json=enquiry_payload(), headers={"X-Tenant-ID": "tnt_bauer"})
+
+    assert response.status_code == 401
+
+
+def test_cannot_read_another_tenants_enquiry_by_adding_its_tenant_id(api_client: TestClient) -> None:
+    """Kowalski's key decides the tenant, whatever tenant ID is sent alongside it."""
+    created = api_client.post("/v1/enquiries", json=enquiry_payload(), headers=BAUER).json()
+
+    response = api_client.get(f"/v1/enquiries/{created['id']}", headers=KOWALSKI | {"X-Tenant-ID": "tnt_bauer"})
+
+    assert response.status_code == 404
+
+
+def test_rejected_api_key_triggers_no_llm_call(api_client: TestClient, fake_llm: FakeLLMClient) -> None:
+    api_client.post("/v1/enquiries", json=enquiry_payload(), headers={"X-API-Key": "not-a-key"})
 
     assert fake_llm.requests == []
 

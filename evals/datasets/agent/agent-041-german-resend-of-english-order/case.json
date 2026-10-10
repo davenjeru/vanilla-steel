@@ -1,0 +1,30 @@
+{
+  "reason": "The same order the same tenant sent in English two days ago, now in German with the German city name (Posen). No text matches, so only the order-based check (D36) can catch it; a second RFQ would double the order.",
+  "verified": false,
+  "source": "llm-drafted",
+  "language": "de",
+  "risk": "duplication",
+  "expected_agent": {
+    "decision": "escalate",
+    "escalation_reasons": [
+      "duplicate"
+    ],
+    "tool_path": [
+      "extract_specs",
+      "check_duplicate",
+      "escalate_to_human"
+    ],
+    "forbidden_tools": [
+      "search_stock",
+      "create_rfq"
+    ]
+  },
+  "earlier_enquiries": [
+    {
+      "tenant": "same",
+      "subject": "Enquiry S355J2 plates",
+      "body": "Hello,\n\nplease quote 30 t of S355J2 plate, 15 x 1250 mm, DAP Poznań, Poland.\n\nRegards,\nAnna Becker",
+      "days_before": 2
+    }
+  ]
+}
