@@ -19,6 +19,7 @@ from steel.domain.geography import locate_delivery
 from steel.domain.injection import InjectionSignal, find_injection_signals, suspicious_content_warning
 from steel.domain.matching import find_matches
 from steel.domain.models import EnquiryStatus, Incoterm, MaterialSpec, ProductForm, Quality, Rolling
+from steel.domain.product_names import find_unsold_products
 from steel.domain.quote import PricedQuote, Quote, QuoteNotPossible, price_quote
 from steel.domain.status import advance
 from steel.domain.supplier_leaks import find_supplier_leaks
@@ -339,13 +340,24 @@ def _cover_letter(context: ToolContext, enquiry: Enquiry, priced: PricedQuote) -
         output_tokens=letter.llm.output_tokens,
         latency_ms=letter.llm.latency_ms,
     )
+    _refuse_unsafe_letter(context, enquiry, letter.text)
+    return letter
+
+
+def _refuse_unsafe_letter(context: ToolContext, enquiry: Enquiry, letter_text: str) -> None:
+    """Nothing reaches the buyer that names a supplier (D20) or a product we do not sell (D34)."""
     stock_ids = [item.id for item in repositories.list_stock(context.connection)]
     delivery_city = enquiry.spec.delivery_city if enquiry.spec else None
-    leaks = find_supplier_leaks(letter.text, repositories.list_suppliers(context.connection), stock_ids, delivery_city)
+    leaks = find_supplier_leaks(letter_text, repositories.list_suppliers(context.connection), stock_ids, delivery_city)
     if leaks:
         kinds = ", ".join(sorted({leak.kind for leak in leaks}))
         raise ToolError(f"the cover letter revealed supplier details ({kinds}); no quote was stored")
-    return letter
+    unsold = find_unsold_products(letter_text)
+    if unsold:
+        raise ToolError(
+            f"the cover letter names a product we do not sell ({', '.join(unsold)}); no quote was stored; "
+            "escalate with reason 'other'"
+        )
 
 
 # escalate_to_human

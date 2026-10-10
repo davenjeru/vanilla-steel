@@ -15,7 +15,7 @@ from steel.domain.quote import PricedQuote
 from steel.llm.client import LLMClient, LLMError, LLMRequest, LLMResponse
 
 PROMPT_ID = "quote_letter"
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"  # v2: full description, trade word for the form, dimension order, no invented sender
 PROMPT_PATH = Path(__file__).parent / "prompts" / f"{PROMPT_ID}_{PROMPT_VERSION}.md"
 OUTPUT_NAME = "record_cover_letter"
 FALLBACK_LANGUAGE = "en"  # the common language of European steel trade, when extraction found none

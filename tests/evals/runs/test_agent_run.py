@@ -17,6 +17,7 @@ from evals.runs.agent import (
 )
 from evals.runs.shared.golden_cases import DATASETS_DIR, GoldenCase, load_dataset
 from evals.runs.shared.judge import JUDGE_MODEL
+from evals.runs.shared.tool_contracts import NO_ARGUMENTS
 from steel.agent.trace import TraceEvent
 from steel.llm.replay import ReplayLLMClient
 from steel.sandbox import SandboxResult, handle_in_sandbox
@@ -211,7 +212,18 @@ def test_tools_without_arguments_say_so_in_their_description(
     payload = confident_ai_payload(lambda: trace_agent_run(first_agent_golden(), rfq_run), monkeypatch)
 
     [duplicate_span] = [span for span in payload["toolSpans"] if span["name"] == "check_duplicate"]
-    assert duplicate_span["description"].endswith("Takes no arguments: code supplies the enquiry and the tenant.")
+    assert duplicate_span["description"].endswith(NO_ARGUMENTS)
+
+
+def test_the_argument_judge_reads_each_tools_contract(rfq_run: SandboxResult, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Argument Correctness reads the trace's tools_called, never the schemas: the contract must be there."""
+    payload = confident_ai_payload(lambda: trace_agent_run(first_agent_golden(), rfq_run), monkeypatch)
+
+    descriptions = {call["name"]: call["description"] for call in payload["toolsCalled"]}
+    assert (
+        descriptions["check_duplicate"].endswith(NO_ARGUMENTS),
+        "grade_ambiguous (optional, default false; leaving it out means false)" in descriptions["search_stock"],
+    ) == (True, True)
 
 
 def test_a_step_taken_by_code_is_not_shown_as_the_agents_tool_call(

@@ -1,4 +1,4 @@
-.PHONY: install check lint format test seed eval-extraction eval-extraction-live eval-matching eval-agent eval-agent-live eval-agent-judge-recorded eval-quote-letter eval-quote-letter-live eval-quote-letter-judge-recorded record-fixtures run-agent run-agent-live export-candidates
+.PHONY: install check lint format test seed eval-extraction eval-extraction-live eval-matching eval-agent eval-agent-live eval-agent-judge-recorded eval-quote-letter eval-quote-letter-live eval-quote-letter-judge-recorded record-fixtures run-agent run-agent-live export-candidates calibration-sheet
 
 install:
 	uv sync
@@ -74,3 +74,7 @@ run-agent-live:
 ## make export-candidates TENANT=tnt_bauer [ENQUIRIES="enq_0042 enq_0057"]
 export-candidates:
 	uv run python -m scripts.export_candidates --tenant $(TENANT) $(foreach id,$(ENQUIRIES),--enquiry $(id))
+
+## Calibration (Slice 6 preparation): judged verdicts with empty columns for yours. make calibration-sheet RUN=.deepeval/quote_letter_judged.json
+calibration-sheet:
+	uv run python -m scripts.calibration_sheet $(RUN)

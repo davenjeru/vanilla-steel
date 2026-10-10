@@ -416,6 +416,19 @@ def test_letter_naming_a_supplier_is_never_stored(seeded_connection: sqlite3.Con
     )
 
 
+def test_letter_naming_a_product_we_do_not_sell_is_never_stored(seeded_connection: sqlite3.Connection) -> None:
+    """D34: on the Slice 5 live run a Polish letter called a coil a steel tube; that must not reach the buyer."""
+    context = rfq_ready_context(seeded_connection, cover_letter="Przesyłamy ofertę na stalową rurkę S355J2.")
+
+    with pytest.raises(ToolError, match="rurkę"):
+        draft_quote(context, {"rfq_id": "rfq_0001"})
+
+    assert (quotes.get_quote_for_enquiry(seeded_connection, "tnt_bauer", "enq_0001"), status_of(seeded_connection)) == (
+        None,
+        EnquiryStatus.MATCHED,
+    )
+
+
 def test_second_quote_for_the_same_enquiry_is_refused(seeded_connection: sqlite3.Connection) -> None:
     """A buyer must never receive two different prices for one enquiry."""
     context = rfq_ready_context(seeded_connection)

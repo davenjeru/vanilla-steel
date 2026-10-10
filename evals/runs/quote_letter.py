@@ -21,6 +21,7 @@ from deepeval.tracing import observe, update_current_trace
 
 from evals.metrics.quote_letter.judged import judged_letter_metrics
 from evals.metrics.quote_letter.names_no_supplier import NamesNoSupplier
+from evals.metrics.quote_letter.names_only_products_we_sell import NamesOnlyProductsWeSell
 from evals.metrics.quote_letter.uses_only_the_quoted_figures import UsesOnlyTheQuotedFigures
 from evals.runs.shared.golden_cases import DATASETS_DIR, GoldenCase, QuoteLetterInput, load_dataset, load_manifest
 from evals.runs.shared.judge import JUDGE_MODEL
@@ -33,7 +34,7 @@ from steel.quotes.cover_letter import PROMPT_VERSION, CoverLetter, write_cover_l
 from steel.settings import Settings
 
 DATASET = "quote_letter"
-COMPONENT_VERSION = "quote-letter-v1"
+COMPONENT_VERSION = "quote-letter-v2"  # v2: letter prompt v2
 SETTINGS = Settings()
 
 
@@ -45,7 +46,7 @@ def make_llm(mode: Mode) -> LLMClient:
 
 
 def letter_metrics(mode: Mode) -> list[BaseMetric]:
-    deterministic: list[BaseMetric] = [UsesOnlyTheQuotedFigures(), NamesNoSupplier()]
+    deterministic: list[BaseMetric] = [UsesOnlyTheQuotedFigures(), NamesNoSupplier(), NamesOnlyProductsWeSell()]
     return deterministic + judged_letter_metrics() if is_judged(mode) else deterministic
 
 

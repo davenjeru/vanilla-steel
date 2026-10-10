@@ -52,6 +52,7 @@ from evals.runs.shared.golden_cases import DATASETS_DIR, GoldenCase, load_datase
 from evals.runs.shared.judge import JUDGE_MODEL
 from evals.runs.shared.run_labels import current_git_revision, run_identifier
 from evals.runs.shared.run_modes import Mode, is_judged, parse_mode
+from evals.runs.shared.tool_contracts import describe_arguments
 from steel.agent.runner import MAX_TURNS, PROMPT_VERSION
 from steel.agent.tools import TOOLS
 from steel.agent.trace import TraceEvent
@@ -322,20 +323,17 @@ def enquiry_totals(outcome: AgentOutcome) -> dict[str, Any]:
 
 
 def _tool_description(name: str) -> str | None:
-    """The tool's description, plus a note when it takes no arguments.
+    """The tool's description plus its argument contract, generated from its schema.
 
-    An empty argument list is correct, not an omission: the tools get the
-    enquiry and tenant from code (decision D25). The note is added here, not
-    in the product's description, which is part of the agent prompt; changing
-    it would invalidate every recording.
+    The judge (Argument Correctness) reads only this, never the schemas, so without the contract it
+    judged argument-free tools (D25) and defaulted fields as wrong. Added here, not in the product's
+    description, which is part of the agent prompt; changing that would invalidate every recording.
     None for a tool the agent invented; the trace still shows the name it tried.
     """
     tool = TOOLS.get(name)
     if tool is None:
         return None
-    if not tool.spec.input_schema.get("properties"):
-        return f"{tool.spec.description} Takes no arguments: code supplies the enquiry and the tenant."
-    return tool.spec.description
+    return f"{tool.spec.description} {describe_arguments(tool.spec.input_schema)}"
 
 
 def main() -> None:
