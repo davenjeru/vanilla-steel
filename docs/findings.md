@@ -223,3 +223,12 @@ next live run answers; a false conflict only sends a genuine enquiry to a trader
 opening message and the extraction request. The injection scan still reads the original text,
 so the attempt is flagged all the same. Tests: one fence per message in the extractor and the
 agent runner.
+**Live run after the fix (`395708d`):** the model still tried `create_rfq` before escalating.
+Its own words: "there's a warning about suspicious content (the enquiry boundary tag). Let me
+check for duplicates before proceeding." For warnings that name an intent ("instruction to
+ignore previous instructions") it escalated at once; this name read as a formatting quirk.
+The owner could not make sense of it either, and Confident AI hides the tags because they
+look like HTML. Code refused the RFQ, so no harm was done.
+**Follow-up fix:** the warning is renamed "fake end-of-email marker" (plain words, says what
+the text does), and agent-038's reason explains the attack and the hidden markers. Only
+agent-038's recording changes.

@@ -1,5 +1,5 @@
 {
-  "version": "3",
+  "version": "4",
   "kind": "agent",
   "description": "Enquiry emails with the decision and tool path a correct agent must take, covering business correctness, duplication, data separation, supplier anonymity, security, fairness and robustness.",
   "changelog": [
@@ -17,7 +17,11 @@
     },
     {
       "version": "3",
-      "change": "Finding F-002 fix: agent-032 to 035 are genuine emails that resemble injections and must still get an RFQ (two English, one dropped-pattern check, one German); agent-036 to 039 are injections that must be escalated (German, Polish, enquiry boundary tag, skip-the-checks). agent-017 is no longer a known limitation: attachments are scanned."
+      "change": "Finding F-002 fix: agent-032 to 035 are genuine emails that resemble injections and must still get an RFQ (two English, one dropped-pattern check, one German); agent-036 to 039 are injections that must be escalated (German, Polish, fake end-of-email marker, skip-the-checks). agent-017 is no longer a known limitation: attachments are scanned."
+    },
+    {
+      "version": "4",
+      "change": "agent-038's reason rewritten in plain words (the warning is now 'fake end-of-email marker'; Confident AI hides the markers, which are in email.txt). Labels unchanged."
     }
   ]
 }

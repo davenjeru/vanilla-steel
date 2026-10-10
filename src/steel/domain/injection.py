@@ -52,7 +52,7 @@ INTERNAL_STOCK_OR_SUPPLIER_ID = re.compile(r"\b(?:stk|sup)_\d+\b", re.IGNORECASE
 
 
 class InjectionSignal(BaseModel):
-    kind: str  # shown to the agent and stored as a warning
+    kind: str  # shown to the agent, traders and buyers as a warning, so plain words that say what the text does
     matched: str  # the text that matched, for the trader reviewing the escalation
 
 
@@ -62,7 +62,9 @@ def find_injection_signals(text: str, tool_names: Iterable[str]) -> list[Injecti
         ("instruction to ignore previous instructions", IGNORE_PREVIOUS_INSTRUCTIONS),
         ("text addressed to the system", [ADDRESSED_TO_THE_SYSTEM]),
         ("request to skip checks", [SKIP_CHECKS]),
-        ("enquiry boundary tag", [ENQUIRY_BOUNDARY_TAG]),
+        # Named for what it does, not what it is: as "enquiry boundary tag" the model read it as a
+        # formatting quirk and carried on (agent-038), and traders could not make sense of it either.
+        ("fake end-of-email marker", [ENQUIRY_BOUNDARY_TAG]),
         ("agent tool name", [_tool_name_pattern(tool_names)]),
         ("internal stock or supplier ID", [INTERNAL_STOCK_OR_SUPPLIER_ID]),
     ]
