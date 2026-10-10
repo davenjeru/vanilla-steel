@@ -310,7 +310,7 @@
         "value": 18,
         "unit": "t"
       },
-      "incoterm": "DDP",
+      "incoterm": "DAP",
       "delivery_city": "Poznań",
       "delivery_country": "PL",
       "delivery_date": "2026-12-15",
@@ -319,6 +319,6 @@
     "model": "claude-haiku-4-5-20251001",
     "input_tokens": 2621,
     "output_tokens": 292,
-    "latency_ms": 2118.1
+    "latency_ms": 2069.6
   }
 }
