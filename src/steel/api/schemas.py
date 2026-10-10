@@ -33,6 +33,9 @@ class EnquiryOut(BaseModel):
     spec: MaterialSpec | None
     warnings: list[str]
     failure_code: str | None = Field(description="Set when status is failed; details stay internal")
+    offers_available: int = Field(
+        description="Stock lots meeting every requirement. Which suppliers and at what cost stays internal."
+    )
     created_at: datetime
 
     @classmethod
@@ -44,5 +47,6 @@ class EnquiryOut(BaseModel):
             spec=enquiry.spec,
             warnings=enquiry.warnings,
             failure_code="extraction_failed" if enquiry.failure_reason else None,
+            offers_available=len(enquiry.matches),
             created_at=enquiry.created_at,
         )

@@ -27,6 +27,9 @@ This plan describes the product side in detail and records evaluation decisions 
 | D16 | LLM answers are recorded to `fixtures/llm/` (committed) by `scripts/record_fixtures.py` and replayed by `ReplayLLMClient`, which never falls back to a live call. The fixture key hashes prompt ID, version, text, model, input and output schema, so any change forces a new recording. API enquiries and golden `email.txt` render identically, so both share recordings. |
 | D17 | Out of scope for Slice 1: relative dates ("in three weeks") and calendar weeks ("KW 48") are left null; legacy `.xls` and PDF attachments are skipped with a warning; tenancy uses a temporary `X-Tenant-ID` header (approved) that Slice 3 replaces with API keys. |
 | D18 | Attachments: CSV (standard library) and `.xlsx` (`openpyxl`, approved) become text tables, every sheet included, formulas shown as their cached values. An unreadable attachment is skipped with a warning and never fails the enquiry. |
+| D19 | Matching rules (owner accepted defaults): exact normalised grade; form, and rolling and coating when stated, must match; prime only unless second choice is requested; thickness within max(5%, 0.05 mm), width and length within 1% (no cutting service); one lot must cover the tonnage. Ranking by delivered cost per tonne = price + 0.08 EUR/t/km x great-circle distance, ties broken by stock ID. Unknown delivery location ranks by price with a warning. Rules live in `domain/matching.py` and `domain/tolerances.py`. |
+| D20 | Matches are internal: they name suppliers and cost prices, which would reveal supplier identity and the platform's margin. They are stored with the enquiry for the agent and RFQs; the buyer API shows only status `matched` and `offers_available`. Zero-tolerance API tests scan responses for supplier names, IDs, cities, stock IDs and cost fields. |
+| D21 | Slice order changed to 2 -> 4 -> 5 -> 3 -> 6 to reach the agent and LLM-judge metrics sooner. Judge model for G-Eval and other judge metrics: OpenAI (a different model family from the Claude extractor, avoiding self-preference bias). A judge experiment on extraction compares judge verdicts with FieldMatch ground truth; learning only, never a gate. |
 | D13 | Slice 4 adds a feedback-loop script: escalated or wrongly handled enquiries become candidate case folders (`verified: false`, `source: production`) with the system's extraction pre-filled for correction. Full production sampling (stratified, PII-scrubbed, tenant-consented) is described in the test strategy as a planned layer; a tenant's enquiry never enters a shared dataset unless anonymised and permitted. |
 
 ## Repo layout
@@ -95,11 +98,12 @@ POST /v1/enquiries  EnquiryCreate -> 201 EnquiryOut{id, status, status_history, 
 
 ### Slice 2: Matching
 ```python
-find_matches(spec, stock, suppliers, delivery: GeoPoint, rules: MatchRules) -> MatchOutcome
-class MatchOutcome: matches: list[Match]; rejections: list[Rejection]
-class Match: stock_item_id; supplier_id; score; breakdown: ScoreBreakdown   # price, distance_km, sub-scores
-class Rejection: stock_item_id; reasons: list[RejectionReason]
-GET /v1/enquiries/{id}/matches -> MatchesOut (internal view)
+find_matches(spec, stock, suppliers, delivery: DeliveryLocation) -> MatchOutcome
+class MatchOutcome: matches: list[Match]; rejections: list[Rejection]; missing_fields; warnings
+class Match: rank; stock_item_id; supplier_id; price_eur_per_t; distance_km; freight_eur_per_t; delivered_eur_per_t
+class Rejection: stock_item_id; reasons: list[RejectionReason]   # every broken constraint
+locate_delivery(city, country) -> DeliveryLocation                 # city table, country centre, or unknown
+EnquiryOut.offers_available: int                                   # matches stay internal (D20)
 ```
 
 ### Slice 3: Duplicates and tenancy

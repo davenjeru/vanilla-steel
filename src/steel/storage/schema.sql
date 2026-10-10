@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS stock_items (
     supplier_id     TEXT NOT NULL REFERENCES suppliers (id),
     grade           TEXT NOT NULL,
     form            TEXT NOT NULL CHECK (form IN ('sheet', 'plate', 'coil')),
+    rolling         TEXT NOT NULL CHECK (rolling IN ('hot_rolled', 'cold_rolled')),
     thickness_mm    REAL NOT NULL CHECK (thickness_mm > 0),
     width_mm        REAL NOT NULL CHECK (width_mm > 0),
     length_mm       REAL CHECK (length_mm IS NULL OR length_mm > 0),
@@ -41,6 +42,7 @@ CREATE TABLE IF NOT EXISTS enquiries (
     spec           TEXT,           -- JSON MaterialSpec once extracted
     warnings       TEXT NOT NULL,  -- JSON list of strings
     failure_reason TEXT,
+    matches        TEXT NOT NULL,  -- JSON list of ranked matches; internal, holds supplier IDs
     created_at     TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS enquiries_by_tenant ON enquiries (tenant_id);

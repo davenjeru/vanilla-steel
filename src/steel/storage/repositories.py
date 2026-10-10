@@ -30,10 +30,10 @@ def insert_stock(connection: sqlite3.Connection, stock: list[StockItem]) -> None
     connection.executemany(
         """
         INSERT INTO stock_items (
-            id, supplier_id, grade, form, thickness_mm, width_mm, length_mm,
+            id, supplier_id, grade, form, rolling, thickness_mm, width_mm, length_mm,
             quantity_t, coating, quality, price_eur_per_t
         ) VALUES (
-            :id, :supplier_id, :grade, :form, :thickness_mm, :width_mm, :length_mm,
+            :id, :supplier_id, :grade, :form, :rolling, :thickness_mm, :width_mm, :length_mm,
             :quantity_t, :coating, :quality, :price_eur_per_t
         )
         """,

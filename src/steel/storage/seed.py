@@ -9,7 +9,7 @@ import sqlite3
 from dataclasses import dataclass
 from decimal import Decimal
 
-from steel.domain.models import ProductForm, Quality, StockItem, Supplier, Tenant
+from steel.domain.models import ProductForm, Quality, Rolling, StockItem, Supplier, Tenant
 from steel.storage import repositories
 
 DEFAULT_SEED = 20261009
@@ -86,21 +86,30 @@ class GradeProfile:
     forms: tuple[ProductForm, ...]
     thicknesses_mm: tuple[float, ...]
     base_price_eur_per_t: int
+    rolling: Rolling
     coatings: tuple[str, ...] = ()
 
 
+HOT = Rolling.HOT_ROLLED
+COLD = Rolling.COLD_ROLLED
+
+# Structural and cold-forming S-grades are hot-rolled; DC and DX grades are cold-rolled
+# (galvanised DX51D in this replica is on a cold-rolled substrate).
 GRADE_PROFILES = [
-    GradeProfile("S235JR", (ProductForm.SHEET, ProductForm.PLATE, ProductForm.COIL), (2.0, 3.0, 5.0, 8.0, 10.0), 620),
-    GradeProfile("S275JR", (ProductForm.SHEET, ProductForm.PLATE), (3.0, 5.0, 8.0, 12.0), 640),
-    GradeProfile("S355J2", (ProductForm.PLATE, ProductForm.COIL), (5.0, 8.0, 10.0, 15.0, 20.0), 690),
-    GradeProfile("S355MC", (ProductForm.COIL, ProductForm.SHEET), (2.0, 3.0, 4.0, 6.0), 710),
-    GradeProfile("DC01", (ProductForm.SHEET, ProductForm.COIL), (0.5, 0.8, 1.0, 1.5, 2.0), 680),
-    GradeProfile("DC04", (ProductForm.SHEET, ProductForm.COIL), (0.7, 1.0, 1.5), 720),
+    GradeProfile(
+        "S235JR", (ProductForm.SHEET, ProductForm.PLATE, ProductForm.COIL), (2.0, 3.0, 5.0, 8.0, 10.0), 620, HOT
+    ),
+    GradeProfile("S275JR", (ProductForm.SHEET, ProductForm.PLATE), (3.0, 5.0, 8.0, 12.0), 640, HOT),
+    GradeProfile("S355J2", (ProductForm.PLATE, ProductForm.COIL), (5.0, 8.0, 10.0, 15.0, 20.0), 690, HOT),
+    GradeProfile("S355MC", (ProductForm.COIL, ProductForm.SHEET), (2.0, 3.0, 4.0, 6.0), 710, HOT),
+    GradeProfile("DC01", (ProductForm.SHEET, ProductForm.COIL), (0.5, 0.8, 1.0, 1.5, 2.0), 680, COLD),
+    GradeProfile("DC04", (ProductForm.SHEET, ProductForm.COIL), (0.7, 1.0, 1.5), 720, COLD),
     GradeProfile(
         "DX51D",
         (ProductForm.SHEET, ProductForm.COIL),
         (0.5, 0.75, 1.0, 1.5, 2.0),
         760,
+        COLD,
         ("Z100", "Z140", "Z200", "Z275"),
     ),
 ]
@@ -124,6 +133,7 @@ def _random_stock_item(rng: random.Random, number: int) -> StockItem:
         supplier_id=rng.choice(SUPPLIERS).id,
         grade=profile.grade,
         form=form,
+        rolling=profile.rolling,
         thickness_mm=rng.choice(profile.thicknesses_mm),
         width_mm=rng.choice(WIDTHS_MM),
         length_mm=None if form is ProductForm.COIL else rng.choice(LENGTHS_MM),

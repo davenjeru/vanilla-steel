@@ -37,6 +37,7 @@ def test_response_contract_has_exactly_the_documented_fields(api_client: TestCli
         "spec",
         "warnings",
         "failure_code",
+        "offers_available",
         "created_at",
     }
 
@@ -77,7 +78,7 @@ def test_unsupported_attachment_is_reported_as_a_warning(api_client: TestClient)
 
     response = api_client.post("/v1/enquiries", json=enquiry_payload(attachments=[pdf]), headers=BAUER)
 
-    assert response.json()["warnings"] == ["attachment skipped: drawing.pdf: .pdf is not supported yet"]
+    assert "attachment skipped: drawing.pdf: .pdf is not supported yet" in response.json()["warnings"]
 
 
 def test_excel_attachment_reaches_the_extractor_as_a_table(api_client: TestClient, fake_llm: FakeLLMClient) -> None:
@@ -96,7 +97,7 @@ def test_corrupt_excel_attachment_is_a_warning_not_a_server_error(api_client: Te
     response = api_client.post("/v1/enquiries", json=enquiry_payload(attachments=[corrupt]), headers=BAUER)
 
     assert response.status_code == 201
-    assert response.json()["warnings"] == ["attachment skipped: order.xlsx: not a readable .xlsx file"]
+    assert "attachment skipped: order.xlsx: not a readable .xlsx file" in response.json()["warnings"]
 
 
 def test_extraction_failure_still_stores_the_enquiry_as_failed(

@@ -53,3 +53,10 @@ def test_coils_have_no_length_while_sheets_and_plates_do() -> None:
 def test_suppliers_are_located_in_europe() -> None:
     for supplier in SUPPLIERS:
         assert 34 <= supplier.latitude <= 72 and -25 <= supplier.longitude <= 45, supplier.id
+
+
+def test_rolling_follows_the_grade_standard() -> None:
+    """DC and DX grades are cold-rolled, S-grades hot-rolled; matching on rolling relies on this."""
+    for item in build_stock():
+        expected = "cold_rolled" if item.grade.startswith(("DC", "DX")) else "hot_rolled"
+        assert item.rolling == expected, item.id

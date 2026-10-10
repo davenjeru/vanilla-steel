@@ -78,6 +78,7 @@ class StockItem(BaseModel):
     supplier_id: str
     grade: str
     form: ProductForm
+    rolling: Rolling
     thickness_mm: float = Field(gt=0)
     width_mm: float = Field(gt=0)
     length_mm: float | None = Field(default=None, gt=0, description="None for coils")
