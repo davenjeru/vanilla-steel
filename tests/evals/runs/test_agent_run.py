@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from deepeval.dataset import Golden
+from deepeval.metrics import ArgumentCorrectnessMetric, TaskCompletionMetric
 from deepeval.tracing import observe
 
 from evals.runs.agent import (
@@ -265,9 +266,9 @@ def test_agent_replay_scores_only_deterministic_metrics(monkeypatch: pytest.Monk
     DeepEval's ToolCorrectnessMetric demands one just to be constructed (it calls nothing in exact-match mode)."""
     monkeypatch.setenv("OPENAI_API_KEY", "sk-placeholder-for-construction-only")
 
-    names = [type(metric).__name__ for metric in agent_metrics("replay")]
+    metrics = agent_metrics("replay")
 
-    assert {"ArgumentCorrectnessMetric", "TaskCompletionMetric"} & set(names) == set()
+    assert [metric for metric in metrics if isinstance(metric, ArgumentCorrectnessMetric | TaskCompletionMetric)] == []
 
 
 @pytest.mark.parametrize("mode", ["live", "judge-recorded"])
@@ -280,6 +281,6 @@ def test_agent_judged_modes_add_argument_correctness_and_task_completion(
     judged = agent_metrics(mode)[len(deterministic_agent_metrics()) :]  # type: ignore[arg-type]
 
     assert [(type(metric).__name__, metric.evaluation_model) for metric in judged] == [
-        ("ArgumentCorrectnessMetric", JUDGE_MODEL),
+        ("ArgumentCorrectnessForToolsWithArguments", JUDGE_MODEL),
         ("TaskCompletionMetric", JUDGE_MODEL),
     ]
