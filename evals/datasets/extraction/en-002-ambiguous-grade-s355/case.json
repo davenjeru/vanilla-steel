@@ -1,0 +1,22 @@
+{
+  "reason": "Incomplete grade 'S355' could be S355J2, S355JR or S355MC: grade must stay null and grade_ambiguous true so the agent escalates instead of guessing. Coil, so no length.",
+  "verified": false,
+  "language": "en",
+  "source": "llm-drafted",
+  "expected_spec": {
+    "grade": null,
+    "grade_ambiguous": true,
+    "form": "coil",
+    "rolling": "hot_rolled",
+    "quality": null,
+    "coating": null,
+    "thickness_mm": 6,
+    "width_mm": 1500,
+    "length_mm": null,
+    "quantity_t": 60,
+    "incoterm": "DAP",
+    "delivery_city": "Gdańsk",
+    "delivery_country": "PL",
+    "delivery_date": "2027-01-31"
+  }
+}

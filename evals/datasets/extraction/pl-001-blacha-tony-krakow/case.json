@@ -1,0 +1,22 @@
+{
+  "reason": "Polish: 'tony' as the tonne unit, 'blachy gorącowalcowanej' (hot-rolled sheet, a synonym the prompt does not list), and the city declined as 'do Krakowa' must be recorded in its base form Kraków.",
+  "verified": false,
+  "language": "pl",
+  "source": "llm-drafted",
+  "expected_spec": {
+    "grade": "S355J2",
+    "grade_ambiguous": false,
+    "form": "sheet",
+    "rolling": "hot_rolled",
+    "quality": null,
+    "coating": null,
+    "thickness_mm": 4,
+    "width_mm": 1500,
+    "length_mm": 3000,
+    "quantity_t": 24,
+    "incoterm": "DAP",
+    "delivery_city": "Kraków",
+    "delivery_country": "PL",
+    "delivery_date": "2027-01-20"
+  }
+}

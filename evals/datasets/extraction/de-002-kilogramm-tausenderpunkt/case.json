@@ -1,0 +1,22 @@
+{
+  "reason": "German thousands dot: '25.000 kg' is 25 000 kg, so 25 t. Reading it as 25.0 kg (0.025 t) is the classic error. Also kaltgewalzt with a cold-rolled grade, and Wien is the official local name of Vienna.",
+  "verified": false,
+  "language": "de",
+  "source": "llm-drafted",
+  "expected_spec": {
+    "grade": "DC01",
+    "grade_ambiguous": false,
+    "form": "sheet",
+    "rolling": "cold_rolled",
+    "quality": null,
+    "coating": null,
+    "thickness_mm": 1.0,
+    "width_mm": 1000,
+    "length_mm": 2000,
+    "quantity_t": 25,
+    "incoterm": "DAP",
+    "delivery_city": "Wien",
+    "delivery_country": "AT",
+    "delivery_date": "2026-11-30"
+  }
+}

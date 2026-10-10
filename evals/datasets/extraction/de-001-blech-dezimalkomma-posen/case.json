@@ -1,0 +1,22 @@
+{
+  "reason": "German: decimal comma (2,5 mm), Blech and warmgewalzt, German exonym Posen must become Poznań, DD.MM.YYYY date. 'frei Haus' is a German trade term, not an Incoterm, so incoterm stays null rather than being guessed as DAP.",
+  "verified": false,
+  "language": "de",
+  "source": "llm-drafted",
+  "expected_spec": {
+    "grade": "S235JR",
+    "grade_ambiguous": false,
+    "form": "sheet",
+    "rolling": "hot_rolled",
+    "quality": null,
+    "coating": null,
+    "thickness_mm": 2.5,
+    "width_mm": 1250,
+    "length_mm": 2500,
+    "quantity_t": 18,
+    "incoterm": null,
+    "delivery_city": "Poznań",
+    "delivery_country": "PL",
+    "delivery_date": "2026-12-15"
+  }
+}

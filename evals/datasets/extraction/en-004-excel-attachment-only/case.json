@@ -1,0 +1,22 @@
+{
+  "reason": "Every detail is only in the Excel attachment (order.xlsx); the email body says nothing. Tests that the spreadsheet reaches the extractor as a table and is read column by column.",
+  "verified": false,
+  "language": "en",
+  "source": "llm-drafted",
+  "expected_spec": {
+    "grade": "S235JR",
+    "grade_ambiguous": false,
+    "form": "sheet",
+    "rolling": null,
+    "quality": "prime",
+    "coating": null,
+    "thickness_mm": 5,
+    "width_mm": 1500,
+    "length_mm": 3000,
+    "quantity_t": 30,
+    "incoterm": "DAP",
+    "delivery_city": "Ostrava",
+    "delivery_country": "CZ",
+    "delivery_date": "2027-02-15"
+  }
+}

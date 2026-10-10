@@ -1,0 +1,22 @@
+{
+  "reason": "Relative date 'in drei Wochen' must stay null instead of being computed. Also: coating Z275 written inside the grade (DX51D+Z275) must be split into grade DX51D and coating Z275; a coil has no length; rolling is not stated and DX51D implies none.",
+  "verified": false,
+  "language": "de",
+  "source": "llm-drafted",
+  "expected_spec": {
+    "grade": "DX51D",
+    "grade_ambiguous": false,
+    "form": "coil",
+    "rolling": null,
+    "quality": null,
+    "coating": "Z275",
+    "thickness_mm": 0.75,
+    "width_mm": 1250,
+    "length_mm": null,
+    "quantity_t": 50,
+    "incoterm": "DAP",
+    "delivery_city": "Bratislava",
+    "delivery_country": "SK",
+    "delivery_date": null
+  }
+}

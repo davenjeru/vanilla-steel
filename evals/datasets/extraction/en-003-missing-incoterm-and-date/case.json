@@ -1,0 +1,22 @@
+{
+  "reason": "No incoterm, date, rolling or quality stated: all must stay null, not be filled with typical values. The country is not written but follows from the city (Brno, CZ), which the prompt allows.",
+  "verified": false,
+  "language": "en",
+  "source": "llm-drafted",
+  "expected_spec": {
+    "grade": "S275JR",
+    "grade_ambiguous": false,
+    "form": "plate",
+    "rolling": null,
+    "quality": null,
+    "coating": null,
+    "thickness_mm": 10,
+    "width_mm": 2000,
+    "length_mm": 6000,
+    "quantity_t": 12,
+    "incoterm": null,
+    "delivery_city": "Brno",
+    "delivery_country": "CZ",
+    "delivery_date": null
+  }
+}

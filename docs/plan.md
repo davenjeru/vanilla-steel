@@ -135,6 +135,38 @@ GET /v1/quotes/{id} -> BuyerQuote                   # no supplier fields in the 
 Product side: `.github/workflows/ci.yml` running `make check`, README design decisions.
 Owner: release gate, test strategy, regression demo.
 
+## Planned eval metrics by slice
+
+Agreed list of DeepEval built-in and custom metrics. Claude flags each group at
+the start of its slice. Rule: deterministic wherever the answer is knowable;
+judge-model metrics only where code cannot decide.
+
+| Slice | Metric | Type | Checks | Risk |
+|---|---|---|---|---|
+| 1 | `FieldMatch` per field | Custom, deterministic | **Done.** Each of 14 MaterialSpec fields against its label | Extraction |
+| 1 | `JsonCorrectnessMetric` | Built-in | Optional: output conforms to the schema. Low value, since the forced tool call and RawSpec validation already enforce it | Extraction |
+| 2 | Hard-constraint violations | Custom, deterministic, zero tolerance | Wrong grade, size outside tolerance, second choice offered for prime | Business correctness |
+| 2 | Top-1 / top-k match | Custom, deterministic | Expected stock items ranked first or within k | Business correctness |
+| 2 | Ranking quality | Custom, deterministic | Cheaper and nearer ranks above dearer and farther | Business correctness |
+| 3 | Near-duplicate precision and recall | Custom, deterministic | Over labelled email pairs (forwarded, reworded, resent) | Duplication |
+| 4 | `ToolPermissionMetric` | Built-in, deterministic | Only allowed tools called; prompt injection uses `denied_tools` | Data separation, business correctness |
+| 4 | `ToolCorrectnessMetric` | Built-in | Right tools, order and arguments against `expected_tools`; escalation present when required | Business correctness |
+| 4 | `AgentLoopDetectionMetric` | Built-in, deterministic | No repeated or cyclic tool calls | Business correctness |
+| 4 | Tenant scope | Custom, deterministic, zero tolerance | Every trace event's tenant equals the enquiry's tenant | Data separation |
+| 4 | Cost and latency | Custom, deterministic | Tokens, cost and latency per enquiry within limits | Release criteria |
+| 4 | `ArgumentCorrectnessMetric` | Built-in, judge | Only where a deterministic argument check is impossible | Business correctness |
+| 4 | `StepEfficiencyMetric` | Built-in, judge | Prefer the deterministic alternative: tool calls <= expected path length | Business correctness |
+| 4 | `TaskCompletionMetric` | Built-in, judge | Overall verdict; a complement, not a gate | Business correctness |
+| 5 | Supplier leak check | Custom, deterministic, zero tolerance | Supplier names, IDs (sup_, stk_) or addresses in cover text. `PatternMatchMetric` passes on a match, so it cannot be used for this | Data separation |
+| 5 | `GEval` quote quality | Built-in, judge | Commercially sensible, professional, in the customer's language. **Pause here: owner chooses the judge model** | Business correctness |
+| 5 | `FaithfulnessMetric` / `HallucinationMetric` | Built-in, judge | Cover text matches the deterministic quote lines (no invented prices, dates, quantities) | Business correctness |
+| 5 | `PromptAlignmentMetric` | Built-in, judge | Cover text follows prompt instructions (validity period, no supplier names) | Business correctness |
+| 5 | `PIILeakageMetric` | Built-in, judge, secondary | Indirect leaks the deterministic check misses, e.g. "our partner mill in Linz" | Data separation |
+| 5 | `DAGMetric` | Built-in, judge, option | Decision-tree grading of the quote for more consistent scores than one G-Eval | Business correctness |
+| 6 | Judge calibration | Process | Owner judges ~10 cases; each gated judge metric must agree with the human | All |
+
+Not relevant here: RAG contextual metrics, conversational and turn metrics, image, audio, voice, MCP, bias, toxicity, summarisation, non-advice.
+
 ## Testability requirements
 
 1. LLM injected through `create_app` and dependencies. Replay client fails loudly on a missing fixture.
