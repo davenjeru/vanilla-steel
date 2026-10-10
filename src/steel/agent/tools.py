@@ -19,10 +19,13 @@ from steel.domain.geography import locate_delivery
 from steel.domain.injection import InjectionSignal, find_injection_signals, suspicious_content_warning
 from steel.domain.matching import find_matches
 from steel.domain.models import EnquiryStatus, Incoterm, MaterialSpec, ProductForm, Quality, Rolling
+from steel.domain.quote import PricedQuote, Quote, QuoteNotPossible, price_quote
 from steel.domain.status import advance
+from steel.domain.supplier_leaks import find_supplier_leaks
 from steel.extraction.extractor import EnquiryDocument, extract_spec, readable_text
 from steel.llm.client import LLMClient, LLMError, ToolSpec
-from steel.storage import enquiries, repositories, rfqs
+from steel.quotes.cover_letter import CoverLetter, write_cover_letter
+from steel.storage import enquiries, quotes, repositories, rfqs
 
 TERMINAL_STATUSES = {EnquiryStatus.ESCALATED, EnquiryStatus.FAILED, EnquiryStatus.QUOTED}
 
@@ -40,8 +43,10 @@ class ToolContext:
     connection: sqlite3.Connection
     llm: LLMClient
     extraction_model: str
+    quote_model: str
     clock: Callable[[], datetime]
     new_rfq_id: Callable[[], str]
+    new_quote_id: Callable[[], str]
     offered_stock_ids: list[str] = field(default_factory=list)  # from the latest search_stock
     rfq_id: str | None = None
     model_usage: ModelUsage | None = None  # set by a tool that called a model; the loop records it
@@ -56,8 +61,9 @@ class ToolContext:
         enquiries.update_pipeline_state(self.connection, self.tenant_id, enquiry)
 
     def decision_made(self) -> bool:
-        """The run is over once an RFQ exists or the enquiry can no longer change."""
-        return self.rfq_id is not None or self.load_enquiry().status in TERMINAL_STATUSES
+        """The run is over once the enquiry is quoted, escalated or failed. An RFQ alone is not an end
+        (Slice 5): the buyer is still waiting for the quote, so a run that stops there is escalated."""
+        return self.load_enquiry().status in TERMINAL_STATUSES
 
 
 # extract_specs
@@ -89,7 +95,9 @@ def extract_specs(context: ToolContext, arguments: dict[str, Any]) -> dict[str, 
     history = advance(enquiry.status_history, EnquiryStatus.EXTRACTED, context.clock())
     suspicions = [suspicious_content_warning(signal) for signal in _injection_signals(context, enquiry)]
     warnings = result.warnings + suspicions
-    extracted = enquiry.model_copy(update={"status_history": history, "spec": result.spec, "warnings": warnings})
+    extracted = enquiry.model_copy(
+        update={"status_history": history, "spec": result.spec, "warnings": warnings, "language": result.language}
+    )
     context.save_enquiry(extracted)
     return _spec_summary(extracted)
 
@@ -259,6 +267,87 @@ def _refuse_if_suspicious(context: ToolContext, enquiry: Enquiry) -> None:
         )
 
 
+# draft_quote (Slice 5)
+
+
+class DraftQuoteArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rfq_id: str = Field(description="The rfq_id create_rfq returned")
+
+
+def draft_quote(context: ToolContext, arguments: dict[str, Any]) -> dict[str, Any]:
+    """Price the RFQ'd lot, have the LLM write the cover letter, check it for supplier leaks, store the quote.
+
+    Prices are deterministic (D5); only the letter is written by a model, and code scans it before it is
+    stored, so a buyer never sees a supplier (D20). One quote per enquiry, enforced by the database.
+    """
+    rfq = _rfq_to_quote(context, _validated(DraftQuoteArguments, arguments).rfq_id)
+    enquiry = context.load_enquiry()
+    if enquiry.status in TERMINAL_STATUSES:
+        raise ToolError(f"the enquiry is already {enquiry.status}; no quote can be drafted")
+    priced = _priced_quote(context, enquiry, rfq)
+    letter = _cover_letter(context, enquiry, priced)
+    quote = Quote(
+        id=context.new_quote_id(),
+        tenant_id=context.tenant_id,
+        enquiry_id=enquiry.id,
+        rfq_id=rfq.id,
+        priced=priced,
+        cover_letter=letter.text,
+        language=letter.language,
+        created_at=context.clock(),
+    )
+    quotes.insert_quote(context.connection, context.tenant_id, quote)
+    history = advance(enquiry.status_history, EnquiryStatus.QUOTED, context.clock())
+    context.save_enquiry(enquiry.model_copy(update={"status_history": history}))
+    return {"quote_id": quote.id}
+
+
+def _rfq_to_quote(context: ToolContext, rfq_id: str) -> Rfq:
+    """Only the RFQ this run created can be quoted, so a confused model cannot quote another lot."""
+    if context.rfq_id is None:
+        raise ToolError("call create_rfq first; a quote prices the RFQ'd lot")
+    if rfq_id != context.rfq_id:
+        raise ToolError(f"{rfq_id} is not the RFQ of this enquiry; use {context.rfq_id}")
+    rfq = rfqs.get_rfq_for_enquiry(context.connection, context.tenant_id, context.enquiry_id)
+    if rfq is None:
+        raise ToolError("call create_rfq first; a quote prices the RFQ'd lot")
+    return rfq
+
+
+def _priced_quote(context: ToolContext, enquiry: Enquiry, rfq: Rfq) -> PricedQuote:
+    matches = [match for match in enquiry.matches if match.stock_item_id == rfq.stock_item_id]
+    lots = [item for item in repositories.list_stock(context.connection) if item.id == rfq.stock_item_id]
+    if enquiry.spec is None or not matches or not lots:
+        raise ToolError("the RFQ'd lot is no longer among the offers; escalate with reason 'other'")
+    try:
+        return price_quote(enquiry.spec, lots[0], matches[0], quoted_on=context.clock().date())
+    except QuoteNotPossible as error:
+        raise ToolError(f"the quote cannot be priced: {error}; escalate with reason 'other'") from error
+
+
+def _cover_letter(context: ToolContext, enquiry: Enquiry, priced: PricedQuote) -> CoverLetter:
+    """The letter is the only model-written text a buyer reads, so it is scanned before anything is stored."""
+    try:
+        letter = write_cover_letter(priced, enquiry.language, context.llm, context.quote_model)
+    except LLMError as error:
+        raise ToolError("the cover letter could not be written; escalate with reason 'other'") from error
+    context.model_usage = ModelUsage(
+        model=letter.llm.model,
+        input_tokens=letter.llm.input_tokens,
+        output_tokens=letter.llm.output_tokens,
+        latency_ms=letter.llm.latency_ms,
+    )
+    stock_ids = [item.id for item in repositories.list_stock(context.connection)]
+    delivery_city = enquiry.spec.delivery_city if enquiry.spec else None
+    leaks = find_supplier_leaks(letter.text, repositories.list_suppliers(context.connection), stock_ids, delivery_city)
+    if leaks:
+        kinds = ", ".join(sorted({leak.kind for leak in leaks}))
+        raise ToolError(f"the cover letter revealed supplier details ({kinds}); no quote was stored")
+    return letter
+
+
 # escalate_to_human
 
 AgentEscalationReason = Literal[
@@ -338,6 +427,15 @@ TOOLS: dict[str, AgentTool] = {
                 input_schema=CreateRfqArguments.model_json_schema(),
             ),
             create_rfq,
+        ),
+        AgentTool(
+            ToolSpec(
+                name="draft_quote",
+                description="Price the RFQ'd lot and write the buyer's quote. Call once, right after create_rfq, "
+                "with the rfq_id it returned.",
+                input_schema=DraftQuoteArguments.model_json_schema(),
+            ),
+            draft_quote,
         ),
         AgentTool(
             ToolSpec(

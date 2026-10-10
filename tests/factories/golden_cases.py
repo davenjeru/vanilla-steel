@@ -55,8 +55,46 @@ def valid_agent_labels(**overrides: Any) -> dict[str, Any]:
         "expected_agent": {
             "decision": "rfq",
             "rfq_stock_item_id": "stk_058",
-            "tool_path": ["extract_specs", "check_duplicate", "search_stock", "create_rfq"],
+            "tool_path": ["extract_specs", "check_duplicate", "search_stock", "create_rfq", "draft_quote"],
         },
+    }
+    return labels | overrides
+
+
+PRICED_S355_PLATE = {
+    "lines": [
+        {
+            "grade": "S355J2",
+            "form": "plate",
+            "rolling": "hot_rolled",
+            "quality": "prime",
+            "coating": None,
+            "thickness_mm": 15.0,
+            "width_mm": 1250.0,
+            "length_mm": None,
+            "quantity_t": 30.0,
+            "price_per_tonne_eur": "701",
+            "total_eur": "21030.00",
+        }
+    ],
+    "currency": "EUR",
+    "vat": "net",
+    "incoterm": "DAP",
+    "delivery_city": "Poznań",
+    "delivery_country": "PL",
+    "valid_until": "2026-10-15",
+}
+
+
+def valid_quote_letter_labels(**overrides: Any) -> dict[str, Any]:
+    """A Polish customer's quote for 30 t S355J2 plate: the letter must be in Polish."""
+    labels = {
+        "reason": "Standard quote for a Polish customer",
+        "verified": True,
+        "source": "hand-written",
+        "language": "pl",
+        "risk": "business_correctness",
+        "input_quote": {"language": "pl", "quote": PRICED_S355_PLATE},
     }
     return labels | overrides
 

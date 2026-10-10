@@ -6,14 +6,14 @@ is met by exactly two lots: stk_058 (Dąbrowa Górnicza) and stk_116 (Eisenhütt
 
 import json
 import sqlite3
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from steel.llm.client import LLMClient
-from steel.storage.seed import SUPPLIERS, build_stock
+from tests.factories.buyer_views import INTERNAL_FIELD_NAMES, all_keys, supplier_identifiers
 from tests.factories.enquiries import BAUER, enquiry_payload
 from tests.factories.llm import FakeLLMClient
 
@@ -28,17 +28,6 @@ S355_PLATE_READING = {
     "delivery_country": "PL",
 }
 
-# Everything that would reveal who the supplier is or what the platform pays.
-INTERNAL_FIELD_NAMES = {
-    "supplier_id",
-    "stock_item_id",
-    "price_eur_per_t",
-    "freight_eur_per_t",
-    "delivered_eur_per_t",
-    "distance_km",
-    "matches",
-}
-
 
 @pytest.fixture
 def client_for(make_api_client: Callable[[LLMClient], TestClient]) -> Callable[[dict[str, Any]], TestClient]:
@@ -50,10 +39,13 @@ def submit(client: TestClient) -> dict[str, Any]:
     return client.post("/v1/enquiries", json=enquiry_payload(), headers=BAUER).json()
 
 
-def test_enquiry_with_matching_stock_moves_to_matched(client_for: Callable[[dict[str, Any]], TestClient]) -> None:
+def test_enquiry_with_matching_stock_moves_through_matched_to_quoted(
+    client_for: Callable[[dict[str, Any]], TestClient],
+) -> None:
+    """Slice 5: the agent drafts the quote after the RFQ, so matching stock ends in a quote."""
     body = submit(client_for(S355_PLATE_READING))
 
-    assert [change["status"] for change in body["status_history"]] == ["received", "extracted", "matched"]
+    assert [change["status"] for change in body["status_history"]] == ["received", "extracted", "matched", "quoted"]
 
 
 def test_buyer_sees_how_many_offers_are_available(client_for: Callable[[dict[str, Any]], TestClient]) -> None:
@@ -114,19 +106,3 @@ def buyer_response_text(client: TestClient, read_back: bool) -> str:
     if not read_back:
         return created.text
     return client.get(f"/v1/enquiries/{created.json()['id']}", headers=BAUER).text
-
-
-def supplier_identifiers() -> list[str]:
-    """Names, IDs and cities of every supplier, and every stock lot ID."""
-    identifiers = [value for supplier in SUPPLIERS for value in (supplier.name, supplier.id, supplier.city)]
-    return identifiers + [item.id for item in build_stock()]
-
-
-def all_keys(value: Any) -> Iterator[str]:
-    if isinstance(value, dict):
-        for key, nested in value.items():
-            yield key
-            yield from all_keys(nested)
-    elif isinstance(value, list):
-        for nested in value:
-            yield from all_keys(nested)

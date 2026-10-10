@@ -16,12 +16,13 @@ from pydantic import BaseModel
 from steel.agent.trace import AgentRun
 from steel.domain.enquiry import Enquiry, Rfq
 from steel.domain.fingerprint import enquiry_fingerprint
+from steel.domain.quote import Quote
 from steel.domain.status import start_history
 from steel.extraction.attachments import Attachment
 from steel.llm.client import LLMClient
 from steel.pipeline import EnquirySubmission, Pipeline, receive_enquiry
 from steel.settings import Settings
-from steel.storage import agent_runs, enquiries, rfqs
+from steel.storage import agent_runs, enquiries, quotes, rfqs
 from steel.storage.db import connect, create_schema
 from steel.storage.seed import seed_database
 
@@ -43,6 +44,7 @@ class SandboxResult(BaseModel):
     enquiry: Enquiry
     run: AgentRun
     rfq: Rfq | None
+    quote: Quote | None
 
 
 def handle_in_sandbox(
@@ -58,7 +60,7 @@ def handle_in_sandbox(
         connection = connect(Path(directory) / "sandbox.db")
         create_schema(connection)
         seed_database(connection)
-        enquiry_numbers, rfq_numbers = itertools.count(1), itertools.count(1)
+        enquiry_numbers, rfq_numbers, quote_numbers = itertools.count(1), itertools.count(1), itertools.count(1)
         for earlier in earlier_enquiries or []:
             _store_earlier_enquiry(connection, earlier, f"enq_{next(enquiry_numbers):04d}")
         pipeline = Pipeline(
@@ -66,18 +68,21 @@ def handle_in_sandbox(
             llm=llm,
             extraction_model=settings.extraction_model,
             agent_model=settings.agent_model,
+            quote_model=settings.quote_model,
             clock=lambda: SANDBOX_TIME,
             new_enquiry_id=lambda: f"enq_{next(enquiry_numbers):04d}",
             new_rfq_id=lambda: f"rfq_{next(rfq_numbers):04d}",
+            new_quote_id=lambda: f"quo_{next(quote_numbers):04d}",
         )
         submission = EnquirySubmission(sender="buyer@example.com", subject=subject, body=body, attachments=attachments)
         enquiry = receive_enquiry(pipeline, SANDBOX_TENANT, submission)
         run = agent_runs.get_agent_run(connection, SANDBOX_TENANT, enquiry.id)
         rfq = rfqs.get_rfq_for_enquiry(connection, SANDBOX_TENANT, enquiry.id)
+        quote = quotes.get_quote_for_enquiry(connection, SANDBOX_TENANT, enquiry.id)
         connection.close()
     if run is None:
         raise RuntimeError(f"no agent run stored for {enquiry.id}")
-    return SandboxResult(enquiry=enquiry, run=run, rfq=rfq)
+    return SandboxResult(enquiry=enquiry, run=run, rfq=rfq, quote=quote)
 
 
 def _store_earlier_enquiry(connection: sqlite3.Connection, earlier: EarlierEnquiry, enquiry_id: str) -> None:

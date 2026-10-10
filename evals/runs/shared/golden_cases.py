@@ -35,6 +35,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, ValidationError, 
 
 from steel.agent.tools import TOOLS, AgentEscalationReason
 from steel.domain.models import MaterialSpec
+from steel.domain.quote import PricedQuote
 from steel.extraction.attachments import Attachment
 from steel.sandbox import OTHER_TENANT, SANDBOX_TENANT, EarlierEnquiry
 from steel.storage.seed import build_stock
@@ -48,8 +49,9 @@ EMAIL_FILE = "email.txt"
 EXTRACTION_NAME_PATTERN = re.compile(r"^(?P<language>[a-z]{2})-\d{3}-[a-z0-9-]+$")
 MATCHING_NAME_PATTERN = re.compile(r"^match-\d{3}-[a-z0-9-]+$")
 AGENT_NAME_PATTERN = re.compile(r"^agent-\d{3}-[a-z0-9-]+$")
+QUOTE_LETTER_NAME_PATTERN = re.compile(r"^letter-\d{3}-[a-z0-9-]+$")
 
-DatasetKind = Literal["extraction", "matching", "agent"]
+DatasetKind = Literal["extraction", "matching", "agent", "quote_letter"]
 Verification = StrictBool | Literal["back-translated"]
 Source = Literal["hand-written", "llm-drafted", "production"]
 Risk = Literal[
@@ -60,6 +62,8 @@ Risk = Literal[
 EXTRACTION_LABELS = {"expected_spec"}
 MATCHING_LABELS = {"input_spec", "expected_offers", "unsuitable_offers"}
 AGENT_LABELS = {"expected_agent", "earlier_enquiries"}
+QUOTE_LETTER_LABELS = {"input_quote"}
+ALL_KIND_LABELS = EXTRACTION_LABELS | MATCHING_LABELS | AGENT_LABELS | QUOTE_LETTER_LABELS
 
 
 class InvalidGoldenCase(ValueError):
@@ -97,6 +101,7 @@ class AgentExpectations(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    # "rfq" means the full sale: one RFQ for the lot, then the buyer's quote (Slice 5).
     decision: Literal["rfq", "escalate"]
     rfq_stock_item_id: str | None = Field(default=None, description="The lot the one RFQ must be for")
     escalation_reasons: list[AgentEscalationReason] = Field(default=[], description="Any of these is acceptable")
@@ -114,9 +119,9 @@ class AgentExpectations(BaseModel):
             raise ValueError("an rfq decision needs rfq_stock_item_id and no escalation_reasons")
         if self.decision == "escalate" and (not self.escalation_reasons or self.rfq_stock_item_id):
             raise ValueError("an escalate decision needs escalation_reasons and no rfq_stock_item_id")
-        final_tool = "create_rfq" if self.decision == "rfq" else "escalate_to_human"
-        if self.tool_path[-1] != final_tool:
-            raise ValueError(f"tool_path must end with {final_tool} for decision {self.decision}")
+        final_tools = ["create_rfq", "draft_quote"] if self.decision == "rfq" else ["escalate_to_human"]
+        if self.tool_path[-len(final_tools) :] != final_tools:
+            raise ValueError(f"tool_path must end with {', '.join(final_tools)} for decision {self.decision}")
         return self
 
 
@@ -138,6 +143,10 @@ class CaseLabels(BaseModel):
     # Agent
     expected_agent: AgentExpectations | None = None
     earlier_enquiries: list[EarlierEnquiryLabel] | None = None
+    # Quote letter
+    input_quote: dict[str, Any] | None = Field(
+        default=None, description="What the letter writer sees: the customer's language and the priced quote"
+    )
     # Any kind
     risk: Risk | None = Field(
         default=None, description="The business risk this case protects; required for agent cases"
@@ -211,13 +220,15 @@ class GoldenCase(BaseModel):
                 "dataset": self.dataset,
                 "version": self.dataset_version,
                 "attachments": [path.name for path in self.attachments],
-                **self.labels.model_dump(exclude=EXTRACTION_LABELS | MATCHING_LABELS | AGENT_LABELS, exclude_none=True),
+                **self.labels.model_dump(exclude=ALL_KIND_LABELS, exclude_none=True),
             },
         }
 
     def _input(self) -> str:
         if self.kind == "matching":
             return _as_json(self.labels.input_spec)
+        if self.kind == "quote_letter":
+            return _as_json(self.labels.input_quote)
         return self.email or ""
 
     def _expected_tools(self) -> list[ToolCall] | None:
@@ -229,6 +240,9 @@ class GoldenCase(BaseModel):
         ]
 
     def _expected_output(self) -> str | None:
+        if self.kind == "quote_letter":
+            # No expected text: a letter has many right wordings. Its language is knowable.
+            return _as_json({"letter_language": self.labels.language})
         if self.kind == "agent":
             return self.labels.expected_agent.model_dump_json() if self.labels.expected_agent else None
         if self.kind == "matching":
@@ -270,6 +284,9 @@ def load_case(case_dir: Path, manifest: DatasetManifest) -> GoldenCase:
     elif manifest.kind == "matching":
         _validate_matching_case(case_dir, labels)
         email = None
+    elif manifest.kind == "quote_letter":
+        _validate_quote_letter_case(case_dir, labels)
+        email = None
     else:
         _validate_agent_case(case_dir, labels)
         email = _read_required_file(case_dir / EMAIL_FILE)
@@ -296,7 +313,7 @@ def _load_labels(case_dir: Path) -> CaseLabels:
 
 
 def _validate_extraction_case(case_dir: Path, labels: CaseLabels) -> None:
-    _forbid_labels_of_other_kind(case_dir, labels, MATCHING_LABELS | AGENT_LABELS, "extraction")
+    _forbid_labels_of_other_kind(case_dir, labels, ALL_KIND_LABELS - EXTRACTION_LABELS, "extraction")
     if labels.language is None:
         raise InvalidGoldenCase(f"{case_dir}: extraction case needs a language")
     _require_name_matches_language(case_dir, labels.language)
@@ -321,7 +338,7 @@ def _require_valid_expected_spec(case_dir: Path, labels: CaseLabels) -> None:
 
 
 def _validate_matching_case(case_dir: Path, labels: CaseLabels) -> None:
-    _forbid_labels_of_other_kind(case_dir, labels, EXTRACTION_LABELS | AGENT_LABELS, "matching")
+    _forbid_labels_of_other_kind(case_dir, labels, ALL_KIND_LABELS - MATCHING_LABELS, "matching")
     if not MATCHING_NAME_PATTERN.match(case_dir.name):
         raise InvalidGoldenCase(f"{case_dir}: folder name must look like match-001-short-slug")
     missing = sorted(MATCHING_LABELS - labels.present_fields())
@@ -347,7 +364,7 @@ def _require_consistent_offer_labels(case_dir: Path, expected: list[str], unsuit
 
 
 def _validate_agent_case(case_dir: Path, labels: CaseLabels) -> None:
-    _forbid_labels_of_other_kind(case_dir, labels, EXTRACTION_LABELS | MATCHING_LABELS, "agent")
+    _forbid_labels_of_other_kind(case_dir, labels, ALL_KIND_LABELS - AGENT_LABELS, "agent")
     if not AGENT_NAME_PATTERN.match(case_dir.name):
         raise InvalidGoldenCase(f"{case_dir}: folder name must look like agent-001-short-slug")
     missing = sorted({"expected_agent", "language", "risk"} - labels.present_fields())
@@ -356,6 +373,33 @@ def _validate_agent_case(case_dir: Path, labels: CaseLabels) -> None:
     expected = labels.expected_agent
     if expected is not None and expected.rfq_stock_item_id is not None:
         _require_consistent_offer_labels(case_dir, [expected.rfq_stock_item_id], [])
+
+
+# Quote-letter cases
+
+
+class QuoteLetterInput(BaseModel):
+    """Exactly what the letter writer receives (steel.quotes.cover_letter): never supplier data, never the email."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    language: str | None = Field(pattern=r"^[a-z]{2}$", description="None when extraction found no language")
+    quote: PricedQuote
+
+
+def _validate_quote_letter_case(case_dir: Path, labels: CaseLabels) -> None:
+    _forbid_labels_of_other_kind(case_dir, labels, ALL_KIND_LABELS - QUOTE_LETTER_LABELS, "quote_letter")
+    if not QUOTE_LETTER_NAME_PATTERN.match(case_dir.name):
+        raise InvalidGoldenCase(f"{case_dir}: folder name must look like letter-001-short-slug")
+    missing = sorted({"language", "input_quote", "risk"} - labels.present_fields())
+    if missing:
+        raise InvalidGoldenCase(f"{case_dir}: quote_letter case needs {missing}")
+    try:
+        letter_input = QuoteLetterInput.model_validate(labels.input_quote)
+    except ValidationError as error:
+        raise InvalidGoldenCase(f"{case_dir}: input_quote is not a valid letter input: {error}") from error
+    if not letter_input.quote.lines:
+        raise InvalidGoldenCase(f"{case_dir}: input_quote has no quote lines")
 
 
 # Shared checks

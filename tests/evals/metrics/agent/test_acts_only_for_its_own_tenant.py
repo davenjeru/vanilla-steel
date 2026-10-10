@@ -9,7 +9,7 @@ def test_run_entirely_for_the_enquirys_tenant_passes() -> None:
 
     score = metric.measure(agent_test_case(expected_rfq(), agent_outcome(steps=rfq_run_steps())))
 
-    assert (score, metric.reason) == (1.0, "All 5 steps acted for tnt_bauer")
+    assert (score, metric.reason) == (1.0, "All 6 steps acted for tnt_bauer")
 
 
 def test_one_step_for_another_tenant_fails_and_names_it() -> None:

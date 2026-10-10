@@ -56,6 +56,9 @@ class RawSpec(BaseModel):
     delivery_city: str | None = Field(default=None, description="Official local name, e.g. Poznań for Posen")
     delivery_country: str | None = Field(default=None, description="ISO 3166-1 alpha-2 code, e.g. PL")
     delivery_date: date | None = Field(default=None, description="Latest acceptable delivery date")
+    language: str | None = Field(
+        default=None, description="ISO 639-1 code of the language the customer wrote in, e.g. en, de, pl"
+    )
     conflicts: list[Conflict] = Field(
         default=[],
         description="Fields stated with different values in different places; do not choose between them",

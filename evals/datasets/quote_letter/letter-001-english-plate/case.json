@@ -1,0 +1,33 @@
+{
+  "reason": "Standard quote for an English-speaking customer: 30 t S355J2 plate, DAP Poznań.",
+  "verified": false,
+  "source": "hand-written",
+  "language": "en",
+  "risk": "business_correctness",
+  "input_quote": {
+    "language": "en",
+    "quote": {
+      "lines": [
+        {
+          "grade": "S355J2",
+          "form": "plate",
+          "rolling": "hot_rolled",
+          "quality": "prime",
+          "coating": null,
+          "thickness_mm": 15.0,
+          "width_mm": 1250.0,
+          "length_mm": 2500.0,
+          "quantity_t": 30.0,
+          "price_per_tonne_eur": "733",
+          "total_eur": "21990.00"
+        }
+      ],
+      "currency": "EUR",
+      "vat": "net",
+      "incoterm": "DAP",
+      "delivery_city": "Poznań",
+      "delivery_country": "PL",
+      "valid_until": "2026-10-15"
+    }
+  }
+}

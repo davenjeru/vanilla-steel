@@ -10,7 +10,7 @@ from evals.runs.shared.golden_cases import InvalidGoldenCase, load_dataset
 from tests.factories.golden_cases import valid_agent_labels, valid_case_labels, write_case
 
 CASE_NAME = "agent-001-s355-plate-rfq"
-HAPPY_PATH = ["extract_specs", "check_duplicate", "search_stock", "create_rfq"]
+HAPPY_PATH = ["extract_specs", "check_duplicate", "search_stock", "create_rfq", "draft_quote"]
 
 
 def write_agent_case(dataset_dir: Path, **label_overrides: Any) -> Path:
@@ -91,7 +91,7 @@ def test_escalation_case_with_several_acceptable_reasons_loads(agent_dataset_dir
     [
         (expect_agent(rfq_stock_item_id=None), "an rfq decision needs rfq_stock_item_id"),
         (escalation([]), "an escalate decision needs escalation_reasons"),
-        (expect_agent(tool_path=["extract_specs", "check_duplicate", "search_stock"]), "must end with create_rfq"),
+        (expect_agent(tool_path=HAPPY_PATH[:-1]), "must end with create_rfq, draft_quote"),
         (escalation(["no_stock"], path=["extract_specs", "create_rfq"]), "must end with escalate_to_human"),
         (expect_agent(tool_path=["extract_specs", "send_email", "create_rfq"]), "unknown tools"),
         (expect_agent(forbidden_tools=["search_stock"]), "both expected and forbidden"),
@@ -100,7 +100,7 @@ def test_escalation_case_with_several_acceptable_reasons_loads(agent_dataset_dir
     ids=[
         "rfq-without-lot",
         "escalation-without-reason",
-        "rfq-path-not-ending-in-create-rfq",
+        "rfq-path-without-the-quote",
         "escalation-path-not-ending-in-escalate",
         "unknown-tool",
         "tool-expected-and-forbidden",

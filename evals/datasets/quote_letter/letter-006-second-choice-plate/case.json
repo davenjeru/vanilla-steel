@@ -1,0 +1,33 @@
+{
+  "reason": "Second-choice lot the customer asked for: the letter must present it factually, never as prime.",
+  "verified": false,
+  "source": "hand-written",
+  "language": "en",
+  "risk": "business_correctness",
+  "input_quote": {
+    "language": "en",
+    "quote": {
+      "lines": [
+        {
+          "grade": "S235JR",
+          "form": "plate",
+          "rolling": "hot_rolled",
+          "quality": "second_choice",
+          "coating": null,
+          "thickness_mm": 5.0,
+          "width_mm": 1500.0,
+          "length_mm": 2500.0,
+          "quantity_t": 20.0,
+          "price_per_tonne_eur": "615",
+          "total_eur": "12300.00"
+        }
+      ],
+      "currency": "EUR",
+      "vat": "net",
+      "incoterm": "DAP",
+      "delivery_city": "Poznań",
+      "delivery_country": "PL",
+      "valid_until": "2026-10-15"
+    }
+  }
+}

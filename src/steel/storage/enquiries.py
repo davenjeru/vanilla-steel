@@ -21,8 +21,9 @@ def insert_enquiry(connection: sqlite3.Connection, enquiry: Enquiry, attachments
             """
             INSERT INTO enquiries (
                 id, tenant_id, sender, subject, body, fingerprint, created_at,
-                status_history, spec, warnings, failure_reason, matches, escalation_reason, escalation_detail
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                status_history, spec, warnings, failure_reason, matches, escalation_reason, escalation_detail,
+                language
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 enquiry.id,
@@ -48,7 +49,7 @@ def update_pipeline_state(connection: sqlite3.Connection, tenant_id: str, enquir
             """
             UPDATE enquiries SET
                 status_history = ?, spec = ?, warnings = ?, failure_reason = ?, matches = ?,
-                escalation_reason = ?, escalation_detail = ?
+                escalation_reason = ?, escalation_detail = ?, language = ?
             WHERE id = ? AND tenant_id = ?
             """,
             (*_pipeline_values(enquiry), enquiry.id, tenant_id),
@@ -100,7 +101,7 @@ def find_earlier_duplicate(
     return row["id"] if row else None
 
 
-def _pipeline_values(enquiry: Enquiry) -> tuple[str, str | None, str, str | None, str, str | None, str | None]:
+def _pipeline_values(enquiry: Enquiry) -> tuple[str | None, ...]:
     return (
         STATUS_HISTORY.dump_json(enquiry.status_history).decode(),
         enquiry.spec.model_dump_json() if enquiry.spec else None,
@@ -109,6 +110,7 @@ def _pipeline_values(enquiry: Enquiry) -> tuple[str, str | None, str, str | None
         MATCHES.dump_json(enquiry.matches).decode(),
         enquiry.escalation_reason,
         enquiry.escalation_detail,
+        enquiry.language,
     )
 
 
@@ -127,5 +129,6 @@ def _enquiry_from_row(row: sqlite3.Row) -> Enquiry:
         matches=MATCHES.validate_json(row["matches"]),
         escalation_reason=row["escalation_reason"],
         escalation_detail=row["escalation_detail"],
+        language=row["language"],
         created_at=row["created_at"],
     )

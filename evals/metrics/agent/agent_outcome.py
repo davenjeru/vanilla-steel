@@ -40,6 +40,7 @@ class AgentOutcome(BaseModel):
     enquiry_tenant_id: str
     decision: Literal["rfq", "escalate", "failed"]
     rfq_stock_item_id: str | None = None
+    quote_id: str | None = None  # the buyer's quote; an RFQ without one leaves the buyer waiting (Slice 5)
     escalation_reason: str | None = None
     steps: list[AgentStep]
     buyer_view: dict[str, Any]  # the enquiry exactly as the buyer API returns it after the run

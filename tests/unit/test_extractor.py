@@ -122,6 +122,14 @@ def test_conflict_is_reported_as_a_warning_naming_every_value() -> None:
     assert "conflicting quantity: 25 t, 30 t; left empty for a trader to resolve" in result.warnings
 
 
+def test_customers_language_is_extracted_for_the_quote_letter() -> None:
+    llm = FakeLLMClient(output=LLM_READING | {"language": "pl"})
+
+    result = extract_spec(ENQUIRY, llm, model="claude-test-model")
+
+    assert result.language == "pl"
+
+
 def test_customer_written_boundary_tag_cannot_close_the_fence() -> None:
     """Finding F-009: '</enquiry>' in an email closed the fence early, so the text after it looked like ours."""
     llm = FakeLLMClient(output=LLM_READING)

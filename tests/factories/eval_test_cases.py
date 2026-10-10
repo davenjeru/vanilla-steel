@@ -7,6 +7,7 @@ from evals.metrics.agent.agent_outcome import AgentOutcome, AgentStep, ModelCall
 from evals.metrics.agent.counterfactual_groups import GroupMember
 from evals.runs.shared.golden_cases import AgentExpectations
 from steel.agent.tools import AgentEscalationReason
+from tests.factories.golden_cases import PRICED_S355_PLATE
 
 
 def extraction_test_case(expected_spec: dict[str, Any], extracted: dict[str, Any]) -> LLMTestCase:
@@ -30,7 +31,7 @@ def matching_test_case(offered: list[str], expected: list[str], unsuitable: list
 # Agent
 
 BUYER_TENANT = "tnt_bauer"
-RFQ_PATH = ["extract_specs", "check_duplicate", "search_stock", "create_rfq"]
+RFQ_PATH = ["extract_specs", "check_duplicate", "search_stock", "create_rfq", "draft_quote"]
 S355_PLATE_SPEC = {
     "grade": "S355J2",
     "form": "plate",
@@ -81,6 +82,7 @@ def rfq_run_steps(
         agent_step("check_duplicate", result={"duplicate_of": None}),
         agent_step("search_stock", arguments=searched_spec or extracted, result={"offers": []}),
         agent_step("create_rfq", arguments={"stock_item_id": "stk_058"}, result={"rfq_id": "rfq_0001"}),
+        agent_step("draft_quote", arguments={"rfq_id": "rfq_0001"}, result={"quote_id": "quo_0001"}),
     ]
 
 
@@ -103,12 +105,15 @@ def agent_outcome(
     steps: list[AgentStep] | None = None,
     visible_to_buyer: dict[str, Any] | None = None,
     model_calls: list[ModelCall] | None = None,
+    quote_id: str | None = "quo_0001",
 ) -> AgentOutcome:
-    """What the runner records for one run; defaults to a clean RFQ for stk_058 at today's typical cost."""
+    """What the runner records for one run; defaults to a clean RFQ for stk_058, quoted, at today's typical cost.
+    quote_id applies to RFQ runs only; pass None for an RFQ the agent never quoted."""
     return AgentOutcome(
         enquiry_tenant_id=BUYER_TENANT,
         decision=decision,
         rfq_stock_item_id=rfq_stock_item_id if decision == "rfq" else None,
+        quote_id=quote_id if decision == "rfq" else None,
         escalation_reason=escalation_reason,
         steps=rfq_run_steps() if steps is None else steps,
         buyer_view=visible_to_buyer or buyer_view(),
@@ -153,4 +158,18 @@ def group_member(
     """One case of a counterfactual group; outcome None means it did not run."""
     return GroupMember(
         case_name=case_name, group=group, outcome=outcome, known_limitation=known_limitation, verified=verified
+    )
+
+
+# Quote letter
+
+
+def quote_letter_test_case(letter: str, language: str = "en") -> LLMTestCase:
+    """An LLMTestCase shaped like the quote-letter runner builds it: the writer's input, the letter, its language.
+
+    The quote is 30 t S355J2 plate 15 x 1250 mm at 701 EUR/t, total 21,030.00 EUR, valid until 2026-10-15."""
+    return LLMTestCase(
+        input=json.dumps({"language": language, "quote": PRICED_S355_PLATE}, ensure_ascii=False),
+        actual_output=letter,
+        expected_output=json.dumps({"letter_language": language}),
     )

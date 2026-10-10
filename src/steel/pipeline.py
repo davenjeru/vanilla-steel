@@ -36,9 +36,11 @@ class Pipeline:
     llm: LLMClient
     extraction_model: str
     agent_model: str
+    quote_model: str
     clock: Callable[[], datetime]
     new_enquiry_id: Callable[[], str]
     new_rfq_id: Callable[[], str]
+    new_quote_id: Callable[[], str]
 
 
 def receive_enquiry(pipeline: Pipeline, tenant_id: str, submission: EnquirySubmission) -> Enquiry:
@@ -61,8 +63,10 @@ def receive_enquiry(pipeline: Pipeline, tenant_id: str, submission: EnquirySubmi
         connection=pipeline.connection,
         llm=pipeline.llm,
         extraction_model=pipeline.extraction_model,
+        quote_model=pipeline.quote_model,
         clock=pipeline.clock,
         new_rfq_id=pipeline.new_rfq_id,
+        new_quote_id=pipeline.new_quote_id,
     )
     run = run_agent(context, pipeline.agent_model)
     agent_runs.save_agent_run(pipeline.connection, tenant_id, run)

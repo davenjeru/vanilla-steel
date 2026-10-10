@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS enquiries (
     fingerprint    TEXT NOT NULL,  -- same for resent or forwarded enquiries (Slice 4)
     escalation_reason TEXT,        -- why a human must take over (Slice 4)
     escalation_detail TEXT,        -- internal explanation from the agent
+    language       TEXT,           -- the customer's ISO 639-1 code, for the quote letter (Slice 5)
     created_at     TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS enquiries_by_tenant ON enquiries (tenant_id);
@@ -66,6 +67,18 @@ CREATE TABLE IF NOT EXISTS rfqs (
     enquiry_id    TEXT NOT NULL UNIQUE REFERENCES enquiries (id),
     stock_item_id TEXT NOT NULL REFERENCES stock_items (id),
     created_at    TEXT NOT NULL
+);
+
+-- Slice 5: at most one quote per RFQ and per enquiry, enforced by the database.
+CREATE TABLE IF NOT EXISTS quotes (
+    id           TEXT PRIMARY KEY,
+    tenant_id    TEXT NOT NULL REFERENCES tenants (id),
+    enquiry_id   TEXT NOT NULL UNIQUE REFERENCES enquiries (id),
+    rfq_id       TEXT NOT NULL UNIQUE REFERENCES rfqs (id),
+    priced       TEXT NOT NULL,  -- JSON PricedQuote: lines and terms, no supplier fields
+    cover_letter TEXT NOT NULL,  -- written by the LLM, scanned for supplier leaks before storing
+    language     TEXT NOT NULL,
+    created_at   TEXT NOT NULL
 );
 
 -- Slice 4: one agent run per enquiry, with every LLM turn and tool call. Internal only.

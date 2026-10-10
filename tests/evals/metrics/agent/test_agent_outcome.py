@@ -26,4 +26,4 @@ def test_rejects_an_outcome_in_the_wrong_shape() -> None:
 def test_tools_called_leaves_out_llm_turns_and_steps_taken_by_code() -> None:
     outcome = agent_outcome()
 
-    assert outcome.tools_called() == ["extract_specs", "check_duplicate", "search_stock", "create_rfq"]
+    assert outcome.tools_called() == ["extract_specs", "check_duplicate", "search_stock", "create_rfq", "draft_quote"]

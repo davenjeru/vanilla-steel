@@ -41,15 +41,20 @@ def seeded_database_file(database_path: Path) -> Path:
 
 
 def build_api_client(database_path: Path, llm: LLMClient) -> TestClient:
-    """An API client with a fixed clock and IDs counting from 1 (enq_0001, rfq_0001)."""
-    enquiry_numbers = itertools.count(1)
-    rfq_numbers = itertools.count(1)
+    """An API client with a fixed clock and IDs counting from 1 (enq_0001, rfq_0001, quo_0001)."""
+    enquiry_numbers, rfq_numbers, quote_numbers = itertools.count(1), itertools.count(1), itertools.count(1)
     app = create_app(
-        Settings(database_path=database_path, extraction_model="claude-test-model", agent_model="claude-test-model"),
+        Settings(
+            database_path=database_path,
+            extraction_model="claude-test-model",
+            agent_model="claude-test-model",
+            quote_model="claude-test-model",
+        ),
         llm=llm,
         clock=lambda: FIXED_NOW,
         new_enquiry_id=lambda: f"enq_{next(enquiry_numbers):04d}",
         new_rfq_id=lambda: f"rfq_{next(rfq_numbers):04d}",
+        new_quote_id=lambda: f"quo_{next(quote_numbers):04d}",
     )
     return TestClient(app)
 
@@ -79,8 +84,7 @@ def make_api_client(seeded_database_path: Path) -> Callable[[LLMClient], TestCli
 
     Clients built in one test share the database, so they share one ID sequence too.
     """
-    enquiry_numbers = itertools.count(1)
-    rfq_numbers = itertools.count(1)
+    enquiry_numbers, rfq_numbers, quote_numbers = itertools.count(1), itertools.count(1), itertools.count(1)
 
     def build(llm: LLMClient) -> TestClient:
         app = create_app(
@@ -88,11 +92,13 @@ def make_api_client(seeded_database_path: Path) -> Callable[[LLMClient], TestCli
                 database_path=seeded_database_path,
                 extraction_model="claude-test-model",
                 agent_model="claude-test-model",
+                quote_model="claude-test-model",
             ),
             llm=llm,
             clock=lambda: FIXED_NOW,
             new_enquiry_id=lambda: f"enq_{next(enquiry_numbers):04d}",
             new_rfq_id=lambda: f"rfq_{next(rfq_numbers):04d}",
+            new_quote_id=lambda: f"quo_{next(quote_numbers):04d}",
         )
         return TestClient(app)
 

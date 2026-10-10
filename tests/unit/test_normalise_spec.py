@@ -3,7 +3,7 @@
 from datetime import date
 
 from steel.domain.models import Incoterm, ProductForm, Rolling
-from steel.extraction.normalise import normalise_spec
+from steel.extraction.normalise import normalise_language, normalise_spec
 from steel.extraction.raw_spec import Measurement, RawSpec
 
 
@@ -105,3 +105,25 @@ def test_rolling_that_contradicts_the_grade_is_kept_with_a_warning() -> None:
 
     assert result.spec.rolling == "hot_rolled"
     assert result.warnings == ["rolling: hot_rolled stated, but DC01 is cold_rolled by definition"]
+
+
+# The customer's language, for the quote letter (Slice 5)
+
+
+def test_language_code_is_lower_cased() -> None:
+    assert normalise_language("DE", warnings=[]) == "de"
+
+
+def test_language_that_is_not_a_two_letter_code_is_left_empty_with_a_warning() -> None:
+    """Never a guess (D15): the letter falls back to English and a trader can see why."""
+    warnings: list[str] = []
+
+    language = normalise_language("German", warnings)
+
+    assert (language, warnings) == (None, ["language: 'German' is not a two-letter ISO 639-1 code"])
+
+
+def test_unstated_language_stays_empty_without_a_warning() -> None:
+    warnings: list[str] = []
+
+    assert (normalise_language(None, warnings), warnings) == (None, [])

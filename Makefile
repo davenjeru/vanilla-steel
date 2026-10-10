@@ -1,4 +1,4 @@
-.PHONY: install check lint format test seed eval-extraction eval-extraction-live eval-matching eval-agent eval-agent-live record-fixtures run-agent run-agent-live export-candidates
+.PHONY: install check lint format test seed eval-extraction eval-extraction-live eval-matching eval-agent eval-agent-live eval-agent-judge-recorded eval-quote-letter eval-quote-letter-live eval-quote-letter-judge-recorded record-fixtures run-agent run-agent-live export-candidates
 
 install:
 	uv sync
@@ -37,9 +37,26 @@ eval-matching:
 eval-agent:
 	uv run --env-file .env python -m evals.runs.agent
 
-## Calls Claude for every agent case (costs money) and records the answers to fixtures/llm/. Commit them.
+## Calls Claude for every agent case (costs money), records the answers to fixtures/llm/ (commit them),
+## and adds the judged metrics (gpt-6-sol, report-only).
 eval-agent-live:
 	uv run --env-file .env python -m evals.runs.agent --live
+
+## Judges the recorded agent runs again without re-running the agent (costs judge calls only).
+eval-agent-judge-recorded:
+	uv run --env-file .env python -m evals.runs.agent --judge-recorded
+
+## Quote letters (Slice 5). Replay: recorded letters, deterministic metrics only, free.
+eval-quote-letter:
+	uv run --env-file .env python -m evals.runs.quote_letter
+
+## New letters from Claude (recorded, commit them) plus the judged metrics (gpt-6-sol, report-only).
+eval-quote-letter-live:
+	uv run --env-file .env python -m evals.runs.quote_letter --live
+
+## Judges the recorded letters again without regenerating them, e.g. after changing judge criteria.
+eval-quote-letter-judge-recorded:
+	uv run --env-file .env python -m evals.runs.quote_letter --judge-recorded
 
 ## Calls Claude for every extraction golden case and saves the answers to fixtures/llm/. Commit them.
 record-fixtures:

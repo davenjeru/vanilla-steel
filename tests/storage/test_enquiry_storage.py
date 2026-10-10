@@ -64,6 +64,15 @@ def test_attachments_are_stored_with_the_enquiry(seeded_connection: sqlite3.Conn
     assert (row["filename"], row["content"]) == ("order.csv", csv.content)
 
 
+def test_extracted_language_is_saved_with_the_enquiry(seeded_connection: sqlite3.Connection) -> None:
+    enquiry = stored_enquiry(seeded_connection)
+
+    enquiries.update_pipeline_state(seeded_connection, "tnt_bauer", enquiry.model_copy(update={"language": "de"}))
+    stored = enquiries.get_enquiry(seeded_connection, "tnt_bauer", "enq_0001")
+
+    assert stored is not None and stored.language == "de"
+
+
 def test_listing_returns_only_the_tenants_own_enquiries_oldest_first(seeded_connection: sqlite3.Connection) -> None:
     """Data separation: the feedback-loop script exports one tenant at a time and must never see another's."""
     for enquiry_id, tenant_id in [("enq_0002", "tnt_bauer"), ("enq_0001", "tnt_bauer"), ("enq_0003", "tnt_kowalski")]:

@@ -1,0 +1,11 @@
+{
+  "version": "0",
+  "kind": "quote_letter",
+  "description": "Priced quotes with the customer's language: the cover letter must use only the quoted figures, name no supplier, be in the right language and be commercially sensible.",
+  "changelog": [
+    {
+      "version": "0",
+      "change": "First 8 cases (hand-written, unverified), priced from seed stock."
+    }
+  ]
+}

@@ -61,13 +61,15 @@ def handled_enquiry(
 def tool_context(
     connection: sqlite3.Connection, llm: LLMClient, enquiry_id: str = "enq_0001", tenant_id: str = "tnt_bauer"
 ) -> ToolContext:
-    rfq_numbers = itertools.count(1)
+    rfq_numbers, quote_numbers = itertools.count(1), itertools.count(1)
     return ToolContext(
         tenant_id=tenant_id,
         enquiry_id=enquiry_id,
         connection=connection,
         llm=llm,
         extraction_model="claude-test-model",
+        quote_model="claude-test-model",
         clock=lambda: FIXED_NOW,
         new_rfq_id=lambda: f"rfq_{next(rfq_numbers):04d}",
+        new_quote_id=lambda: f"quo_{next(quote_numbers):04d}",
     )

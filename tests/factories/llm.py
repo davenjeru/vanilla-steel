@@ -5,6 +5,7 @@ from typing import Any
 
 from steel.domain.injection import SUSPICIOUS_CONTENT_WARNING
 from steel.llm.client import ConversationRequest, ConversationResponse, LLMRequest, LLMResponse
+from steel.quotes.cover_letter import PROMPT_ID as QUOTE_LETTER_PROMPT_ID
 
 
 def llm_request(**overrides: Any) -> LLMRequest:
@@ -59,24 +60,38 @@ def tool_call(name: str, arguments: dict[str, Any] | None = None, call_id: str =
     return {"type": "tool_use", "id": call_id, "name": name, "input": arguments or {}}
 
 
+PLAIN_COVER_LETTER = (
+    "Dear customer, thank you for your enquiry. Please find our offer below: prices are in EUR per tonne, "
+    "net of VAT, delivered under the stated terms. Kind regards"
+)
+
+
 class FakeLLMClient:
-    """Extraction returns a fixed reading. As the agent, it follows the reference policy.
+    """Extraction returns a fixed reading, the quote letter a fixed text. As the agent, it follows the
+    reference policy.
 
     Remembers every request, so tests can check what was asked.
     call_id_prefix imitates a live model, whose tool-call IDs differ on every run.
     """
 
     def __init__(
-        self, output: dict[str, Any], extraction_error: Exception | None = None, call_id_prefix: str = "toolu"
+        self,
+        output: dict[str, Any],
+        extraction_error: Exception | None = None,
+        call_id_prefix: str = "toolu",
+        cover_letter: str = PLAIN_COVER_LETTER,
     ) -> None:
         self.output = output
         self.extraction_error = extraction_error
         self.call_id_prefix = call_id_prefix
+        self.cover_letter = cover_letter
         self.requests: list[LLMRequest] = []
         self.conversations: list[ConversationRequest] = []
 
     def complete(self, request: LLMRequest) -> LLMResponse:
         self.requests.append(request)
+        if request.prompt_id == QUOTE_LETTER_PROMPT_ID:
+            return llm_response({"text": self.cover_letter})
         if self.extraction_error is not None:
             raise self.extraction_error
         return llm_response(self.output)
@@ -100,6 +115,8 @@ class ScriptedLLMClient:
         self.conversations: list[ConversationRequest] = []
 
     def complete(self, request: LLMRequest) -> LLMResponse:
+        if request.prompt_id == QUOTE_LETTER_PROMPT_ID:
+            return llm_response({"text": PLAIN_COVER_LETTER})
         return llm_response(self.extraction_output)
 
     def converse(self, request: ConversationRequest) -> ConversationResponse:
@@ -144,8 +161,12 @@ def reference_next_tool_call(history: list[ToolResult]) -> tuple[str, dict[str, 
     if not history:
         return "extract_specs", {}
     name, result, is_error = history[-1]
-    if is_error or name in {"create_rfq", "escalate_to_human"}:
+    if is_error and name == "draft_quote":
+        return "escalate_to_human", {"reason": "other", "detail": f"The quote could not be drafted: {result['error']}"}
+    if is_error or name in {"draft_quote", "escalate_to_human"}:
         return None
+    if name == "create_rfq":
+        return "draft_quote", {"rfq_id": result["rfq_id"]}
     if name == "extract_specs":
         return _after_extraction(result)
     if name == "check_duplicate":

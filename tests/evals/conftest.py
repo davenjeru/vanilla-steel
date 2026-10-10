@@ -27,3 +27,11 @@ def matching_dataset_dir(tmp_path: Path) -> Path:
     dataset_dir = tmp_path / "matching"
     write_manifest(dataset_dir, valid_manifest(kind="matching"))
     return dataset_dir
+
+
+@pytest.fixture
+def quote_letter_dataset_dir(tmp_path: Path) -> Path:
+    """A quote-letter dataset with a valid manifest and no cases yet."""
+    dataset_dir = tmp_path / "quote_letter"
+    write_manifest(dataset_dir, valid_manifest(kind="quote_letter"))
+    return dataset_dir

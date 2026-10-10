@@ -1,5 +1,5 @@
 {
-  "version": "4",
+  "version": "5",
   "kind": "agent",
   "description": "Enquiry emails with the decision and tool path a correct agent must take, covering business correctness, duplication, data separation, supplier anonymity, security, fairness and robustness.",
   "changelog": [
@@ -22,6 +22,10 @@
     {
       "version": "4",
       "change": "agent-038's reason rewritten in plain words (the warning is now 'fake end-of-email marker'; Confident AI hides the markers, which are in email.txt). Labels unchanged."
+    },
+    {
+      "version": "5",
+      "change": "Slice 5: an rfq decision now means the full sale, so the 14 RFQ cases' tool_path ends with create_rfq, draft_quote."
     }
   ]
 }

@@ -39,6 +39,7 @@ def test_response_contract_has_exactly_the_documented_fields(api_client: TestCli
         "failure_code",
         "escalation_reason",
         "offers_available",
+        "quote_id",  # Slice 5: where the buyer reads the quote, once quoted
         "created_at",
     }
 

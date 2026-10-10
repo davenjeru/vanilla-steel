@@ -44,6 +44,7 @@ def test_two_sandbox_runs_see_identical_state(tmp_path: Path) -> None:
         "check_duplicate",
         "search_stock",
         "create_rfq",
+        "draft_quote",
     ]
 
 

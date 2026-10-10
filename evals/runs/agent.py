@@ -1,10 +1,12 @@
 """Run the agent eval and upload the run to Confident AI.
 
-Usage: uv run --env-file .env python -m evals.runs.agent [--live]
+Usage: uv run --env-file .env python -m evals.runs.agent [--live | --judge-recorded]
 
 Each case runs in the sandbox (fresh seed database, predictable IDs), with its
 earlier enquiries on file. Replay is the default; --live calls Claude and
 records every answer to fixtures/llm/, so the run can be replayed later.
+--live and --judge-recorded add the judged metrics (gpt-6-sol); see
+evals/runs/shared/run_modes.py.
 
 In replay, a case without a recording cannot run. It is listed by name and
 left out of the run: never scored as a pass or a fail it did not earn.
@@ -19,7 +21,6 @@ in each span's metadata.
 be constructed, although in exact-match mode it never calls a model.
 """
 
-import argparse
 from collections.abc import Callable
 from typing import Any, Literal
 
@@ -40,6 +41,7 @@ from evals.metrics.agent.agent_outcome import AgentOutcome, AgentStep, ModelCall
 from evals.metrics.agent.budget import enquiry_cost, price_for
 from evals.metrics.agent.calls_no_forbidden_tool import CallsNoForbiddenTool
 from evals.metrics.agent.counterfactual_groups import GroupMember, GroupVerdict, judge_counterfactual_groups
+from evals.metrics.agent.judged import judged_agent_metrics
 from evals.metrics.agent.latency import LatencyVerdict, judge_latency
 from evals.metrics.agent.reaches_the_right_decision import ReachesTheRightDecision
 from evals.metrics.agent.reveals_no_supplier_to_the_buyer import RevealsNoSupplierToTheBuyer
@@ -47,11 +49,13 @@ from evals.metrics.agent.searches_with_the_extracted_spec import SearchesWithThe
 from evals.metrics.agent.stays_within_the_cost_limit import StaysWithinTheCostLimit
 from evals.metrics.agent.stays_within_the_token_budget import StaysWithinTheTokenBudget
 from evals.runs.shared.golden_cases import DATASETS_DIR, GoldenCase, load_dataset, load_manifest
+from evals.runs.shared.judge import JUDGE_MODEL
 from evals.runs.shared.run_labels import current_git_revision, run_identifier
+from evals.runs.shared.run_modes import Mode, is_judged, parse_mode
 from steel.agent.runner import MAX_TURNS, PROMPT_VERSION
 from steel.agent.tools import TOOLS
 from steel.agent.trace import TraceEvent
-from steel.api.schemas import EnquiryOut
+from steel.api.schemas import BuyerQuote, EnquiryOut
 from steel.domain.enquiry import Enquiry
 from steel.domain.models import EnquiryStatus
 from steel.extraction.extractor import EnquiryDocument
@@ -122,6 +126,7 @@ def agent_outcome(result: SandboxResult) -> AgentOutcome:
         enquiry_tenant_id=result.enquiry.tenant_id,
         decision=_decision(result),
         rfq_stock_item_id=result.rfq.stock_item_id if result.rfq else None,
+        quote_id=result.quote.id if result.quote else None,
         escalation_reason=result.enquiry.escalation_reason,
         steps=[
             AgentStep(
@@ -133,9 +138,19 @@ def agent_outcome(result: SandboxResult) -> AgentOutcome:
             )
             for event in result.run.events
         ],
-        buyer_view=EnquiryOut.from_enquiry(result.enquiry).model_dump(mode="json"),
+        buyer_view=buyer_view(result),
         model_calls=model_calls(result.run.events),
     )
+
+
+def buyer_view(result: SandboxResult) -> dict[str, Any]:
+    """Everything the buyer API returns after the run: the enquiry and, once quoted, the quote with its
+    LLM-written cover letter, so the supplier-leak metric scans the letter too."""
+    quote_id = result.quote.id if result.quote else None
+    view = EnquiryOut.from_enquiry(result.enquiry, quote_id=quote_id).model_dump(mode="json")
+    if result.quote is not None:
+        view["quote"] = BuyerQuote.from_quote(result.quote).model_dump(mode="json")
+    return view
 
 
 def model_calls(events: list[TraceEvent]) -> list[ModelCall]:
@@ -187,16 +202,17 @@ def trace_llm_turn(event: TraceEvent) -> str:
 
 @observe(type="llm")
 def trace_model_call_inside_tool(event: TraceEvent, model: str) -> str:
-    """The extraction call extract_specs makes, as an LLM span nested under the tool's span,
-    so the trace view shows every model call an enquiry costs, not only the agent's turns."""
+    """A model call a tool makes itself (extract_specs' extraction, draft_quote's cover letter), as an LLM
+    span nested under the tool's span, so the trace view shows every model call an enquiry costs."""
+    note = f"see the {event.name} result"
     set_span_input("not recorded: the agent trace stores the tool's result only")
     update_current_span(
         name=f"{event.name}: {model}",
-        output="see the extract_specs result",
+        output=note,
         metadata={"recorded_latency_ms": event.model_latency_ms},
     )
     record_model_use(model, event.input_tokens, event.output_tokens)
-    return "see the extract_specs result"
+    return note
 
 
 def record_model_use(model: str, input_tokens: int, output_tokens: int) -> None:
@@ -323,35 +339,43 @@ def _tool_description(name: str) -> str | None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run the agent eval.")
-    parser.add_argument("--live", action="store_true", help="call Claude and record, instead of replaying")
-    live = parser.parse_args().live
-
+    mode = parse_mode("Run the agent eval.")
     dataset_dir = DATASETS_DIR / DATASET
     manifest = load_manifest(dataset_dir)
     cases = load_dataset(dataset_dir)
-    results = run_every_case(cases, llm_for_case(live))
+    results = run_every_case(cases, llm_for_case(live=mode == "live"))
     dataset = EvaluationDataset(goldens=[Golden(**case.as_golden_fields()) for case in cases if case.name in results])
 
     for golden in dataset.evals_iterator(
-        metrics=agent_metrics(),
-        hyperparameters={
-            "model": SETTINGS.agent_model,
-            "extraction_model": SETTINGS.extraction_model,
-            "prompt_version": PROMPT_VERSION,
-            "max_turns": MAX_TURNS,
-            "mode": "live" if live else "replay",
-        },
+        metrics=agent_metrics(mode),
+        hyperparameters=run_hyperparameters(mode),
         identifier=run_identifier(DATASET, manifest.version, COMPONENT_VERSION, current_git_revision()),
     ):
         trace_agent_run(golden, results[golden.name])
 
     print_counterfactual_report(judge_counterfactual_groups(group_members(cases, results)))
-    print_latency_report(judge_latency(model_seconds_by_case(results), live))
+    print_latency_report(judge_latency(model_seconds_by_case(results), live=mode == "live"))
 
 
-def agent_metrics() -> list[BaseMetric]:
-    """Per-case metrics, all deterministic: none calls a judge model."""
+def run_hyperparameters(mode: Mode) -> dict[str, Any]:
+    return {
+        "model": SETTINGS.agent_model,
+        "extraction_model": SETTINGS.extraction_model,
+        "quote_model": SETTINGS.quote_model,
+        "prompt_version": PROMPT_VERSION,
+        "max_turns": MAX_TURNS,
+        "mode": mode,
+        "judge_model": JUDGE_MODEL if is_judged(mode) else "none",
+    }
+
+
+def agent_metrics(mode: Mode) -> list[BaseMetric]:
+    """Deterministic metrics always; judged ones only in judged modes (they call OpenAI)."""
+    return deterministic_agent_metrics() + judged_agent_metrics() if is_judged(mode) else deterministic_agent_metrics()
+
+
+def deterministic_agent_metrics() -> list[BaseMetric]:
+    """Per-case metrics that call no judge model."""
     return [
         ReachesTheRightDecision(),
         ToolCorrectnessMetric(should_exact_match=True, threshold=1.0),

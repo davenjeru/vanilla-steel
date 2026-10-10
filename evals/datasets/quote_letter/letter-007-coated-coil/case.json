@@ -1,0 +1,33 @@
+{
+  "reason": "Coated coil (DX51D+Z275, no length): the digits in the grade and coating are names, not figures.",
+  "verified": false,
+  "source": "hand-written",
+  "language": "de",
+  "risk": "business_correctness",
+  "input_quote": {
+    "language": "de",
+    "quote": {
+      "lines": [
+        {
+          "grade": "DX51D",
+          "form": "coil",
+          "rolling": "cold_rolled",
+          "quality": "prime",
+          "coating": "Z275",
+          "thickness_mm": 1.0,
+          "width_mm": 2000.0,
+          "length_mm": null,
+          "quantity_t": 50.0,
+          "price_per_tonne_eur": "867",
+          "total_eur": "43350.00"
+        }
+      ],
+      "currency": "EUR",
+      "vat": "net",
+      "incoterm": "DAP",
+      "delivery_city": "Wrocław",
+      "delivery_country": "PL",
+      "valid_until": "2026-10-15"
+    }
+  }
+}

@@ -11,6 +11,7 @@ from steel.extraction.raw_spec import Measurement, RawSpec
 
 COATING_PATTERN = re.compile(r"^Z\d{2,3}$")
 COUNTRY_PATTERN = re.compile(r"^[A-Z]{2}$")
+LANGUAGE_PATTERN = re.compile(r"^[a-z]{2}$")
 
 
 class NormalisedSpec(BaseModel):
@@ -88,3 +89,18 @@ def _country(written: str | None, warnings: list[str]) -> str | None:
         warnings.append(f"delivery_country: not an ISO code {written!r}")
         return None
     return country
+
+
+def normalise_language(written: str | None, warnings: list[str]) -> str | None:
+    """The customer's language as an ISO 639-1 code, for the quote letter (Slice 5).
+
+    Not a MaterialSpec field: it describes the customer, not the steel. A value that is not a
+    two-letter code becomes None with a warning (D15); the letter then falls back to English.
+    """
+    if written is None:
+        return None
+    language = written.strip().lower()
+    if not LANGUAGE_PATTERN.match(language):
+        warnings.append(f"language: {written!r} is not a two-letter ISO 639-1 code")
+        return None
+    return language

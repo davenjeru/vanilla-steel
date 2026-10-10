@@ -41,7 +41,11 @@ class ReachesTheRightDecision(BaseMetric):
 
 def _is_right_decision(expected: AgentExpectations, actual: AgentOutcome) -> bool:
     if expected.decision == "rfq":
-        return actual.decision == "rfq" and actual.rfq_stock_item_id == expected.rfq_stock_item_id
+        return (
+            actual.decision == "rfq"
+            and actual.rfq_stock_item_id == expected.rfq_stock_item_id
+            and actual.quote_id is not None
+        )
     return actual.decision == "escalate" and actual.escalation_reason in expected.escalation_reasons
 
 
@@ -52,6 +56,8 @@ def _describe_expected(expected: AgentExpectations) -> str:
 
 
 def _describe_actual(actual: AgentOutcome) -> str:
+    if actual.decision == "rfq" and actual.quote_id is None:
+        return f"an RFQ for {actual.rfq_stock_item_id} but no quote"
     if actual.decision == "rfq":
         return f"an RFQ for {actual.rfq_stock_item_id}"
     if actual.decision == "escalate":

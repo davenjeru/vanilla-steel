@@ -9,12 +9,12 @@ from steel.domain.models import MaterialSpec
 from steel.extraction.attachments import Attachment, UnsupportedAttachment, attachment_as_text
 from steel.extraction.conflicts import drop_conflicting_fields
 from steel.extraction.evidence import drop_unstated_claims
-from steel.extraction.normalise import normalise_spec
+from steel.extraction.normalise import normalise_language, normalise_spec
 from steel.extraction.raw_spec import RawSpec
 from steel.llm.client import LLMClient, LLMError, LLMRequest, LLMResponse
 
 PROMPT_ID = "extract_spec"
-PROMPT_VERSION = "v2"  # v2: reports conflicting values (finding F-008)
+PROMPT_VERSION = "v3"  # v2: reports conflicting values (F-008); v3: the customer's language (Slice 5)
 PROMPT_PATH = Path(__file__).parent / "prompts" / f"{PROMPT_ID}_{PROMPT_VERSION}.md"
 OUTPUT_NAME = "record_spec"
 
@@ -39,6 +39,7 @@ class EnquiryDocument(BaseModel):
 
 class ExtractionResult(BaseModel):
     spec: MaterialSpec
+    language: str | None  # the customer's, for the quote letter; not part of the steel spec
     raw: RawSpec
     warnings: list[str]
     llm: LLMResponse
@@ -56,7 +57,10 @@ def extract_spec(document: EnquiryDocument, llm: LLMClient, model: str) -> Extra
     supported = drop_unstated_claims(raw, enquiry_text=request.user, warnings=warnings)
     unambiguous = drop_conflicting_fields(supported, warnings)
     normalised = normalise_spec(unambiguous)
-    return ExtractionResult(spec=normalised.spec, raw=raw, warnings=warnings + normalised.warnings, llm=response)
+    language = normalise_language(raw.language, warnings)
+    return ExtractionResult(
+        spec=normalised.spec, language=language, raw=raw, warnings=warnings + normalised.warnings, llm=response
+    )
 
 
 def build_request(document: EnquiryDocument, model: str, warnings: list[str]) -> LLMRequest:

@@ -1,0 +1,33 @@
+{
+  "reason": "100 t coil, a six-figure total in Polish format. Delivery is to Katowice, where a supplier also sits: the buyer's own city is not a leak, but no supplier or mill may be named.",
+  "verified": false,
+  "source": "hand-written",
+  "language": "pl",
+  "risk": "supplier_anonymity",
+  "input_quote": {
+    "language": "pl",
+    "quote": {
+      "lines": [
+        {
+          "grade": "S355J2",
+          "form": "coil",
+          "rolling": "hot_rolled",
+          "quality": "prime",
+          "coating": null,
+          "thickness_mm": 10.0,
+          "width_mm": 2000.0,
+          "length_mm": null,
+          "quantity_t": 100.0,
+          "price_per_tonne_eur": "761",
+          "total_eur": "76100.00"
+        }
+      ],
+      "currency": "EUR",
+      "vat": "net",
+      "incoterm": "DAP",
+      "delivery_city": "Katowice",
+      "delivery_country": "PL",
+      "valid_until": "2026-10-15"
+    }
+  }
+}

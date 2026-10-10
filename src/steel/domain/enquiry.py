@@ -39,6 +39,7 @@ class Enquiry(BaseModel):
     matches: list[Match] = []
     escalation_reason: EscalationReason | None = None
     escalation_detail: str | None = None
+    language: str | None = None  # ISO 639-1, from extraction; the quote letter is written in it
     created_at: datetime
 
     @property

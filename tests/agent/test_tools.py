@@ -7,19 +7,22 @@ import pytest
 
 from steel.agent.tools import (
     TOOLS,
+    ToolContext,
     ToolError,
     check_duplicate,
     create_rfq,
+    draft_quote,
     escalate_to_human,
     extract_specs,
     search_stock,
 )
 from steel.domain.models import EnquiryStatus
+from steel.domain.quote import quoted_price_per_tonne
 from steel.llm.client import LLMError
-from steel.storage import enquiries, rfqs
+from steel.storage import enquiries, quotes, rfqs
 from steel.storage.seed import SUPPLIERS
 from tests.factories.agent import STANDARD_BODY, STANDARD_SUBJECT, stored_enquiry, tool_context
-from tests.factories.llm import FakeLLMClient
+from tests.factories.llm import PLAIN_COVER_LETTER, FakeLLMClient
 from tests.factories.spreadsheets import xlsx_attachment
 
 S355_PLATE_READING = {
@@ -119,6 +122,16 @@ def test_extract_specs_returns_the_spec_and_marks_the_enquiry_extracted(seeded_c
 
     assert (result["spec"]["grade"], result["missing_fields"]) == ("S355J2", [])
     assert status_of(seeded_connection) is EnquiryStatus.EXTRACTED
+
+
+def test_extract_specs_saves_the_customers_language_for_the_quote(seeded_connection: sqlite3.Connection) -> None:
+    stored_enquiry(seeded_connection)
+    context = tool_context(seeded_connection, FakeLLMClient(output=S355_PLATE_READING | {"language": "pl"}))
+
+    extract_specs(context, {})
+
+    enquiry = enquiries.get_enquiry(seeded_connection, "tnt_bauer", "enq_0001")
+    assert enquiry is not None and enquiry.language == "pl"
 
 
 def test_extract_specs_twice_does_not_call_the_llm_again(seeded_connection: sqlite3.Connection) -> None:
@@ -318,6 +331,98 @@ def test_rfq_after_escalation_is_refused(seeded_connection: sqlite3.Connection) 
         create_rfq(context, {"stock_item_id": "stk_058"})
 
     assert rfqs.get_rfq_for_enquiry(seeded_connection, "tnt_bauer", "enq_0001") is None
+
+
+# draft_quote (Slice 5)
+
+
+def rfq_ready_context(connection: sqlite3.Connection, cover_letter: str = PLAIN_COVER_LETTER) -> ToolContext:
+    """A German customer's enquiry, extracted, searched and RFQ'd for stk_058: ready for its quote."""
+    stored_enquiry(connection)
+    llm = FakeLLMClient(output=S355_PLATE_READING | {"language": "de"}, cover_letter=cover_letter)
+    context = tool_context(connection, llm)
+    extract_specs(context, {})
+    search_stock(context, S355_PLATE_SEARCH)
+    create_rfq(context, {"stock_item_id": "stk_058"})
+    return context
+
+
+def test_quote_is_priced_stored_and_the_enquiry_marked_quoted(seeded_connection: sqlite3.Connection) -> None:
+    context = rfq_ready_context(seeded_connection)
+
+    result = draft_quote(context, {"rfq_id": "rfq_0001"})
+
+    quote = quotes.get_quote_for_enquiry(seeded_connection, "tnt_bauer", "enq_0001")
+    assert (result, quote is not None, status_of(seeded_connection)) == (
+        {"quote_id": "quo_0001"},
+        True,
+        EnquiryStatus.QUOTED,
+    )
+
+
+def test_quote_price_is_the_delivered_cost_plus_margin(seeded_connection: sqlite3.Connection) -> None:
+    context = rfq_ready_context(seeded_connection)
+    enquiry = context.load_enquiry()
+    [match] = [match for match in enquiry.matches if match.stock_item_id == "stk_058"]
+
+    draft_quote(context, {"rfq_id": "rfq_0001"})
+
+    quote = quotes.get_quote_for_enquiry(seeded_connection, "tnt_bauer", "enq_0001")
+    assert quote is not None
+    assert quote.priced.lines[0].price_per_tonne_eur == quoted_price_per_tonne(match.delivered_eur_per_t)
+
+
+def test_quote_letter_is_written_in_the_customers_language(seeded_connection: sqlite3.Connection) -> None:
+    context = rfq_ready_context(seeded_connection)
+
+    draft_quote(context, {"rfq_id": "rfq_0001"})
+
+    quote = quotes.get_quote_for_enquiry(seeded_connection, "tnt_bauer", "enq_0001")
+    assert quote is not None and quote.language == "de"
+
+
+def test_quote_records_the_letter_model_call_for_cost_tracking(seeded_connection: sqlite3.Connection) -> None:
+    context = rfq_ready_context(seeded_connection)
+
+    draft_quote(context, {"rfq_id": "rfq_0001"})
+
+    assert context.model_usage is not None and context.model_usage.input_tokens > 0
+
+
+def test_quote_for_an_rfq_this_run_did_not_create_is_refused(seeded_connection: sqlite3.Connection) -> None:
+    context = rfq_ready_context(seeded_connection)
+
+    with pytest.raises(ToolError, match="rfq_9999 is not the RFQ"):
+        draft_quote(context, {"rfq_id": "rfq_9999"})
+
+
+def test_quote_before_any_rfq_is_refused(seeded_connection: sqlite3.Connection) -> None:
+    context = searched_context(seeded_connection)
+
+    with pytest.raises(ToolError, match="call create_rfq first"):
+        draft_quote(context, {"rfq_id": "rfq_0001"})
+
+
+def test_letter_naming_a_supplier_is_never_stored(seeded_connection: sqlite3.Connection) -> None:
+    """Zero tolerance (D20): a letter that names the supplier or its city must not reach the buyer."""
+    context = rfq_ready_context(seeded_connection, cover_letter="Shipped by our partner Donaucoil from Linz.")
+
+    with pytest.raises(ToolError, match="supplier"):
+        draft_quote(context, {"rfq_id": "rfq_0001"})
+
+    assert (quotes.get_quote_for_enquiry(seeded_connection, "tnt_bauer", "enq_0001"), status_of(seeded_connection)) == (
+        None,
+        EnquiryStatus.MATCHED,
+    )
+
+
+def test_second_quote_for_the_same_enquiry_is_refused(seeded_connection: sqlite3.Connection) -> None:
+    """A buyer must never receive two different prices for one enquiry."""
+    context = rfq_ready_context(seeded_connection)
+    draft_quote(context, {"rfq_id": "rfq_0001"})
+
+    with pytest.raises(ToolError, match="quoted"):
+        draft_quote(context, {"rfq_id": "rfq_0001"})
 
 
 # escalate_to_human

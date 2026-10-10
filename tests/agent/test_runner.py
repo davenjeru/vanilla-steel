@@ -52,9 +52,20 @@ def test_stock_available_path_ends_with_one_rfq_for_the_best_offer(seeded_connec
 
     agent_run = run(seeded_connection, FakeLLMClient(output=S355_PLATE_READING))
 
-    assert tool_path(agent_run) == ["extract_specs", "check_duplicate", "search_stock", "create_rfq"]
     rfq = rfqs.get_rfq_for_enquiry(seeded_connection, "tnt_bauer", "enq_0001")
     assert (agent_run.rfq_id, rfq.stock_item_id if rfq else None) == ("rfq_0001", "stk_058")
+
+
+def test_stock_available_path_ends_with_a_quote_for_the_buyer(seeded_connection: sqlite3.Connection) -> None:
+    """Slice 5: the agent drafts the quote right after the RFQ (D24), so an RFQ path ends quoted."""
+    stored_enquiry(seeded_connection)
+
+    agent_run = run(seeded_connection, FakeLLMClient(output=S355_PLATE_READING))
+
+    assert (tool_path(agent_run), agent_run.final_status) == (
+        ["extract_specs", "check_duplicate", "search_stock", "create_rfq", "draft_quote"],
+        EnquiryStatus.QUOTED,
+    )
 
 
 def test_no_stock_path_escalates_without_an_rfq(seeded_connection: sqlite3.Connection) -> None:
@@ -162,12 +173,12 @@ def test_trace_events_are_numbered_in_order(seeded_connection: sqlite3.Connectio
 
 
 def test_run_stops_as_soon_as_a_decision_is_made(seeded_connection: sqlite3.Connection) -> None:
-    """No extra LLM turn after create_rfq: four tool turns, four LLM turns."""
+    """No extra LLM turn after draft_quote: five tool turns, five LLM turns."""
     stored_enquiry(seeded_connection)
 
     agent_run = run(seeded_connection, FakeLLMClient(output=S355_PLATE_READING))
 
-    assert len([event for event in agent_run.events if event.kind == "llm_turn"]) == 4
+    assert len([event for event in agent_run.events if event.kind == "llm_turn"]) == 5
 
 
 def test_enquiry_is_fenced_as_data_in_the_opening_message(seeded_connection: sqlite3.Connection) -> None:
@@ -244,6 +255,25 @@ def test_unknown_tool_is_reported_to_the_model_not_crashed_on(seeded_connection:
 
     [call] = agent_run.tool_calls()
     assert (call.is_error, call.result) == (True, {"error": "unknown tool 'delete_all_enquiries'"})
+
+
+def test_model_that_stops_after_the_rfq_is_escalated_by_code(seeded_connection: sqlite3.Connection) -> None:
+    """An RFQ without a quote would leave the buyer waiting, so the run is not over until the quote is drafted."""
+    stored_enquiry(seeded_connection)
+    stops_after_the_rfq = ScriptedLLMClient(
+        turns=[
+            [tool_call("extract_specs")],
+            [tool_call("search_stock", S355_PLATE_SEARCH, "toolu_02")],
+            [tool_call("create_rfq", {"stock_item_id": "stk_058"}, "toolu_03")],
+            [{"type": "text", "text": "RFQ created, all done."}],
+        ],
+        extraction_output=S355_PLATE_READING,
+    )
+
+    run(seeded_connection, stops_after_the_rfq)
+
+    enquiry = enquiries.get_enquiry(seeded_connection, "tnt_bauer", "enq_0001")
+    assert enquiry is not None and enquiry.escalation_reason == "agent_gave_no_decision"
 
 
 def test_hallucinated_stock_id_never_becomes_an_rfq(seeded_connection: sqlite3.Connection) -> None:
