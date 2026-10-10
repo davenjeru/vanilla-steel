@@ -18,7 +18,7 @@ def test_recorded_answer_is_replayed_exactly(tmp_path: Path) -> None:
 
 
 def test_replay_never_calls_a_live_model_for_an_unrecorded_request(tmp_path: Path) -> None:
-    with pytest.raises(MissingFixture, match="record_fixtures.py"):
+    with pytest.raises(MissingFixture, match="python -m scripts.record_fixtures"):
         ReplayLLMClient(tmp_path).complete(llm_request())
 
 

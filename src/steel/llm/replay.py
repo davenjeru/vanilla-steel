@@ -25,7 +25,8 @@ class ReplayLLMClient:
         path = fixture_path(self.fixtures_dir, request)
         if not path.is_file():
             raise MissingFixture(
-                f"no recorded answer at {path}; record it with scripts/record_fixtures.py "
+                f"no recorded answer at {path}; record it with "
+                "`uv run --env-file .env python -m scripts.record_fixtures` "
                 "(the prompt, model or input changed since the last recording)"
             )
         recording = json.loads(path.read_text(encoding="utf-8"))
