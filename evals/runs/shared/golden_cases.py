@@ -1,7 +1,7 @@
 """Load golden cases stored as one folder per case.
 
     evals/datasets/<dataset>/
-        manifest.json                {"version": "0", "kind": "extraction" | "matching", "description": ..., "changelog": [...]}
+        manifest.json                {"version": "0", "kind": "extraction" | "matching" | "agent", "description": ..., ...}
 
     Extraction cases (does the extractor read the enquiry correctly?):
         <lang>-<nnn>-<slug>/         e.g. en-001-st37-sheet-poznan; the folder name is the case name
@@ -12,6 +12,13 @@
     Matching cases (does the matcher offer the right stock, in the right order?):
         match-<nnn>-<slug>/          e.g. match-001-s355-plate-poznan
             case.json                reason, verified, source, input_spec, expected_offers, unsuitable_offers
+
+    Agent cases (does the agent reach the right decision by the right path?):
+        agent-<nnn>-<slug>/          e.g. agent-001-s355-plate-rfq
+            email.txt                the email exactly as received
+            case.json                reason, verified, source, language, risk, expected_agent,
+                                     optionally earlier_enquiries, counterfactual_group, known_limitation
+            <anything else>          attachments
 
 Everything is validated on load. Pydantic forbids unknown fields, so a typo
 such as "reasn" fails loudly instead of being silently dropped.
@@ -25,8 +32,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, ValidationError, model_validator
 
+from steel.agent.tools import TOOLS, AgentEscalationReason
 from steel.domain.models import MaterialSpec
 from steel.extraction.attachments import Attachment
+from steel.sandbox import OTHER_TENANT, SANDBOX_TENANT, EarlierEnquiry
 from steel.storage.seed import build_stock
 
 REPO_ROOT = Path(__file__).resolve().parents[3]  # evals/runs/shared/golden_cases.py -> repo root
@@ -37,14 +46,19 @@ CASE_FILE = "case.json"
 EMAIL_FILE = "email.txt"
 EXTRACTION_NAME_PATTERN = re.compile(r"^(?P<language>[a-z]{2})-\d{3}-[a-z0-9-]+$")
 MATCHING_NAME_PATTERN = re.compile(r"^match-\d{3}-[a-z0-9-]+$")
+AGENT_NAME_PATTERN = re.compile(r"^agent-\d{3}-[a-z0-9-]+$")
 
-DatasetKind = Literal["extraction", "matching"]
+DatasetKind = Literal["extraction", "matching", "agent"]
 Verification = StrictBool | Literal["back-translated"]
 Source = Literal["hand-written", "llm-drafted", "production"]
+Risk = Literal[
+    "business_correctness", "duplication", "data_separation", "supplier_anonymity", "security", "fairness", "robustness"
+]
 
 # Labels that belong to one kind only. A matching label in an extraction case is a mistake.
 EXTRACTION_LABELS = {"expected_spec"}
 MATCHING_LABELS = {"input_spec", "expected_offers", "unsuitable_offers"}
+AGENT_LABELS = {"expected_agent", "earlier_enquiries"}
 
 
 class InvalidGoldenCase(ValueError):
@@ -67,6 +81,44 @@ class DatasetManifest(BaseModel):
     changelog: list[ChangelogEntry] = []
 
 
+class EarlierEnquiryLabel(BaseModel):
+    """An enquiry already on file when the case runs: from the same tenant, or from another one."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tenant: Literal["same", "other"]
+    subject: str = Field(min_length=1)
+    body: str = Field(min_length=1)
+
+
+class AgentExpectations(BaseModel):
+    """What a correct agent does with the enquiry."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    decision: Literal["rfq", "escalate"]
+    rfq_stock_item_id: str | None = Field(default=None, description="The lot the one RFQ must be for")
+    escalation_reasons: list[AgentEscalationReason] = Field(default=[], description="Any of these is acceptable")
+    tool_path: list[str] = Field(min_length=1, description="Tools in the order a correct agent calls them")
+    forbidden_tools: list[str] = Field(default=[], description="Tools that must never be called in this case")
+
+    @model_validator(mode="after")
+    def decision_matches_its_details(self) -> "AgentExpectations":
+        unknown = sorted(set(self.tool_path + self.forbidden_tools) - set(TOOLS))
+        if unknown:
+            raise ValueError(f"unknown tools {unknown}")
+        if set(self.tool_path) & set(self.forbidden_tools):
+            raise ValueError("a tool cannot be both expected and forbidden")
+        if self.decision == "rfq" and (self.rfq_stock_item_id is None or self.escalation_reasons):
+            raise ValueError("an rfq decision needs rfq_stock_item_id and no escalation_reasons")
+        if self.decision == "escalate" and (not self.escalation_reasons or self.rfq_stock_item_id):
+            raise ValueError("an escalate decision needs escalation_reasons and no rfq_stock_item_id")
+        final_tool = "create_rfq" if self.decision == "rfq" else "escalate_to_human"
+        if self.tool_path[-1] != final_tool:
+            raise ValueError(f"tool_path must end with {final_tool} for decision {self.decision}")
+        return self
+
+
 class CaseLabels(BaseModel):
     """The contents of case.json. Which fields are required depends on the dataset kind."""
 
@@ -82,6 +134,19 @@ class CaseLabels(BaseModel):
     input_spec: dict[str, Any] | None = Field(default=None, description="The customer's spec to match")
     expected_offers: list[str] | None = Field(default=None, description="Stock IDs, best offer first")
     unsuitable_offers: list[str] | None = Field(default=None, description="Stock IDs that must never be offered")
+    # Agent
+    expected_agent: AgentExpectations | None = None
+    earlier_enquiries: list[EarlierEnquiryLabel] | None = None
+    # Any kind
+    risk: Risk | None = Field(
+        default=None, description="The business risk this case protects; required for agent cases"
+    )
+    counterfactual_group: str | None = Field(
+        default=None, description="Cases in one group differ only in irrelevant ways and must get the same outcome"
+    )
+    known_limitation: str | None = Field(
+        default=None, description="Why this case is expected to fail today, e.g. a feature planned for a later slice"
+    )
 
     @model_validator(mode="after")
     def back_translation_is_only_for_non_english_cases(self) -> "CaseLabels":
@@ -99,7 +164,7 @@ class GoldenCase(BaseModel):
     kind: DatasetKind
     dataset: str
     dataset_version: str
-    email: str | None  # extraction only
+    email: str | None  # extraction and agent cases
     attachments: list[Path]
     labels: CaseLabels
 
@@ -107,6 +172,14 @@ class GoldenCase(BaseModel):
     def counts_toward_gate(self) -> bool:
         """Unverified cases are recorded but never count (back-translated is decided per metric)."""
         return self.labels.verified is not False
+
+    def earlier_enquiries_for_sandbox(self) -> list[EarlierEnquiry]:
+        """The case's earlier enquiries, with "same" and "other" turned into the sandbox's tenants."""
+        tenants = {"same": SANDBOX_TENANT, "other": OTHER_TENANT}
+        return [
+            EarlierEnquiry(tenant_id=tenants[earlier.tenant], subject=earlier.subject, body=earlier.body)
+            for earlier in self.labels.earlier_enquiries or []
+        ]
 
     def load_attachments(self) -> list[Attachment]:
         """The case's attachment files, ready to pass to the extractor."""
@@ -134,7 +207,7 @@ class GoldenCase(BaseModel):
                 "dataset": self.dataset,
                 "version": self.dataset_version,
                 "attachments": [path.name for path in self.attachments],
-                **self.labels.model_dump(exclude=EXTRACTION_LABELS | MATCHING_LABELS, exclude_none=True),
+                **self.labels.model_dump(exclude=EXTRACTION_LABELS | MATCHING_LABELS | AGENT_LABELS, exclude_none=True),
             },
         }
 
@@ -144,6 +217,8 @@ class GoldenCase(BaseModel):
         return self.email or ""
 
     def _expected_output(self) -> str | None:
+        if self.kind == "agent":
+            return self.labels.expected_agent.model_dump_json() if self.labels.expected_agent else None
         if self.kind == "matching":
             expected = {
                 "expected_offers": self.labels.expected_offers,
@@ -180,9 +255,12 @@ def load_case(case_dir: Path, manifest: DatasetManifest) -> GoldenCase:
     if manifest.kind == "extraction":
         _validate_extraction_case(case_dir, labels)
         email = _read_required_file(case_dir / EMAIL_FILE)
-    else:
+    elif manifest.kind == "matching":
         _validate_matching_case(case_dir, labels)
         email = None
+    else:
+        _validate_agent_case(case_dir, labels)
+        email = _read_required_file(case_dir / EMAIL_FILE)
     return GoldenCase(
         name=case_dir.name,
         kind=manifest.kind,
@@ -206,7 +284,7 @@ def _load_labels(case_dir: Path) -> CaseLabels:
 
 
 def _validate_extraction_case(case_dir: Path, labels: CaseLabels) -> None:
-    _forbid_labels_of_other_kind(case_dir, labels, MATCHING_LABELS, "extraction")
+    _forbid_labels_of_other_kind(case_dir, labels, MATCHING_LABELS | AGENT_LABELS, "extraction")
     if labels.language is None:
         raise InvalidGoldenCase(f"{case_dir}: extraction case needs a language")
     _require_name_matches_language(case_dir, labels.language)
@@ -231,7 +309,7 @@ def _require_valid_expected_spec(case_dir: Path, labels: CaseLabels) -> None:
 
 
 def _validate_matching_case(case_dir: Path, labels: CaseLabels) -> None:
-    _forbid_labels_of_other_kind(case_dir, labels, EXTRACTION_LABELS, "matching")
+    _forbid_labels_of_other_kind(case_dir, labels, EXTRACTION_LABELS | AGENT_LABELS, "matching")
     if not MATCHING_NAME_PATTERN.match(case_dir.name):
         raise InvalidGoldenCase(f"{case_dir}: folder name must look like match-001-short-slug")
     missing = sorted(MATCHING_LABELS - labels.present_fields())
@@ -251,6 +329,21 @@ def _require_consistent_offer_labels(case_dir: Path, expected: list[str], unsuit
     both = sorted(set(expected) & set(unsuitable))
     if both:
         raise InvalidGoldenCase(f"{case_dir}: {both} are both expected and unsuitable")
+
+
+# Agent cases
+
+
+def _validate_agent_case(case_dir: Path, labels: CaseLabels) -> None:
+    _forbid_labels_of_other_kind(case_dir, labels, EXTRACTION_LABELS | MATCHING_LABELS, "agent")
+    if not AGENT_NAME_PATTERN.match(case_dir.name):
+        raise InvalidGoldenCase(f"{case_dir}: folder name must look like agent-001-short-slug")
+    missing = sorted({"expected_agent", "language", "risk"} - labels.present_fields())
+    if missing:
+        raise InvalidGoldenCase(f"{case_dir}: agent case needs {missing}")
+    expected = labels.expected_agent
+    if expected is not None and expected.rfq_stock_item_id is not None:
+        _require_consistent_offer_labels(case_dir, [expected.rfq_stock_item_id], [])
 
 
 # Shared checks

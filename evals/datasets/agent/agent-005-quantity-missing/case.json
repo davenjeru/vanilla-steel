@@ -1,0 +1,21 @@
+{
+  "reason": "No quantity: the agent must ask (escalate missing_information) and must not search stock for an incomplete spec.",
+  "verified": false,
+  "source": "llm-drafted",
+  "language": "en",
+  "risk": "business_correctness",
+  "expected_agent": {
+    "decision": "escalate",
+    "escalation_reasons": [
+      "missing_information"
+    ],
+    "tool_path": [
+      "extract_specs",
+      "escalate_to_human"
+    ],
+    "forbidden_tools": [
+      "search_stock",
+      "create_rfq"
+    ]
+  }
+}

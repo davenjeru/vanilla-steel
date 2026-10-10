@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from steel.llm.replay import RecordingLLMClient, ReplayLLMClient
-from steel.sandbox import handle_in_sandbox
+from steel.sandbox import EarlierEnquiry, handle_in_sandbox
 from steel.settings import Settings
 from tests.factories.llm import FakeLLMClient
 
@@ -45,3 +45,23 @@ def test_two_sandbox_runs_see_identical_state(tmp_path: Path) -> None:
         "search_stock",
         "create_rfq",
     ]
+
+
+def test_earlier_enquiry_from_the_same_tenant_is_found_as_a_duplicate() -> None:
+    earlier = EarlierEnquiry(tenant_id="tnt_bauer", subject="Plates", body="30 t S355J2 15 x 1250")
+
+    result = handle_in_sandbox(
+        "Fwd: Plates", "30 t S355J2 15 x 1250", [], FakeLLMClient(output=S355_PLATE_READING), SETTINGS, [earlier]
+    )
+
+    assert (result.enquiry.id, result.enquiry.escalation_reason, result.rfq) == ("enq_0002", "duplicate", None)
+
+
+def test_earlier_enquiry_from_another_tenant_is_not_a_duplicate() -> None:
+    earlier = EarlierEnquiry(tenant_id="tnt_kowalski", subject="Plates", body="30 t S355J2 15 x 1250")
+
+    result = handle_in_sandbox(
+        "Plates", "30 t S355J2 15 x 1250", [], FakeLLMClient(output=S355_PLATE_READING), SETTINGS, [earlier]
+    )
+
+    assert result.rfq is not None and result.rfq.stock_item_id == "stk_058"

@@ -44,6 +44,23 @@ def valid_matching_labels(**overrides: Any) -> dict[str, Any]:
     return labels | overrides
 
 
+def valid_agent_labels(**overrides: Any) -> dict[str, Any]:
+    """The happy path: a complete S355J2 plate enquiry that ends in one RFQ for stk_058."""
+    labels = {
+        "reason": "Complete enquiry with matching stock: one RFQ for the best offer",
+        "verified": True,
+        "source": "hand-written",
+        "language": "en",
+        "risk": "business_correctness",
+        "expected_agent": {
+            "decision": "rfq",
+            "rfq_stock_item_id": "stk_058",
+            "tool_path": ["extract_specs", "check_duplicate", "search_stock", "create_rfq"],
+        },
+    }
+    return labels | overrides
+
+
 def write_manifest(dataset_dir: Path, manifest: dict[str, Any]) -> None:
     dataset_dir.mkdir(parents=True, exist_ok=True)
     (dataset_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")

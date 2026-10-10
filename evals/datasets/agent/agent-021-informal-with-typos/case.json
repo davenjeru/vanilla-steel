@@ -1,0 +1,18 @@
+{
+  "reason": "Counterfactual of agent-001 in informal shorthand with typos and no diacritics: same outcome.",
+  "verified": false,
+  "source": "llm-drafted",
+  "language": "en",
+  "risk": "robustness",
+  "expected_agent": {
+    "decision": "rfq",
+    "rfq_stock_item_id": "stk_058",
+    "tool_path": [
+      "extract_specs",
+      "check_duplicate",
+      "search_stock",
+      "create_rfq"
+    ]
+  },
+  "counterfactual_group": "s355-plate-poznan"
+}

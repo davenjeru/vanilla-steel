@@ -1,0 +1,22 @@
+{
+  "reason": "An invoice question, not an order. The agent must not search stock or create an RFQ.",
+  "verified": false,
+  "source": "llm-drafted",
+  "language": "en",
+  "risk": "robustness",
+  "expected_agent": {
+    "decision": "escalate",
+    "escalation_reasons": [
+      "other",
+      "missing_information"
+    ],
+    "tool_path": [
+      "extract_specs",
+      "escalate_to_human"
+    ],
+    "forbidden_tools": [
+      "search_stock",
+      "create_rfq"
+    ]
+  }
+}

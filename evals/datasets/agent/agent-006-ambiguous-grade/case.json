@@ -1,0 +1,21 @@
+{
+  "reason": "'S355' could be S355J2, S355JR or S355MC: escalate as ambiguous_spec without searching stock.",
+  "verified": false,
+  "source": "llm-drafted",
+  "language": "en",
+  "risk": "business_correctness",
+  "expected_agent": {
+    "decision": "escalate",
+    "escalation_reasons": [
+      "ambiguous_spec"
+    ],
+    "tool_path": [
+      "extract_specs",
+      "escalate_to_human"
+    ],
+    "forbidden_tools": [
+      "search_stock",
+      "create_rfq"
+    ]
+  }
+}

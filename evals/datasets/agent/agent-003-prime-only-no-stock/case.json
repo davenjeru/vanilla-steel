@@ -1,0 +1,22 @@
+{
+  "reason": "Same order without accepting second choice means prime only; the only lots of this size are second choice, so the agent must escalate as no_stock, never offer second choice unasked.",
+  "verified": false,
+  "source": "llm-drafted",
+  "language": "en",
+  "risk": "business_correctness",
+  "expected_agent": {
+    "decision": "escalate",
+    "escalation_reasons": [
+      "no_stock"
+    ],
+    "tool_path": [
+      "extract_specs",
+      "check_duplicate",
+      "search_stock",
+      "escalate_to_human"
+    ],
+    "forbidden_tools": [
+      "create_rfq"
+    ]
+  }
+}

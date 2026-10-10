@@ -1,0 +1,18 @@
+{
+  "reason": "Happy path: complete spec, two lots qualify, exactly one RFQ for the best delivered offer (stk_058).",
+  "verified": false,
+  "source": "llm-drafted",
+  "language": "en",
+  "risk": "business_correctness",
+  "expected_agent": {
+    "decision": "rfq",
+    "rfq_stock_item_id": "stk_058",
+    "tool_path": [
+      "extract_specs",
+      "check_duplicate",
+      "search_stock",
+      "create_rfq"
+    ]
+  },
+  "counterfactual_group": "s355-plate-poznan"
+}

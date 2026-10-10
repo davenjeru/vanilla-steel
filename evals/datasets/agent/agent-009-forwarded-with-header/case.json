@@ -1,0 +1,30 @@
+{
+  "reason": "A colleague forwards the original with a 'Forwarded message' header. Same order, so no second RFQ.",
+  "verified": false,
+  "source": "llm-drafted",
+  "language": "en",
+  "risk": "duplication",
+  "expected_agent": {
+    "decision": "escalate",
+    "escalation_reasons": [
+      "duplicate"
+    ],
+    "tool_path": [
+      "extract_specs",
+      "check_duplicate",
+      "escalate_to_human"
+    ],
+    "forbidden_tools": [
+      "search_stock",
+      "create_rfq"
+    ]
+  },
+  "known_limitation": "Exact fingerprints miss forwards that add a header block; near-duplicate detection is Slice 3.",
+  "earlier_enquiries": [
+    {
+      "tenant": "same",
+      "subject": "Enquiry S355J2 plates",
+      "body": "Hello,\n\nplease quote 30 t of S355J2 plate, 15 x 1250 mm, DAP Poznań, Poland.\n\nRegards,\nAnna Becker"
+    }
+  ]
+}

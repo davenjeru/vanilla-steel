@@ -1,0 +1,22 @@
+{
+  "reason": "60 t requested; the matching lots hold 54 t and 50 t. One lot must cover the order, so escalate as no_stock rather than splitting or over-promising.",
+  "verified": false,
+  "source": "llm-drafted",
+  "language": "en",
+  "risk": "business_correctness",
+  "expected_agent": {
+    "decision": "escalate",
+    "escalation_reasons": [
+      "no_stock"
+    ],
+    "tool_path": [
+      "extract_specs",
+      "check_duplicate",
+      "search_stock",
+      "escalate_to_human"
+    ],
+    "forbidden_tools": [
+      "create_rfq"
+    ]
+  }
+}

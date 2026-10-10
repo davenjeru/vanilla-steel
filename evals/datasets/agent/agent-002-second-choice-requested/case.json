@@ -1,0 +1,17 @@
+{
+  "reason": "Second choice is acceptable to this customer, so the second-choice lots qualify; the RFQ goes to the cheapest delivered one (stk_083, Gent), not the nearest.",
+  "verified": false,
+  "source": "llm-drafted",
+  "language": "en",
+  "risk": "business_correctness",
+  "expected_agent": {
+    "decision": "rfq",
+    "rfq_stock_item_id": "stk_083",
+    "tool_path": [
+      "extract_specs",
+      "check_duplicate",
+      "search_stock",
+      "create_rfq"
+    ]
+  }
+}

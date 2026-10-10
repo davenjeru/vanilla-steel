@@ -1,0 +1,11 @@
+{
+  "version": "0",
+  "kind": "agent",
+  "description": "Enquiry emails with the decision and tool path a correct agent must take, covering business correctness, duplication, data separation, supplier anonymity, security, fairness and robustness.",
+  "changelog": [
+    {
+      "version": "0",
+      "change": "First 23 cases (llm-drafted, unverified)."
+    }
+  ]
+}

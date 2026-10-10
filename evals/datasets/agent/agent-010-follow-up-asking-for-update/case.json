@@ -1,0 +1,31 @@
+{
+  "reason": "'Any update?' with the original quoted below is a follow-up, not a new order. It must never become a second RFQ.",
+  "verified": false,
+  "source": "llm-drafted",
+  "language": "en",
+  "risk": "duplication",
+  "expected_agent": {
+    "decision": "escalate",
+    "escalation_reasons": [
+      "duplicate",
+      "other"
+    ],
+    "tool_path": [
+      "extract_specs",
+      "check_duplicate",
+      "escalate_to_human"
+    ],
+    "forbidden_tools": [
+      "search_stock",
+      "create_rfq"
+    ]
+  },
+  "known_limitation": "A follow-up quoting the original is not an exact duplicate; detecting it is Slice 3.",
+  "earlier_enquiries": [
+    {
+      "tenant": "same",
+      "subject": "Enquiry S355J2 plates",
+      "body": "Hello,\n\nplease quote 30 t of S355J2 plate, 15 x 1250 mm, DAP Poznań, Poland.\n\nRegards,\nAnna Becker"
+    }
+  ]
+}
