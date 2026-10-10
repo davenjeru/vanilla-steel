@@ -3,7 +3,7 @@
     replay           recorded outputs, deterministic metrics only: free, repeatable, CI-safe (D4)
     live             new outputs from Claude, recorded; deterministic and judged metrics
     judge-recorded   recorded outputs, deterministic and judged metrics: re-judge the same outputs
-                     without regenerating them, e.g. after changing judge criteria, or for calibration
+                     without regenerating them, e.g. after changing judge criteria
 
 Live and judge-recorded both judge: the judge's answers are not recorded, so judging always calls it.
 """

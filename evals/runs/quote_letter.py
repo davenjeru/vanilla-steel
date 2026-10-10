@@ -8,9 +8,9 @@ case is exactly what the writer sees (the customer's language and the priced quo
     replay (default)   recorded letters, deterministic metrics only: free, repeatable, CI-safe
     --live             new letters from Claude, recorded; deterministic and judged metrics
     --judge-recorded   recorded letters, deterministic and judged metrics: re-judge the same letters,
-                       e.g. after changing judge criteria or for calibration, without regenerating them
+                       e.g. after changing judge criteria, without regenerating them
 
-Judged metrics use gpt-6-sol (evals/runs/shared/judge.py) and are report-only until calibrated.
+Judged metrics use gpt-6-sol (evals/runs/shared/judge.py) and are report-only (D35).
 """
 
 from typing import Any

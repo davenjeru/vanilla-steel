@@ -1,4 +1,4 @@
-"""Judged metrics for the quote cover letter: qualities code cannot decide. Report-only until calibrated.
+"""Judged metrics for the quote cover letter: qualities code cannot decide. Report-only: never gate (D35).
 
 Owner decisions (2026-10-10): quality (G-Eval), prompt alignment and non-advice, with PII leakage as a
 second line behind the deterministic supplier check. Bias and toxicity are left out: a letter built
@@ -7,8 +7,8 @@ information.
 
 Thresholds: G-Eval quality passes at 0.8 (owner, after the Slice 5 live run: at DeepEval's 0.5
 default a Polish letter calling a coil a tube scored 0.5 and passed). The others keep DeepEval's 0.5
-default; they scored 1.0 on every letter so far, so their threshold has not mattered yet. All are
-revisited at calibration (Slice 6).
+default; they scored 1.0 on every letter so far, so their threshold has not mattered yet. Report-only
+metrics do not gate, so these thresholds only colour the report (D35).
 """
 
 from deepeval.metrics import BaseMetric, GEval, NonAdviceMetric, PIILeakageMetric, PromptAlignmentMetric

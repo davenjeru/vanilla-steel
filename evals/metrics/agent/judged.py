@@ -1,4 +1,4 @@
-"""Judged agent metrics: report-only complements to the deterministic ones, until calibrated (Slice 6).
+"""Judged agent metrics: report-only complements to the deterministic ones; never gate (D35).
 
 Owner decisions (2026-10-10):
 - Argument correctness: mostly judges escalate_to_human's free-text detail and draft_quote's argument;
