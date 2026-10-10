@@ -1,0 +1,34 @@
+{
+  "request": {
+    "prompt_id": "quote_letter",
+    "prompt_version": "v1",
+    "model": "claude-haiku-4-5",
+    "system": "You write the short cover letter that goes with a steel quote from a European steel trading platform to a business customer. Call the record_cover_letter tool with the letter text.\n\nYou receive the quote as JSON: the steel offered, quantity, price per tonne, total, delivery terms, currency, VAT and the date the quote is valid until, plus the language to write in.\n\nRules:\n- Write in the language given by \"language\" (an ISO 639-1 code, for example en, de or pl).\n- Keep it short: a greeting, two to four sentences, and a closing. Address the customer neutrally, without a name.\n- Use only numbers, prices, dates and terms that are in the quote, exactly as given. Never calculate, round or invent a figure.\n- State that prices are in EUR per tonne, net of VAT, delivered under the given delivery terms, and that the quote is valid until the given date.\n- Never mention suppliers, mills, warehouses, stock locations or where the steel comes from. The platform is the seller.\n- Do not give legal, tax, customs or financial advice, and do not predict prices or urge the customer to buy quickly.\n- Be professional and factual, as a steel trader writes to a business customer.\n",
+    "user": "{\n  \"language\": \"de\",\n  \"quote\": {\n    \"currency\": \"EUR\",\n    \"delivery_city\": \"Poznań\",\n    \"delivery_country\": \"PL\",\n    \"incoterm\": \"DAP\",\n    \"lines\": [\n      {\n        \"coating\": null,\n        \"form\": \"plate\",\n        \"grade\": \"S355J2\",\n        \"length_mm\": 2500.0,\n        \"price_per_tonne_eur\": \"733\",\n        \"quality\": \"prime\",\n        \"quantity_t\": 30.0,\n        \"rolling\": \"hot_rolled\",\n        \"thickness_mm\": 15.0,\n        \"total_eur\": \"21990.00\",\n        \"width_mm\": 1250.0\n      }\n    ],\n    \"valid_until\": \"2026-10-15\",\n    \"vat\": \"net\"\n  }\n}",
+    "output_name": "record_cover_letter",
+    "output_schema": {
+      "properties": {
+        "text": {
+          "description": "The cover letter, in the requested language",
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "CoverLetterOutput",
+      "type": "object"
+    }
+  },
+  "response": {
+    "output": {
+      "text": "Sehr geehrte Damen und Herren,\n\nanbei erhalten Sie unser Angebot für warmgewalzte Stahlbleche der Güte S355J2 in Prime-Qualität. Die angebotene Menge beträgt 30 Tonnen zum Preis von 733 EUR pro Tonne netto (ohne MwSt.), Gesamtbetrag 21.990,00 EUR. Die Lieferung erfolgt DAP Poznań, Polen.\n\nDieses Angebot ist gültig bis zum 15. Oktober 2026.\n\nMit freundlichen Grüßen"
+    },
+    "model": "claude-haiku-4-5-20251001",
+    "input_tokens": 1186,
+    "output_tokens": 186,
+    "latency_ms": 2117.4
+  }
+}
