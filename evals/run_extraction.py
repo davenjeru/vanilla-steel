@@ -34,7 +34,7 @@ def make_llm(live: bool) -> LLMClient:
     return ReplayLLMClient(SETTINGS.llm_fixtures_dir)
 
 
-@observe()
+@observe(name="extraction", description="run the extraction eval")
 def extract_and_trace(golden: Golden, case: GoldenCase, llm: LLMClient) -> str:
     document = EnquiryDocument.from_email_text(case.email, attachments=case.load_attachments())
     result = extract_spec(document, llm, SETTINGS.extraction_model)
