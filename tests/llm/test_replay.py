@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from steel.llm.replay import MissingFixture, RecordingLLMClient, ReplayLLMClient
+from steel.llm.replay import MissingFixture, RecordingLLMClient, ReplayLLMClient, clear_case_recordings
 from tests.factories.llm import FakeLLMClient, conversation_request, llm_request
 
 
@@ -64,3 +64,45 @@ def test_fixture_stores_the_request_for_human_review(tmp_path: Path) -> None:
     [fixture] = tmp_path.iterdir()
 
     assert "Bitte 25 t St37-2" in fixture.read_text(encoding="utf-8")
+
+
+# Agent conversations are recorded per golden case (finding F-007)
+
+
+def test_agent_turn_recorded_for_a_case_is_stored_in_that_cases_folder(tmp_path: Path) -> None:
+    RecordingLLMClient(FakeLLMClient(output={}), tmp_path, case="agent-007-exact-resend").converse(
+        conversation_request()
+    )
+
+    [fixture] = (tmp_path / "agent" / "agent-007-exact-resend").iterdir()
+
+    assert fixture.name.startswith("agent-v1-")
+
+
+def test_one_cases_agent_recording_is_never_replayed_for_another_case(tmp_path: Path) -> None:
+    """Two cases can send an identical request yet need different answers later; sharing broke agent-007."""
+    RecordingLLMClient(FakeLLMClient(output={}), tmp_path, case="agent-012-same-text-other-tenant").converse(
+        conversation_request()
+    )
+
+    with pytest.raises(MissingFixture):
+        ReplayLLMClient(tmp_path, case="agent-007-exact-resend").converse(conversation_request())
+
+
+def test_extraction_recordings_stay_shared_across_cases(tmp_path: Path) -> None:
+    """One request, one answer: sharing is safe, and API enquiries reuse the golden recordings (D16)."""
+    recorded = RecordingLLMClient(
+        FakeLLMClient(output={"grade_written": "S355J2"}), tmp_path, case="agent-007"
+    ).complete(llm_request())
+
+    assert ReplayLLMClient(tmp_path, case="agent-012").complete(llm_request()) == recorded
+
+
+def test_clearing_a_case_removes_only_that_cases_agent_recordings(tmp_path: Path) -> None:
+    """A re-recorded case must not keep stale turns from its previous conversation."""
+    for case in ["agent-007-exact-resend", "agent-012-same-text-other-tenant"]:
+        RecordingLLMClient(FakeLLMClient(output={}), tmp_path, case=case).converse(conversation_request())
+
+    clear_case_recordings(tmp_path, "agent-007-exact-resend")
+
+    assert sorted(path.name for path in (tmp_path / "agent").iterdir()) == ["agent-012-same-text-other-tenant"]

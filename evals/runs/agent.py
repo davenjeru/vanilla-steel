@@ -20,6 +20,7 @@ be constructed, although in exact-match mode it never calls a model.
 """
 
 import argparse
+from collections.abc import Callable
 from typing import Any, Literal
 
 from deepeval.dataset import EvaluationDataset, Golden
@@ -52,7 +53,7 @@ from steel.domain.models import EnquiryStatus
 from steel.extraction.extractor import EnquiryDocument
 from steel.llm.anthropic_client import AnthropicClient
 from steel.llm.client import LLMClient
-from steel.llm.replay import MissingFixture, RecordingLLMClient, ReplayLLMClient
+from steel.llm.replay import MissingFixture, RecordingLLMClient, ReplayLLMClient, clear_case_recordings
 from steel.sandbox import SandboxResult, handle_in_sandbox
 from steel.settings import Settings
 
@@ -61,10 +62,20 @@ COMPONENT_VERSION = "agent-v1"
 SETTINGS = Settings()
 
 
-def make_llm(live: bool) -> LLMClient:
-    if live:
-        return RecordingLLMClient(AnthropicClient.from_environment(), SETTINGS.llm_fixtures_dir)
-    return ReplayLLMClient(SETTINGS.llm_fixtures_dir)
+def llm_for_case(live: bool) -> Callable[[GoldenCase], LLMClient]:
+    """Each case replays, or records, its own agent conversation (finding F-007).
+
+    Live: the case's old agent recordings are cleared first, so no stale turn survives.
+    """
+
+    def replaying(case: GoldenCase) -> LLMClient:
+        return ReplayLLMClient(SETTINGS.llm_fixtures_dir, case=case.name)
+
+    def recording(case: GoldenCase) -> LLMClient:
+        clear_case_recordings(SETTINGS.llm_fixtures_dir, case.name)
+        return RecordingLLMClient(AnthropicClient.from_environment(), SETTINGS.llm_fixtures_dir, case=case.name)
+
+    return recording if live else replaying
 
 
 def run_in_sandbox(case: GoldenCase, llm: LLMClient) -> SandboxResult:
@@ -76,13 +87,13 @@ def run_in_sandbox(case: GoldenCase, llm: LLMClient) -> SandboxResult:
     )
 
 
-def run_every_case(cases: list[GoldenCase], llm: LLMClient) -> dict[str, SandboxResult]:
+def run_every_case(cases: list[GoldenCase], llm_for: Callable[[GoldenCase], LLMClient]) -> dict[str, SandboxResult]:
     """Results by case name. Cases without a recording are reported, not scored."""
     results: dict[str, SandboxResult] = {}
     unrecorded: list[str] = []
     for number, case in enumerate(cases, start=1):
         try:
-            results[case.name] = run_in_sandbox(case, llm)
+            results[case.name] = run_in_sandbox(case, llm_for(case))
         except MissingFixture:
             unrecorded.append(case.name)
         # Live runs take minutes before DeepEval's own progress bar starts, so report each case as it finishes.
@@ -259,7 +270,7 @@ def main() -> None:
     dataset_dir = DATASETS_DIR / DATASET
     manifest = load_manifest(dataset_dir)
     cases = load_dataset(dataset_dir)
-    results = run_every_case(cases, make_llm(live))
+    results = run_every_case(cases, llm_for_case(live))
     dataset = EvaluationDataset(goldens=[Golden(**case.as_golden_fields()) for case in cases if case.name in results])
 
     for golden in dataset.evals_iterator(

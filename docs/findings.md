@@ -133,14 +133,17 @@ whether to delete those runs in Confident AI.
 | Business risk | Eval reliability: a case silently drops out of replay, and re-recording one case breaks the other. Today it hides agent-007, a duplication case |
 
 **Reproduced by** `test_two_cases_with_the_same_email_both_replay_after_recording`
-(`tests/test_sandbox.py`, `xfail(strict=True)`), and on the real recordings: replaying agent-007
-reaches turn 3 with tool-call IDs that belong to agent-012's conversation.
-**Options (owner to choose):** (a) scope agent recordings by golden case (the case name joins
-the fixture key), so cases never share answers; costs one re-record of all agent cases.
-(b) within one recording session, reuse an existing answer for an identical request
-instead of calling the model again; cheaper, but a later single-case re-record can still
-overwrite. (c) give each case a distinct enquiry ID in the sandbox; works by accident, not design.
-Recommended: (a).
+(`tests/test_sandbox.py`), and on the real recordings: replaying agent-007 reached turn 3 with
+tool-call IDs that belong to agent-012's conversation.
+**Options considered:** (a) scope agent recordings by golden case; (b) within one recording
+session, reuse an existing answer for an identical request (a later single-case re-record
+can still overwrite); (c) give each case a distinct enquiry ID (works by accident, not design).
+**Fixed (owner chose a):** agent conversations recorded for a golden case live in
+`fixtures/llm/agent/<case>/`; a live re-record clears the case's folder first; extraction
+recordings stay shared (D16 updated). Existing recordings were migrated by replaying each
+case from the shared store, so the analysed live run is kept unchanged: 30 of 31 agent cases
+replay with identical outcomes. agent-007 needs one live re-record. The 186 shared agent
+files were removed, 75 of them stale leftovers no case used.
 
 ## F-008: Subject and body give different quantities; the agent orders one of them
 

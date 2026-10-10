@@ -16,7 +16,7 @@ from evals.runs.shared.golden_cases import DATASETS_DIR, GoldenCase, load_datase
 from steel.extraction.extractor import EnquiryDocument
 from steel.llm.anthropic_client import AnthropicClient
 from steel.llm.client import LLMClient
-from steel.llm.replay import RecordingLLMClient, ReplayLLMClient
+from steel.llm.replay import RecordingLLMClient, ReplayLLMClient, clear_case_recordings
 from steel.sandbox import SandboxResult, handle_in_sandbox
 from steel.settings import Settings
 
@@ -38,7 +38,7 @@ def main() -> None:
         document.subject,
         document.body,
         document.attachments,
-        _llm(arguments.live, settings),
+        _llm(arguments.live, settings, case.name),
         settings,
         case.earlier_enquiries_for_sandbox(),
     )
@@ -55,10 +55,12 @@ def find_case(name: str) -> GoldenCase:
     raise SystemExit(f"no case named {name} in {DATASETS_WITH_EMAILS}")
 
 
-def _llm(live: bool, settings: Settings) -> LLMClient:
+def _llm(live: bool, settings: Settings, case_name: str) -> LLMClient:
+    """The agent conversation is recorded per case (finding F-007); a live run first clears the case's old one."""
     if live:
-        return RecordingLLMClient(AnthropicClient.from_environment(), settings.llm_fixtures_dir)
-    return ReplayLLMClient(settings.llm_fixtures_dir)
+        clear_case_recordings(settings.llm_fixtures_dir, case_name)
+        return RecordingLLMClient(AnthropicClient.from_environment(), settings.llm_fixtures_dir, case=case_name)
+    return ReplayLLMClient(settings.llm_fixtures_dir, case=case_name)
 
 
 def print_result(result: SandboxResult) -> None:

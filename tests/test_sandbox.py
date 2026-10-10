@@ -2,8 +2,6 @@
 
 from pathlib import Path
 
-import pytest
-
 from steel.llm.replay import RecordingLLMClient, ReplayLLMClient
 from steel.sandbox import EarlierEnquiry, handle_in_sandbox
 from steel.settings import Settings
@@ -49,20 +47,20 @@ def test_two_sandbox_runs_see_identical_state(tmp_path: Path) -> None:
     ]
 
 
-@pytest.mark.xfail(strict=True, reason="Finding F-007: identical opening requests share one recording")
 def test_two_cases_with_the_same_email_both_replay_after_recording(tmp_path: Path) -> None:
-    """Golden cases agent-007 (resend) and agent-012 (same text, other tenant) both handle enq_0002 with the
-    same email, so their first agent turns are identical requests. Recording the second overwrote the first,
-    and its random tool-call IDs then made the first case's later turns unreplayable."""
+    """Regression for finding F-007. Golden cases agent-007 (resend) and agent-012 (same text, other tenant)
+    both handle enq_0002 with the same email, so their first agent turns are identical requests. Recorded
+    into one shared store, the second overwrote the first, and its random tool-call IDs then made the first
+    case's later turns unreplayable. Each case now records into its own folder."""
     resend = EarlierEnquiry(tenant_id="tnt_bauer", subject="Plates", body="30 t S355J2 15 x 1250")
     other_tenant = EarlierEnquiry(tenant_id="tnt_kowalski", subject="Plates", body="30 t S355J2 15 x 1250")
-    for earlier, live_run in [(resend, "toolu_first"), (other_tenant, "toolu_second")]:
-        live = FakeLLMClient(output=S355_PLATE_READING, call_id_prefix=live_run)
-        handle_in_sandbox(
-            "Plates", "30 t S355J2 15 x 1250", [], RecordingLLMClient(live, tmp_path), SETTINGS, [earlier]
-        )
+    for case, earlier in [("resend", resend), ("other-tenant", other_tenant)]:
+        live = FakeLLMClient(output=S355_PLATE_READING, call_id_prefix=f"toolu_{case}")
+        recording = RecordingLLMClient(live, tmp_path, case=case)
+        handle_in_sandbox("Plates", "30 t S355J2 15 x 1250", [], recording, SETTINGS, [earlier])
 
-    replayed = handle_in_sandbox("Plates", "30 t S355J2 15 x 1250", [], ReplayLLMClient(tmp_path), SETTINGS, [resend])
+    replaying = ReplayLLMClient(tmp_path, case="resend")
+    replayed = handle_in_sandbox("Plates", "30 t S355J2 15 x 1250", [], replaying, SETTINGS, [resend])
 
     assert replayed.enquiry.escalation_reason == "duplicate"
 

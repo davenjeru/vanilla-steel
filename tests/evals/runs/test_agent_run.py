@@ -59,7 +59,7 @@ def test_cases_without_a_recording_are_left_out_not_scored(tmp_path: Path, capsy
     """A case that could not run must not appear as a pass or a fail; it is named instead."""
     case = first_agent_case()
 
-    results = run_every_case([case], ReplayLLMClient(tmp_path))
+    results = run_every_case([case], lambda case: ReplayLLMClient(tmp_path, case=case.name))
 
     assert (results, case.name in capsys.readouterr().out) == ({}, True)
 
@@ -68,7 +68,7 @@ def test_reports_progress_as_each_case_finishes(tmp_path: Path, capsys: pytest.C
     """Live runs take minutes before DeepEval's progress bar appears; the owner must see they are moving."""
     case = first_agent_case()
 
-    run_every_case([case], ReplayLLMClient(tmp_path))
+    run_every_case([case], lambda case: ReplayLLMClient(tmp_path, case=case.name))
 
     assert f"[1/1] {case.name}: not recorded" in capsys.readouterr().out
 
