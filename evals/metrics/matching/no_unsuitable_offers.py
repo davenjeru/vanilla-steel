@@ -3,7 +3,7 @@ from typing import Any
 from deepeval.metrics import BaseMetric
 from deepeval.test_case import LLMTestCase
 
-from evals.metrics.matching_outcome import read_matching_outcome
+from evals.metrics.matching.matching_outcome import read_matching_outcome
 
 
 class NoUnsuitableOffers(BaseMetric):

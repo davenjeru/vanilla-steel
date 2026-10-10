@@ -15,7 +15,7 @@ from deepeval.dataset import EvaluationDataset, Golden
 from deepeval.tracing import observe, update_current_trace
 
 from evals.golden_cases import DATASETS_DIR, GoldenCase, load_dataset, load_manifest
-from evals.metrics.field_match import SCORED_FIELDS, FieldMatch
+from evals.metrics.extraction.field_match import SCORED_FIELDS, FieldMatch
 from steel.extraction.extractor import PROMPT_VERSION, EnquiryDocument, extract_spec
 from steel.llm.anthropic_client import AnthropicClient
 from steel.llm.client import LLMClient

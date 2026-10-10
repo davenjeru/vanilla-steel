@@ -3,7 +3,7 @@
 If this metric is wrong, every extraction accuracy number is wrong, so it is
 tested on its own before it grades anything.
 
-Interface these tests expect from evals/metrics/field_match.py:
+Interface these tests expect from evals/metrics/extraction/field_match.py:
 - values_match(expected, actual) -> bool
 - FieldMatch(field) -> a DeepEval BaseMetric named "FieldMatch[<field>]",
   reading the label from expected_output and the extraction from actual_output
@@ -15,7 +15,7 @@ import asyncio
 import pytest
 from deepeval.test_case import LLMTestCase
 
-from evals.metrics.field_match import SCORED_FIELDS, UNSCORED_FIELDS, FieldMatch, values_match
+from evals.metrics.extraction.field_match import SCORED_FIELDS, UNSCORED_FIELDS, FieldMatch, values_match
 from steel.domain.models import MaterialSpec
 from tests.factories.eval_test_cases import extraction_test_case
 
