@@ -1,0 +1,16 @@
+{
+  "reason": "60 t requested; the only matching lots hold 54 t (stk_058) and 50 t (stk_116). One lot must cover the order, so nothing may be offered. Combining lots is out of scope; the agent must escalate.",
+  "verified": false,
+  "source": "llm-drafted",
+  "input_spec": {
+    "grade": "S355J2",
+    "form": "plate",
+    "thickness_mm": 15,
+    "width_mm": 1250,
+    "quantity_t": 60,
+    "delivery_city": "Poznań",
+    "delivery_country": "PL"
+  },
+  "expected_offers": [],
+  "unsuitable_offers": ["stk_058", "stk_116"]
+}

@@ -1,0 +1,16 @@
+{
+  "reason": "Same enquiry as match-002 but quality not stated, which means prime. The only lots of this size are second choice (stk_083, stk_011), so nothing may be offered; the agent must escalate instead (Slice 4).",
+  "verified": false,
+  "source": "llm-drafted",
+  "input_spec": {
+    "grade": "S235JR",
+    "form": "plate",
+    "thickness_mm": 5,
+    "width_mm": 1500,
+    "quantity_t": 20,
+    "delivery_city": "Poznań",
+    "delivery_country": "PL"
+  },
+  "expected_offers": [],
+  "unsuitable_offers": ["stk_083", "stk_011"]
+}

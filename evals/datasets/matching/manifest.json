@@ -1,0 +1,8 @@
+{
+  "version": "0",
+  "kind": "matching",
+  "description": "Customer specs matched against the deterministic seed stock, with the offers a correct matcher must return (best first) and stock it must never offer.",
+  "changelog": [
+    {"version": "0", "change": "First 5 cases (llm-drafted, unverified): two-lot ranking, distant-but-cheaper wins, second choice not offered unasked, no lot large enough, unknown delivery location."}
+  ]
+}

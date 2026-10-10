@@ -1,11 +1,17 @@
 """Load golden cases stored as one folder per case.
 
     evals/datasets/<dataset>/
-        manifest.json            {"version": "0", "kind": "extraction", "description": ..., "changelog": [...]}
-        <lang>-<nnn>-<slug>/     the folder name is the case name, e.g. en-001-st37-sheet-poznan
-            email.txt            the email exactly as received
-            case.json            reason, verified, language, source, expected_spec
-            <anything else>      attachments, e.g. order.xlsx
+        manifest.json                {"version": "0", "kind": "extraction" | "matching", "description": ..., "changelog": [...]}
+
+    Extraction cases (does the extractor read the enquiry correctly?):
+        <lang>-<nnn>-<slug>/         e.g. en-001-st37-sheet-poznan; the folder name is the case name
+            email.txt                the email exactly as received
+            case.json                reason, verified, language, source, expected_spec
+            <anything else>          attachments, e.g. order.xlsx
+
+    Matching cases (does the matcher offer the right stock, in the right order?):
+        match-<nnn>-<slug>/          e.g. match-001-s355-plate-poznan
+            case.json                reason, verified, source, input_spec, expected_offers, unsuitable_offers
 
 Everything is validated on load. Pydantic forbids unknown fields, so a typo
 such as "reasn" fails loudly instead of being silently dropped.
@@ -21,6 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, ValidationError, 
 
 from steel.domain.models import MaterialSpec
 from steel.extraction.attachments import Attachment
+from steel.storage.seed import build_stock
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DATASETS_DIR = REPO_ROOT / "evals" / "datasets"
@@ -28,10 +35,16 @@ DATASETS_DIR = REPO_ROOT / "evals" / "datasets"
 MANIFEST_FILE = "manifest.json"
 CASE_FILE = "case.json"
 EMAIL_FILE = "email.txt"
-CASE_NAME_PATTERN = re.compile(r"^(?P<language>[a-z]{2})-\d{3}-[a-z0-9-]+$")
+EXTRACTION_NAME_PATTERN = re.compile(r"^(?P<language>[a-z]{2})-\d{3}-[a-z0-9-]+$")
+MATCHING_NAME_PATTERN = re.compile(r"^match-\d{3}-[a-z0-9-]+$")
 
+DatasetKind = Literal["extraction", "matching"]
 Verification = StrictBool | Literal["back-translated"]
 Source = Literal["hand-written", "llm-drafted", "production"]
+
+# Labels that belong to one kind only. A matching label in an extraction case is a mistake.
+EXTRACTION_LABELS = {"expected_spec"}
+MATCHING_LABELS = {"input_spec", "expected_offers", "unsuitable_offers"}
 
 
 class InvalidGoldenCase(ValueError):
@@ -49,35 +62,44 @@ class DatasetManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     version: str = Field(min_length=1)
-    kind: Literal["extraction"]
+    kind: DatasetKind
     description: str = Field(min_length=1)
     changelog: list[ChangelogEntry] = []
 
 
 class CaseLabels(BaseModel):
-    """The contents of case.json."""
+    """The contents of case.json. Which fields are required depends on the dataset kind."""
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     reason: str = Field(min_length=1, description="What this case tests and why it matters")
     verified: Verification
-    language: str = Field(pattern=r"^[a-z]{2}$")
     source: Source
+    language: str | None = Field(default=None, pattern=r"^[a-z]{2}$", description="Extraction cases only")
+    # Extraction
     expected_spec: dict[str, Any] | None = None
+    # Matching
+    input_spec: dict[str, Any] | None = Field(default=None, description="The customer's spec to match")
+    expected_offers: list[str] | None = Field(default=None, description="Stock IDs, best offer first")
+    unsuitable_offers: list[str] | None = Field(default=None, description="Stock IDs that must never be offered")
 
     @model_validator(mode="after")
     def back_translation_is_only_for_non_english_cases(self) -> "CaseLabels":
         # Decision D2: back-translation verifies German and Polish labels.
-        if self.verified == "back-translated" and self.language == "en":
+        if self.verified == "back-translated" and self.language in (None, "en"):
             raise ValueError('verified "back-translated" is only valid for non-English cases')
         return self
+
+    def present_fields(self) -> set[str]:
+        return {name for name in type(self).model_fields if getattr(self, name) is not None}
 
 
 class GoldenCase(BaseModel):
     name: str
+    kind: DatasetKind
     dataset: str
     dataset_version: str
-    email: str
+    email: str | None  # extraction only
     attachments: list[Path]
     labels: CaseLabels
 
@@ -100,27 +122,35 @@ class GoldenCase(BaseModel):
     def as_golden_fields(self) -> dict[str, Any]:
         """Keyword arguments for deepeval's Golden: Golden(**case.as_golden_fields()).
 
-        The expected spec travels as JSON in expected_output, not in metadata:
+        The expected result travels as JSON in expected_output, not in metadata:
         it is the only golden field a trace-level metric receives inside
         evals_iterator, and Confident AI shows it next to the actual output.
         """
         return {
             "name": self.name,
-            "input": self.email,
+            "input": self._input(),
             "expected_output": self._expected_output(),
             "additional_metadata": {
                 "dataset": self.dataset,
                 "version": self.dataset_version,
                 "attachments": [path.name for path in self.attachments],
-                **self.labels.model_dump(exclude={"expected_spec"}),
+                **self.labels.model_dump(exclude=EXTRACTION_LABELS | MATCHING_LABELS, exclude_none=True),
             },
         }
 
+    def _input(self) -> str:
+        if self.kind == "matching":
+            return _as_json(self.labels.input_spec)
+        return self.email or ""
+
     def _expected_output(self) -> str | None:
-        if self.labels.expected_spec is None:
-            return None
-        # ensure_ascii=False keeps "Poznań" readable in Confident AI instead of "Poznań".
-        return json.dumps(self.labels.expected_spec, ensure_ascii=False)
+        if self.kind == "matching":
+            expected = {
+                "expected_offers": self.labels.expected_offers,
+                "unsuitable_offers": self.labels.unsuitable_offers,
+            }
+            return _as_json(expected)
+        return _as_json(self.labels.expected_spec) if self.labels.expected_spec is not None else None
 
 
 def dataset_dirs() -> list[Path]:
@@ -147,14 +177,18 @@ def load_manifest(dataset_dir: Path) -> DatasetManifest:
 
 def load_case(case_dir: Path, manifest: DatasetManifest) -> GoldenCase:
     labels = _load_labels(case_dir)
-    _require_name_matches_language(case_dir, labels)
     if manifest.kind == "extraction":
-        _require_valid_expected_spec(case_dir, labels)
+        _validate_extraction_case(case_dir, labels)
+        email = _read_required_file(case_dir / EMAIL_FILE)
+    else:
+        _validate_matching_case(case_dir, labels)
+        email = None
     return GoldenCase(
         name=case_dir.name,
+        kind=manifest.kind,
         dataset=case_dir.parent.name,
         dataset_version=manifest.version,
-        email=_read_required_file(case_dir / EMAIL_FILE),
+        email=email,
         attachments=_attachments(case_dir),
         labels=labels,
     )
@@ -168,25 +202,75 @@ def _load_labels(case_dir: Path) -> CaseLabels:
         raise InvalidGoldenCase(f"{case_path}: {error}") from error
 
 
-def _require_name_matches_language(case_dir: Path, labels: CaseLabels) -> None:
-    match = CASE_NAME_PATTERN.match(case_dir.name)
+# Extraction cases
+
+
+def _validate_extraction_case(case_dir: Path, labels: CaseLabels) -> None:
+    _forbid_labels_of_other_kind(case_dir, labels, MATCHING_LABELS, "extraction")
+    if labels.language is None:
+        raise InvalidGoldenCase(f"{case_dir}: extraction case needs a language")
+    _require_name_matches_language(case_dir, labels.language)
+    _require_valid_expected_spec(case_dir, labels)
+
+
+def _require_name_matches_language(case_dir: Path, language: str) -> None:
+    match = EXTRACTION_NAME_PATTERN.match(case_dir.name)
     if match is None:
         raise InvalidGoldenCase(f"{case_dir}: folder name must look like en-001-short-slug")
-    if match["language"] != labels.language:
-        raise InvalidGoldenCase(f"{case_dir}: folder prefix {match['language']!r} != language {labels.language!r}")
+    if match["language"] != language:
+        raise InvalidGoldenCase(f"{case_dir}: folder prefix {match['language']!r} != language {language!r}")
 
 
 def _require_valid_expected_spec(case_dir: Path, labels: CaseLabels) -> None:
     if labels.expected_spec is None:
         raise InvalidGoldenCase(f"{case_dir}: extraction case needs an expected_spec")
-    # MaterialSpec ignores unknown fields, so a typo like "thicknes_mm" would never be scored.
-    unknown_fields = set(labels.expected_spec) - set(MaterialSpec.model_fields)
+    _require_material_spec(case_dir, "expected_spec", labels.expected_spec)
+
+
+# Matching cases
+
+
+def _validate_matching_case(case_dir: Path, labels: CaseLabels) -> None:
+    _forbid_labels_of_other_kind(case_dir, labels, EXTRACTION_LABELS, "matching")
+    if not MATCHING_NAME_PATTERN.match(case_dir.name):
+        raise InvalidGoldenCase(f"{case_dir}: folder name must look like match-001-short-slug")
+    missing = sorted(MATCHING_LABELS - labels.present_fields())
+    if missing:
+        raise InvalidGoldenCase(f"{case_dir}: matching case needs {missing}")
+    _require_material_spec(case_dir, "input_spec", labels.input_spec or {})
+    _require_consistent_offer_labels(case_dir, labels.expected_offers or [], labels.unsuitable_offers or [])
+
+
+def _require_consistent_offer_labels(case_dir: Path, expected: list[str], unsuitable: list[str]) -> None:
+    """Offer labels must name real seed stock, once each, and never be both expected and unsuitable."""
+    unknown = sorted(set(expected + unsuitable) - {item.id for item in build_stock()})
+    if unknown:
+        raise InvalidGoldenCase(f"{case_dir}: unknown stock IDs {unknown}")
+    if len(set(expected)) != len(expected):
+        raise InvalidGoldenCase(f"{case_dir}: expected_offers lists a stock ID twice")
+    both = sorted(set(expected) & set(unsuitable))
+    if both:
+        raise InvalidGoldenCase(f"{case_dir}: {both} are both expected and unsuitable")
+
+
+# Shared checks
+
+
+def _forbid_labels_of_other_kind(case_dir: Path, labels: CaseLabels, other_labels: set[str], kind: str) -> None:
+    misplaced = sorted(other_labels & labels.present_fields())
+    if misplaced:
+        raise InvalidGoldenCase(f"{case_dir}: {misplaced} do not belong in {kind} cases")
+
+
+def _require_material_spec(case_dir: Path, label: str, spec: dict[str, Any]) -> None:
+    # MaterialSpec ignores unknown fields, so a typo like "thicknes_mm" would never be scored or matched.
+    unknown_fields = set(spec) - set(MaterialSpec.model_fields)
     if unknown_fields:
-        raise InvalidGoldenCase(f"{case_dir}: expected_spec has unknown fields {sorted(unknown_fields)}")
+        raise InvalidGoldenCase(f"{case_dir}: {label} has unknown fields {sorted(unknown_fields)}")
     try:
-        MaterialSpec(**labels.expected_spec)
+        MaterialSpec(**spec)
     except ValidationError as error:
-        raise InvalidGoldenCase(f"{case_dir}: expected_spec is not a valid MaterialSpec: {error}") from error
+        raise InvalidGoldenCase(f"{case_dir}: {label} is not a valid MaterialSpec: {error}") from error
 
 
 def _attachments(case_dir: Path) -> list[Path]:
@@ -202,6 +286,11 @@ def _read_required_file(path: Path) -> str:
     if not path.is_file():
         raise InvalidGoldenCase(f"{path.parent}: missing {path.name}")
     return path.read_text(encoding="utf-8")
+
+
+def _as_json(value: Any) -> str:
+    # ensure_ascii=False keeps "Poznań" readable in Confident AI instead of "Poznań".
+    return json.dumps(value, ensure_ascii=False)
 
 
 def _is_hidden(path: Path) -> bool:

@@ -1,0 +1,14 @@
+{
+  "reason": "No delivery city or country, so freight cannot be estimated: offers are ranked by price alone (stk_058 at 682 EUR/t before stk_116 at 701 EUR/t). Wrong-size plates are still never offered.",
+  "verified": false,
+  "source": "llm-drafted",
+  "input_spec": {
+    "grade": "S355J2",
+    "form": "plate",
+    "thickness_mm": 15,
+    "width_mm": 1250,
+    "quantity_t": 30
+  },
+  "expected_offers": ["stk_058", "stk_116"],
+  "unsuitable_offers": ["stk_026", "stk_052", "stk_110"]
+}

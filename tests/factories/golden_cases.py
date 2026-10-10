@@ -23,6 +23,27 @@ def valid_case_labels(**overrides: Any) -> dict[str, Any]:
     return labels | overrides
 
 
+def valid_matching_labels(**overrides: Any) -> dict[str, Any]:
+    """A matching case against the real seed stock: two suitable lots, three same-grade near misses."""
+    labels = {
+        "reason": "Prime S355J2 plate for Poznań: two lots qualify, the cheaper delivered one first",
+        "verified": True,
+        "source": "hand-written",
+        "input_spec": {
+            "grade": "S355J2",
+            "form": "plate",
+            "thickness_mm": 15,
+            "width_mm": 1250,
+            "quantity_t": 30,
+            "delivery_city": "Poznań",
+            "delivery_country": "PL",
+        },
+        "expected_offers": ["stk_058", "stk_116"],
+        "unsuitable_offers": ["stk_026", "stk_052", "stk_110"],
+    }
+    return labels | overrides
+
+
 def write_manifest(dataset_dir: Path, manifest: dict[str, Any]) -> None:
     dataset_dir.mkdir(parents=True, exist_ok=True)
     (dataset_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
