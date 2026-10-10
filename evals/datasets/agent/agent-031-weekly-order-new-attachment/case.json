@@ -1,0 +1,25 @@
+{
+  "reason": "Same email text as last week's order, but a new order in the spreadsheet. The fingerprint hashes only subject and body, so this new order is flagged as a duplicate and escalated, delaying a real sale. A correct agent treats it as new: one RFQ for stk_058. The earlier enquiry is stored without its attachment, which is enough here because attachments never enter the fingerprint.",
+  "verified": false,
+  "source": "llm-drafted",
+  "language": "en",
+  "risk": "duplication",
+  "expected_agent": {
+    "decision": "rfq",
+    "rfq_stock_item_id": "stk_058",
+    "tool_path": [
+      "extract_specs",
+      "check_duplicate",
+      "search_stock",
+      "create_rfq"
+    ]
+  },
+  "earlier_enquiries": [
+    {
+      "tenant": "same",
+      "subject": "Weekly order",
+      "body": "Hello,\n\nplease see this week's order attached.\n\nRegards,\nAnna Becker"
+    }
+  ],
+  "known_limitation": "Finding F-005: the duplicate fingerprint ignores attachments, so identical email text with a different order is a false duplicate. Expected to fail until the fingerprint covers attachment content."
+}

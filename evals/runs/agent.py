@@ -26,6 +26,7 @@ from deepeval.dataset import EvaluationDataset, Golden
 from deepeval.metrics import AgentLoopDetectionMetric, ToolCorrectnessMetric
 from deepeval.test_case import ToolCall
 from deepeval.tracing import (
+    current_span_context,
     observe,
     update_current_span,
     update_current_trace,
@@ -36,6 +37,7 @@ from deepeval.tracing import (
 from evals.metrics.agent.acts_only_for_its_own_tenant import ActsOnlyForItsOwnTenant
 from evals.metrics.agent.agent_outcome import AgentOutcome, AgentStep
 from evals.metrics.agent.calls_no_forbidden_tool import CallsNoForbiddenTool
+from evals.metrics.agent.counterfactual_groups import GroupMember, GroupVerdict, judge_counterfactual_groups
 from evals.metrics.agent.reaches_the_right_decision import ReachesTheRightDecision
 from evals.metrics.agent.reveals_no_supplier_to_the_buyer import RevealsNoSupplierToTheBuyer
 from evals.metrics.agent.searches_with_the_extracted_spec import SearchesWithTheExtractedSpec
@@ -45,6 +47,7 @@ from steel.agent.runner import MAX_TURNS, PROMPT_VERSION
 from steel.agent.tools import TOOLS
 from steel.agent.trace import TraceEvent
 from steel.api.schemas import EnquiryOut
+from steel.domain.enquiry import Enquiry
 from steel.domain.models import EnquiryStatus
 from steel.extraction.extractor import EnquiryDocument
 from steel.llm.anthropic_client import AnthropicClient
@@ -127,36 +130,67 @@ def _decision(result: SandboxResult) -> Literal["rfq", "escalate", "failed"]:
     return "failed"
 
 
+def set_span_input(value: Any) -> None:
+    """Set the current span's input directly, even when it is empty.
+
+    DeepEval's update_current_span ignores a falsy input such as {}, and the
+    span then records the decorated function's arguments instead: the whole
+    trace event, enquiry or sandbox result, which carry internal matches
+    (supplier IDs, cost prices) that must not be uploaded as tool input.
+    """
+    span = current_span_context.get()
+    if span is not None:
+        span.input = value
+
+
 @observe(type="llm")
 def trace_llm_turn(event: TraceEvent) -> str:
     """Model and tokens go through update_llm_span, so Confident AI shows them natively.
     No cost: no price per token has been agreed for the replica."""
     text = str(event.result.get("text", ""))
+    set_span_input("not recorded: the agent trace stores each turn's reply only")
     update_current_span(name=event.name, output=text, metadata={"recorded_latency_ms": event.latency_ms})
     update_llm_span(model=event.name, input_token_count=event.input_tokens, output_token_count=event.output_tokens)
     return text
 
 
 @observe(type="tool")
-def trace_tool_call(event: TraceEvent) -> dict[str, Any]:
-    """A tool the agent chose. DeepEval lists tool spans as the agent span's tools_called."""
+def trace_tool_call(event: TraceEvent, enquiry: Enquiry) -> dict[str, Any]:
+    """A tool the agent chose. DeepEval lists tool spans as the agent span's tools_called.
+
+    The input stays exactly what the model sent, often {}; the context code
+    supplied goes to metadata, so a reviewer sees what the tool acted on.
+    """
+    set_span_input(event.arguments)
     update_current_span(
         name=event.name,
-        input=event.arguments,
         output=event.result,
-        metadata={"is_error": event.is_error, "tenant_id": event.tenant_id, "recorded_latency_ms": event.latency_ms},
+        metadata={
+            "is_error": event.is_error,
+            "recorded_latency_ms": event.latency_ms,
+            "supplied_by_code": _context_supplied_by_code(event, enquiry),
+        },
     )
     update_tool_span(description=_tool_description(event.name))
     return event.result
+
+
+def _context_supplied_by_code(event: TraceEvent, enquiry: Enquiry) -> dict[str, str]:
+    context = {"tenant_id": event.tenant_id, "enquiry_id": enquiry.id}
+    if event.name == "check_duplicate":
+        # What the duplicate check compared: this fingerprint against the tenant's earlier enquiries (D26).
+        context["fingerprint"] = enquiry.fingerprint
+        context["compared_with"] = f"earlier enquiries of {event.tenant_id} with the same fingerprint"
+    return context
 
 
 @observe(name="code")
 def trace_code_action(event: TraceEvent) -> dict[str, Any]:
     """An action code took, e.g. escalating a run that hit the step limit.
     Not a tool span: it was not the agent's choice and must not appear among its tool calls."""
+    set_span_input(event.arguments)
     update_current_span(
         name=f"code: {event.name}",
-        input=event.arguments,
         output=event.result,
         metadata={"is_error": event.is_error, "tenant_id": event.tenant_id},
     )
@@ -166,11 +200,12 @@ def trace_code_action(event: TraceEvent) -> dict[str, Any]:
 @observe(name="agent", type="agent", available_tools=list(TOOLS), description="run the agent eval")
 def trace_agent_run(golden: Golden, result: SandboxResult) -> str:
     """The outcome goes to the trace as AgentOutcome JSON, the shape the custom metrics read."""
+    set_span_input(golden.input)
     for event in result.run.events:
         if event.kind == "llm_turn":
             trace_llm_turn(event)
         elif event.kind == "tool_call":
-            trace_tool_call(event)
+            trace_tool_call(event, result.enquiry)
         else:
             trace_code_action(event)
     outcome = agent_outcome(result)
@@ -200,9 +235,20 @@ def trace_agent_run(golden: Golden, result: SandboxResult) -> str:
 
 
 def _tool_description(name: str) -> str | None:
-    """None for a tool the agent invented; the trace still shows the name it tried."""
+    """The tool's description, plus a note when it takes no arguments.
+
+    An empty argument list is correct, not an omission: the tools get the
+    enquiry and tenant from code (decision D25). The note is added here, not
+    in the product's description, which is part of the agent prompt; changing
+    it would invalidate every recording.
+    None for a tool the agent invented; the trace still shows the name it tried.
+    """
     tool = TOOLS.get(name)
-    return tool.spec.description if tool else None
+    if tool is None:
+        return None
+    if not tool.spec.input_schema.get("properties"):
+        return f"{tool.spec.description} Takes no arguments: code supplies the enquiry and the tenant."
+    return tool.spec.description
 
 
 def main() -> None:
@@ -236,6 +282,34 @@ def main() -> None:
         identifier=run_identifier(DATASET, manifest.version, COMPONENT_VERSION, current_git_revision()),
     ):
         trace_agent_run(golden, results[golden.name])
+
+    print_counterfactual_report(judge_counterfactual_groups(group_members(cases, results)))
+
+
+def group_members(cases: list[GoldenCase], results: dict[str, SandboxResult]) -> list[GroupMember]:
+    """Every case in a counterfactual group, with its outcome, or None if it did not run."""
+    return [
+        GroupMember(
+            case_name=case.name,
+            group=case.labels.counterfactual_group,
+            outcome=agent_outcome(results[case.name]) if case.name in results else None,
+            known_limitation=case.labels.known_limitation is not None,
+            verified=case.labels.verified is True,
+        )
+        for case in cases
+        if case.labels.counterfactual_group is not None
+    ]
+
+
+def print_counterfactual_report(verdicts: list[GroupVerdict]) -> None:
+    """Printed, not uploaded: Confident AI scores single cases; the release gate will read these verdicts."""
+    print("\nFairness: counterfactual groups")
+    for verdict in verdicts:
+        gate_note = "" if verdict.counts_toward_gate else " [unverified, does not count]"
+        path_note = " (tool paths differ)" if verdict.tool_paths_differ else ""
+        print(f"  {verdict.verdict.upper():<9} {verdict.group}: {verdict.reason}{path_note}{gate_note}")
+        for case_name, outcome in verdict.outcomes.items():
+            print(f"            {case_name}: {outcome}")
 
 
 if __name__ == "__main__":

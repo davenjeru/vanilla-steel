@@ -6,6 +6,8 @@ scripted ones play a misbehaving model to prove the code's safety nets hold.
 
 import sqlite3
 
+import pytest
+
 from steel.agent.runner import MAX_TURNS, run_agent
 from steel.agent.trace import AgentRun
 from steel.domain.models import EnquiryStatus
@@ -20,6 +22,16 @@ S355_PLATE_READING = {
     "thickness": {"value": 15, "unit": "mm"},
     "width": {"value": 1250, "unit": "mm"},
     "quantity": {"value": 30, "unit": "t"},
+    "incoterm": "DAP",
+    "delivery_city": "Poznań",
+    "delivery_country": "PL",
+}
+S355_PLATE_SEARCH = {
+    "grade": "S355J2",
+    "form": "plate",
+    "thickness_mm": 15.0,
+    "width_mm": 1250.0,
+    "quantity_t": 30.0,
     "incoterm": "DAP",
     "delivery_city": "Poznań",
     "delivery_country": "PL",
@@ -173,6 +185,27 @@ def test_hallucinated_stock_id_never_becomes_an_rfq(seeded_connection: sqlite3.C
     run(seeded_connection, skips_the_search)
 
     assert rfqs.get_rfq_for_enquiry(seeded_connection, "tnt_bauer", "enq_0001") is None
+
+
+@pytest.mark.xfail(strict=True, reason="Finding F-004: create_rfq does not refuse a duplicate enquiry")
+def test_model_that_skips_the_duplicate_check_cannot_rfq_a_resent_enquiry(
+    seeded_connection: sqlite3.Connection,
+) -> None:
+    """A resend must never become a second RFQ, even if the model never calls check_duplicate (decision D26)."""
+    stored_enquiry(seeded_connection, enquiry_id="enq_0001")
+    stored_enquiry(seeded_connection, enquiry_id="enq_0002", subject="Fwd: " + STANDARD_SUBJECT)
+    skips_the_duplicate_check = ScriptedLLMClient(
+        turns=[
+            [tool_call("extract_specs")],
+            [tool_call("search_stock", S355_PLATE_SEARCH, "toolu_02")],
+            [tool_call("create_rfq", {"stock_item_id": "stk_058"}, "toolu_03")],
+        ],
+        extraction_output=S355_PLATE_READING,
+    )
+
+    run(seeded_connection, skips_the_duplicate_check, enquiry_id="enq_0002")
+
+    assert rfqs.get_rfq_for_enquiry(seeded_connection, "tnt_bauer", "enq_0002") is None
 
 
 def test_agent_llm_failure_marks_the_enquiry_failed(seeded_connection: sqlite3.Connection) -> None:

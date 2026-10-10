@@ -4,6 +4,7 @@ from typing import Any, Literal
 from deepeval.test_case import LLMTestCase
 
 from evals.metrics.agent.agent_outcome import AgentOutcome, AgentStep
+from evals.metrics.agent.counterfactual_groups import GroupMember
 from evals.runs.shared.golden_cases import AgentExpectations
 from steel.agent.tools import AgentEscalationReason
 
@@ -119,4 +120,17 @@ def agent_test_case(expected: AgentExpectations, outcome: AgentOutcome) -> LLMTe
         input="Subject: Enquiry S355J2 plate\n\nWe need 30 t of S355J2 plate 15 x 1250 mm, DAP Poznań.",
         actual_output=outcome.model_dump_json(),
         expected_output=expected.model_dump_json(),
+    )
+
+
+def group_member(
+    case_name: str,
+    outcome: AgentOutcome | None,
+    group: str = "s355-plate-poznan",
+    known_limitation: bool = False,
+    verified: bool = True,
+) -> GroupMember:
+    """One case of a counterfactual group; outcome None means it did not run."""
+    return GroupMember(
+        case_name=case_name, group=group, outcome=outcome, known_limitation=known_limitation, verified=verified
     )

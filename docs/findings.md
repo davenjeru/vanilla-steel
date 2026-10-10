@@ -72,3 +72,53 @@ recorded run): metric "Searches with the extracted spec" fails with
 **Proposed fix (not yet made):** `search_stock` refuses arguments that differ from
 the stored extracted spec on any field the agent supplies, so the extracted spec
 is the only source of truth.
+
+## F-004: Nothing in code stops a second RFQ for a resent enquiry
+
+| | |
+|---|---|
+| Found | 2026-10-10, code review of `check_duplicate` and `create_rfq` |
+| Behaviour | Duplicate prevention depends on the agent calling `check_duplicate` and obeying `duplicate_of`. `create_rfq` checks only that the lot was offered and that this enquiry has no RFQ yet; it never asks whether the enquiry duplicates an earlier one |
+| Layer | Product code (missing safety net); the rule lives only in the prompt |
+| Business risk | Duplication: a resend or forward becomes a second RFQ to a supplier, then a second quote to the buyer |
+
+**Reproduced by** `test_model_that_skips_the_duplicate_check_cannot_rfq_a_resent_enquiry`
+(`tests/agent/test_runner.py`): a scripted model skips `check_duplicate` on a forwarded
+resend and `rfq_0001` is created for `enq_0002`. Marked `xfail(strict=True)`, so the
+suite stays green today and turns red the moment the fix lands, forcing the marker off.
+Golden cases 007 and 008 catch it only if the model misbehaves in that run.
+**Proposed fix (not yet made):** `create_rfq` refuses when `find_earlier_duplicate`
+finds an earlier same-tenant enquiry, the same pattern as D25: the rule is enforced by
+code and the prompt is the second line.
+
+## F-005: Same email text with a new order attached is a false duplicate
+
+| | |
+|---|---|
+| Found | 2026-10-10, code review of `steel/domain/fingerprint.py` |
+| Behaviour | The fingerprint hashes subject and body only. "Weekly order, see attached" with a different spreadsheet each week matches last week's enquiry |
+| Layer | Product code (duplicate rule, D26) |
+| Business risk | Duplication in reverse: a genuine order is escalated as a duplicate, so it waits for a human instead of becoming an RFQ. A lost or delayed sale, not a wrong one |
+
+**Reproduced by** agent case `agent-031-weekly-order-new-attachment` (known limitation).
+Played with the reference policy: `check_duplicate` returns `enq_0001` and the enquiry
+is escalated as `duplicate`, where one RFQ for `stk_058` is expected. Needs a live
+recording to run in the eval.
+**Proposed fix (not yet made):** include attachment content (the text tables extraction
+already builds) in the fingerprint, as Slice 3's `fingerprint(doc)` interface suggests.
+
+## F-006: Agent eval uploaded internal match data to Confident AI
+
+| | |
+|---|---|
+| Found | 2026-10-10, while adding duplicate-check context to the trace |
+| Behaviour | DeepEval's `update_current_span` ignores an empty input such as `{}`; a span then records its function's arguments instead. The agent span uploaded the whole `SandboxResult`, including the enquiry's internal matches (supplier IDs, cost prices), and no-argument tool spans uploaded the full trace event |
+| Layer | Eval harness (`evals/runs/agent.py`), not product code |
+| Business risk | Supplier anonymity: internal data sent to a third-party tool beyond what the eval needs. Not buyer-facing |
+
+**Reproduced by** `test_upload_carries_no_internal_match_data` (`tests/evals/runs/test_agent_run.py`),
+which checks the exact body DeepEval would upload; on the previous runner it finds two `sup_` IDs.
+**Fixed:** every span's input is set explicitly (`set_span_input`): the email for the
+agent span, the model's own arguments for tool spans.
+**Open:** agent eval runs already uploaded contain this data. The owner should decide
+whether to delete those runs in Confident AI.

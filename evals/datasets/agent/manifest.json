@@ -1,5 +1,5 @@
 {
-  "version": "1",
+  "version": "2",
   "kind": "agent",
   "description": "Enquiry emails with the decision and tool path a correct agent must take, covering business correctness, duplication, data separation, supplier anonymity, security, fairness and robustness.",
   "changelog": [
@@ -10,6 +10,10 @@
     {
       "version": "1",
       "change": "Added agent-024, the regression case for finding F-003 (agent re-adds an Incoterm extraction dropped)."
+    },
+    {
+      "version": "2",
+      "change": "Three escalation counterfactual groups (no stock, missing quantity, ambiguous grade): agent-003, 005 and 006 joined a group each; agent-025 to 030 add German and Polish variants (llm-drafted, unverified, German and Polish wording needs a native or back-translation check). agent-031: same email text with a new order attached, a false duplicate today (finding F-005, known limitation)."
     }
   ]
 }

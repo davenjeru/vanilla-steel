@@ -1,5 +1,6 @@
 """The agent eval runner: what it records for each case, and how it treats cases it cannot replay."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -95,6 +96,51 @@ def test_confident_ai_shows_model_and_tokens_on_every_llm_turn(
 
     turns = [(span["model"], span["inputTokenCount"] > 0) for span in payload["llmSpans"]]
     assert turns == [("claude-test-model", True)] * len(rfq_run.run.tool_calls())
+
+
+def test_confident_ai_shows_what_the_duplicate_check_compared(
+    rfq_run: SandboxResult, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The model sends {}; the reviewer must still see which enquiry and fingerprint code checked, for which tenant."""
+    payload = confident_ai_payload(lambda: trace_agent_run(first_agent_golden(), rfq_run), monkeypatch)
+
+    [duplicate_span] = [span for span in payload["toolSpans"] if span["name"] == "check_duplicate"]
+    assert (duplicate_span["input"], duplicate_span["metadata"]["supplied_by_code"]) == (
+        {},
+        {
+            "tenant_id": "tnt_bauer",
+            "enquiry_id": rfq_run.enquiry.id,
+            "fingerprint": rfq_run.enquiry.fingerprint,
+            "compared_with": "earlier enquiries of tnt_bauer with the same fingerprint",
+        },
+    )
+
+
+def test_upload_carries_no_internal_match_data(rfq_run: SandboxResult, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression: DeepEval ignores an empty span input and uploads the function's arguments instead, which
+    included the enquiry's internal matches. Tool results name stock lots but never suppliers, so any sup_ ID
+    in the upload means an internal object leaked in."""
+    payload = confident_ai_payload(lambda: trace_agent_run(first_agent_golden(), rfq_run), monkeypatch)
+
+    assert "sup_" not in json.dumps(payload)
+
+
+def test_agent_span_input_is_the_email(rfq_run: SandboxResult, monkeypatch: pytest.MonkeyPatch) -> None:
+    golden = first_agent_golden()
+
+    payload = confident_ai_payload(lambda: trace_agent_run(golden, rfq_run), monkeypatch)
+
+    assert payload["agentSpans"][0]["input"] == golden.input
+
+
+def test_tools_without_arguments_say_so_in_their_description(
+    rfq_run: SandboxResult, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An empty argument list is by design (D25); the description must not leave it looking like an omission."""
+    payload = confident_ai_payload(lambda: trace_agent_run(first_agent_golden(), rfq_run), monkeypatch)
+
+    [duplicate_span] = [span for span in payload["toolSpans"] if span["name"] == "check_duplicate"]
+    assert duplicate_span["description"].endswith("Takes no arguments: code supplies the enquiry and the tenant.")
 
 
 def test_a_step_taken_by_code_is_not_shown_as_the_agents_tool_call(

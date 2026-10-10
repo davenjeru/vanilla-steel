@@ -17,5 +17,6 @@
       "search_stock",
       "create_rfq"
     ]
-  }
+  },
+  "counterfactual_group": "s355-plate-quantity-missing"
 }
