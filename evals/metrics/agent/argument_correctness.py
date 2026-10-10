@@ -33,6 +33,11 @@ class ArgumentCorrectnessForToolsWithArguments(ArgumentCorrectnessMetric):
     async def a_measure(self, test_case: LLMTestCase, *args: Any, **kwargs: Any) -> float:
         return await super().a_measure(_with_judged_calls_only(test_case), *args, **kwargs)
 
+    def _get_prompt(self, method: Any, *, template_class: str | None = None, **kwargs: Any) -> str:
+        """DeepEval looks its judge prompts up by class name, and this subclass has none of its own:
+        borrow the parent's, unchanged (DeepEval's documented template_class option)."""
+        return super()._get_prompt(method, template_class=template_class or "ArgumentCorrectnessMetric", **kwargs)
+
 
 def _takes_no_arguments(tool_name: str) -> bool:
     tool = TOOLS.get(tool_name)
