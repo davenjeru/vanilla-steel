@@ -16,10 +16,11 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from steel.agent.trace import ModelUsage
 from steel.domain.enquiry import Enquiry, EscalationReason, Rfq
 from steel.domain.geography import locate_delivery
+from steel.domain.injection import InjectionSignal, find_injection_signals, suspicious_content_warning
 from steel.domain.matching import find_matches
 from steel.domain.models import EnquiryStatus, Incoterm, MaterialSpec, ProductForm, Quality, Rolling
 from steel.domain.status import advance
-from steel.extraction.extractor import EnquiryDocument, extract_spec
+from steel.extraction.extractor import EnquiryDocument, extract_spec, readable_text
 from steel.llm.client import LLMClient, LLMError, ToolSpec
 from steel.storage import enquiries, repositories, rfqs
 
@@ -86,9 +87,21 @@ def extract_specs(context: ToolContext, arguments: dict[str, Any]) -> dict[str, 
         latency_ms=result.llm.latency_ms,
     )
     history = advance(enquiry.status_history, EnquiryStatus.EXTRACTED, context.clock())
-    extracted = enquiry.model_copy(update={"status_history": history, "spec": result.spec, "warnings": result.warnings})
+    suspicions = [suspicious_content_warning(signal) for signal in _injection_signals(context, enquiry)]
+    warnings = result.warnings + suspicions
+    extracted = enquiry.model_copy(update={"status_history": history, "spec": result.spec, "warnings": warnings})
     context.save_enquiry(extracted)
     return _spec_summary(extracted)
+
+
+def _injection_signals(context: ToolContext, enquiry: Enquiry) -> list[InjectionSignal]:
+    """Instruction-like text anywhere the extractor reads: subject, body and attachments (finding F-002)."""
+    document = EnquiryDocument(
+        subject=enquiry.subject,
+        body=enquiry.body,
+        attachments=enquiries.list_attachments(context.connection, context.tenant_id, enquiry.id),
+    )
+    return find_injection_signals(readable_text(document), tool_names=list(TOOLS))
 
 
 def _spec_summary(enquiry: Enquiry) -> dict[str, Any]:
@@ -207,6 +220,7 @@ def create_rfq(context: ToolContext, arguments: dict[str, Any]) -> dict[str, Any
     if enquiry.status in TERMINAL_STATUSES:
         raise ToolError(f"the enquiry is {enquiry.status}; no RFQ can be created")
     _refuse_if_duplicate(context, enquiry)
+    _refuse_if_suspicious(context, enquiry)
     rfq = Rfq(
         id=context.new_rfq_id(),
         tenant_id=context.tenant_id,
@@ -231,6 +245,18 @@ def _refuse_if_duplicate(context: ToolContext, enquiry: Enquiry) -> None:
     )
     if duplicate_of is not None:
         raise ToolError(f"this enquiry duplicates {duplicate_of}; escalate it as duplicate instead of creating an RFQ")
+
+
+def _refuse_if_suspicious(context: ToolContext, enquiry: Enquiry) -> None:
+    """Finding F-002: a manipulated email must never become an RFQ, even if the model ignores the warning.
+    The text is scanned again here rather than trusting a stored warning, so the rule cannot be bypassed."""
+    signals = _injection_signals(context, enquiry)
+    if signals:
+        kinds = ", ".join(signal.kind for signal in signals)
+        raise ToolError(
+            f"this enquiry contains instruction-like text ({kinds}); "
+            "escalate it as suspicious_content instead of creating an RFQ"
+        )
 
 
 # escalate_to_human

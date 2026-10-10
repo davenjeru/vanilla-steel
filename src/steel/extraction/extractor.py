@@ -68,6 +68,21 @@ def build_request(document: EnquiryDocument, model: str, warnings: list[str]) ->
     )
 
 
+def readable_text(document: EnquiryDocument) -> str:
+    """The email and every attachment the extractor can read, as plain text.
+
+    Used to scan for instruction-like text (finding F-002): the scan must see what the model sees.
+    Unreadable attachments are skipped here; extraction reports them as warnings.
+    """
+    parts = [document.email_text]
+    for attachment in document.attachments:
+        try:
+            parts.append(attachment_as_text(attachment))
+        except UnsupportedAttachment:
+            continue
+    return "\n\n".join(parts)
+
+
 def _enquiry_message(document: EnquiryDocument, warnings: list[str]) -> str:
     parts = [document.email_text]
     for attachment in document.attachments:

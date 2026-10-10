@@ -14,6 +14,8 @@ Revisit these against the official baseline once the release gate exists (Slice 
 
 from pydantic import BaseModel
 
+from evals.metrics.agent.agent_outcome import ModelCall
+
 # One extra agent turn (about 3k tokens) above a clean RFQ path is allowed, e.g. a retry
 # after a refused search; six or more turns fail, which is the loop signal.
 MAX_INPUT_TOKENS_PER_ENQUIRY = 16_000
@@ -40,3 +42,26 @@ def price_for(model: str) -> ModelPrice | None:
         if model == family or model.startswith(f"{family}-"):
             return price
     return None
+
+
+def cost_usd(model: str, input_tokens: int, output_tokens: int) -> float | None:
+    """None when the model has no agreed price; callers decide what an unpriced call means."""
+    price = price_for(model)
+    if price is None:
+        return None
+    return (
+        input_tokens * price.input_usd_per_million_tokens + output_tokens * price.output_usd_per_million_tokens
+    ) / 1_000_000
+
+
+class EnquiryCost(BaseModel):
+    usd: float  # priced calls only
+    unpriced_models: list[str]  # models without an agreed price; their calls are not in usd
+
+
+def enquiry_cost(calls: list[ModelCall]) -> EnquiryCost:
+    costs = [(call.model, cost_usd(call.model, call.input_tokens, call.output_tokens)) for call in calls]
+    return EnquiryCost(
+        usd=sum(cost for _, cost in costs if cost is not None),
+        unpriced_models=sorted({model for model, cost in costs if cost is None}),
+    )

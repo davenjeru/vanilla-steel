@@ -37,6 +37,7 @@ from deepeval.tracing import (
 
 from evals.metrics.agent.acts_only_for_its_own_tenant import ActsOnlyForItsOwnTenant
 from evals.metrics.agent.agent_outcome import AgentOutcome, AgentStep, ModelCall
+from evals.metrics.agent.budget import enquiry_cost, price_for
 from evals.metrics.agent.calls_no_forbidden_tool import CallsNoForbiddenTool
 from evals.metrics.agent.counterfactual_groups import GroupMember, GroupVerdict, judge_counterfactual_groups
 from evals.metrics.agent.latency import LatencyVerdict, judge_latency
@@ -177,13 +178,38 @@ def set_span_input(value: Any) -> None:
 
 @observe(type="llm")
 def trace_llm_turn(event: TraceEvent) -> str:
-    """Model and tokens go through update_llm_span, so Confident AI shows them natively.
-    No cost: no price per token has been agreed for the replica."""
     text = str(event.result.get("text", ""))
     set_span_input("not recorded: the agent trace stores each turn's reply only")
     update_current_span(name=event.name, output=text, metadata={"recorded_latency_ms": event.latency_ms})
-    update_llm_span(model=event.name, input_token_count=event.input_tokens, output_token_count=event.output_tokens)
+    record_model_use(event.name, event.input_tokens, event.output_tokens)
     return text
+
+
+@observe(type="llm")
+def trace_model_call_inside_tool(event: TraceEvent, model: str) -> str:
+    """The extraction call extract_specs makes, as an LLM span nested under the tool's span,
+    so the trace view shows every model call an enquiry costs, not only the agent's turns."""
+    set_span_input("not recorded: the agent trace stores the tool's result only")
+    update_current_span(
+        name=f"{event.name}: {model}",
+        output="see the extract_specs result",
+        metadata={"recorded_latency_ms": event.model_latency_ms},
+    )
+    record_model_use(model, event.input_tokens, event.output_tokens)
+    return "see the extract_specs result"
+
+
+def record_model_use(model: str, input_tokens: int, output_tokens: int) -> None:
+    """Model, tokens and agreed price per token through update_llm_span, so Confident AI shows them natively.
+    A model without an agreed price gets no price rather than a guess (prices: evals/metrics/agent/budget.py)."""
+    price = price_for(model)
+    update_llm_span(
+        model=model,
+        input_token_count=input_tokens,
+        output_token_count=output_tokens,
+        cost_per_input_token=price.input_usd_per_million_tokens / 1_000_000 if price else None,
+        cost_per_output_token=price.output_usd_per_million_tokens / 1_000_000 if price else None,
+    )
 
 
 @observe(type="tool")
@@ -204,6 +230,8 @@ def trace_tool_call(event: TraceEvent, enquiry: Enquiry) -> dict[str, Any]:
         },
     )
     update_tool_span(description=_tool_description(event.name))
+    if event.model is not None:
+        trace_model_call_inside_tool(event, event.model)
     return event.result
 
 
@@ -241,7 +269,6 @@ def trace_agent_run(golden: Golden, result: SandboxResult) -> str:
         else:
             trace_code_action(event)
     outcome = agent_outcome(result)
-    input_tokens, output_tokens = result.run.total_tokens()
     update_current_trace(
         input=golden.input,
         output=outcome.model_dump_json(),
@@ -257,13 +284,25 @@ def trace_agent_run(golden: Golden, result: SandboxResult) -> str:
         ],
         expected_tools=golden.expected_tools,
         metadata={
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
+            **enquiry_totals(outcome),
             "final_status": str(result.enquiry.status),
             "known_limitation": (golden.additional_metadata or {}).get("known_limitation"),
         },
     )
     return outcome.model_dump_json()
+
+
+def enquiry_totals(outcome: AgentOutcome) -> dict[str, Any]:
+    """Every model call for the enquiry, extraction included. DeepEval leaves a trace-built test case's own
+    token and cost fields unset ("Not set" in Confident AI), so the totals live in the trace metadata."""
+    cost = enquiry_cost(outcome.model_calls)
+    return {
+        "input_tokens": outcome.input_tokens(),
+        "output_tokens": outcome.output_tokens(),
+        "cost_usd": round(cost.usd, 4),
+        "unpriced_models": cost.unpriced_models,
+        "model_seconds": round(outcome.model_seconds(), 1),
+    }
 
 
 def _tool_description(name: str) -> str | None:

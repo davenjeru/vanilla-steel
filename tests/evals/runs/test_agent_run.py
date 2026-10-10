@@ -5,8 +5,9 @@ from pathlib import Path
 
 import pytest
 from deepeval.dataset import Golden
+from deepeval.tracing import observe
 
-from evals.runs.agent import agent_outcome, run_every_case, trace_agent_run
+from evals.runs.agent import agent_outcome, record_model_use, run_every_case, trace_agent_run
 from evals.runs.shared.golden_cases import DATASETS_DIR, GoldenCase, load_dataset
 from steel.agent.trace import TraceEvent
 from steel.llm.replay import ReplayLLMClient
@@ -97,13 +98,58 @@ def test_confident_ai_shows_each_tool_the_agent_called_as_a_tool_span(
     ]
 
 
-def test_confident_ai_shows_model_and_tokens_on_every_llm_turn(
+def test_confident_ai_shows_model_and_tokens_on_every_model_call(
+    rfq_run: SandboxResult, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One LLM span per agent turn, plus one for the extraction call inside extract_specs."""
+    payload = confident_ai_payload(lambda: trace_agent_run(first_agent_golden(), rfq_run), monkeypatch)
+    agent_turns = [event for event in rfq_run.run.events if event.kind == "llm_turn"]
+
+    calls = [(span["model"], span["inputTokenCount"] > 0) for span in payload["llmSpans"]]
+    assert calls == [("claude-test-model", True)] * (len(agent_turns) + 1)
+
+
+def test_extraction_call_is_shown_inside_the_extract_specs_span(
     rfq_run: SandboxResult, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     payload = confident_ai_payload(lambda: trace_agent_run(first_agent_golden(), rfq_run), monkeypatch)
 
-    turns = [(span["model"], span["inputTokenCount"] > 0) for span in payload["llmSpans"]]
-    assert turns == [("claude-test-model", True)] * len(rfq_run.run.tool_calls())
+    [extract_specs] = [span for span in payload["toolSpans"] if span["name"] == "extract_specs"]
+    nested = [span["name"] for span in payload["llmSpans"] if span.get("parentUuid") == extract_specs["uuid"]]
+    assert nested == ["extract_specs: claude-test-model"]
+
+
+def test_llm_span_carries_the_agreed_price_per_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Haiku 4.5 at $1 and $5 per million tokens, from evals/metrics/agent/budget.py."""
+
+    @observe(type="llm")
+    def one_haiku_call() -> None:
+        record_model_use("claude-haiku-4-5-20251001", input_tokens=1_000, output_tokens=100)
+
+    payload = confident_ai_payload(one_haiku_call, monkeypatch)
+
+    [span] = payload["llmSpans"]
+    assert (span["costPerInputToken"], span["costPerOutputToken"]) == (0.000001, 0.000005)
+
+
+def test_model_without_an_agreed_price_gets_no_price(rfq_run: SandboxResult, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Never a guessed price: the test model has none, so no span carries one."""
+    payload = confident_ai_payload(lambda: trace_agent_run(first_agent_golden(), rfq_run), monkeypatch)
+
+    assert [span.get("costPerInputToken") for span in payload["llmSpans"]] == [None] * len(payload["llmSpans"])
+
+
+def test_trace_metadata_carries_the_enquiry_totals(rfq_run: SandboxResult, monkeypatch: pytest.MonkeyPatch) -> None:
+    """DeepEval leaves a trace-built test case's own token and cost fields unset, so the totals go here."""
+    payload = confident_ai_payload(lambda: trace_agent_run(first_agent_golden(), rfq_run), monkeypatch)
+    outcome = agent_outcome(rfq_run)
+
+    totals = {key: payload["metadata"][key] for key in ["input_tokens", "output_tokens", "unpriced_models"]}
+    assert totals == {
+        "input_tokens": outcome.input_tokens(),
+        "output_tokens": outcome.output_tokens(),
+        "unpriced_models": ["claude-test-model"],
+    }
 
 
 def test_confident_ai_shows_what_the_duplicate_check_compared(

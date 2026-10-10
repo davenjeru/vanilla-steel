@@ -3,8 +3,8 @@ from typing import Any
 from deepeval.metrics import BaseMetric
 from deepeval.test_case import LLMTestCase
 
-from evals.metrics.agent.agent_outcome import ModelCall, read_agent_case
-from evals.metrics.agent.budget import MAX_COST_USD_PER_ENQUIRY, price_for
+from evals.metrics.agent.agent_outcome import read_agent_case
+from evals.metrics.agent.budget import MAX_COST_USD_PER_ENQUIRY, enquiry_cost
 
 
 class StaysWithinTheCostLimit(BaseMetric):
@@ -25,11 +25,10 @@ class StaysWithinTheCostLimit(BaseMetric):
 
     def measure(self, test_case: LLMTestCase, *args: Any, **kwargs: Any) -> float:
         calls = read_agent_case(test_case).actual.model_calls
-        unpriced = sorted({call.model for call in calls if price_for(call.model) is None})
-        cost_usd = sum(_cost_usd(call) for call in calls if price_for(call.model) is not None)
-        self.success = bool(calls) and not unpriced and cost_usd <= MAX_COST_USD_PER_ENQUIRY
+        cost = enquiry_cost(calls)
+        self.success = bool(calls) and not cost.unpriced_models and cost.usd <= MAX_COST_USD_PER_ENQUIRY
         self.score = 1.0 if self.success else 0.0
-        self.reason = _reason(len(calls), unpriced, cost_usd)
+        self.reason = _reason(len(calls), cost.unpriced_models, cost.usd)
         return self.score
 
     async def a_measure(self, test_case: LLMTestCase, *args: Any, **kwargs: Any) -> float:
@@ -37,16 +36,6 @@ class StaysWithinTheCostLimit(BaseMetric):
 
     def is_successful(self) -> bool:
         return bool(self.success)
-
-
-def _cost_usd(call: ModelCall) -> float:
-    price = price_for(call.model)
-    if price is None:
-        return 0.0
-    return (
-        call.input_tokens * price.input_usd_per_million_tokens
-        + call.output_tokens * price.output_usd_per_million_tokens
-    ) / 1_000_000
 
 
 def _reason(call_count: int, unpriced: list[str], cost_usd: float) -> str:

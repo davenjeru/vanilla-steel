@@ -3,6 +3,7 @@
 import json
 from typing import Any
 
+from steel.domain.injection import SUSPICIOUS_CONTENT_WARNING
 from steel.llm.client import ConversationRequest, ConversationResponse, LLMRequest, LLMResponse
 
 
@@ -159,6 +160,9 @@ def reference_next_tool_call(history: list[ToolResult]) -> tuple[str, dict[str, 
 
 
 def _after_extraction(result: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    suspicions = [warning for warning in result["warnings"] if warning.startswith(SUSPICIOUS_CONTENT_WARNING)]
+    if suspicions:
+        return "escalate_to_human", {"reason": "suspicious_content", "detail": "; ".join(suspicions)}
     if result["spec"].get("grade_ambiguous"):
         return "escalate_to_human", {"reason": "ambiguous_spec", "detail": "The grade could mean several grades."}
     if result["missing_fields"]:

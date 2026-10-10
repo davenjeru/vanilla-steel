@@ -7,6 +7,7 @@ from steel.agent.tools import ToolContext
 from steel.domain.enquiry import Enquiry
 from steel.domain.fingerprint import enquiry_fingerprint
 from steel.domain.status import start_history
+from steel.extraction.attachments import Attachment
 from steel.llm.client import LLMClient
 from steel.storage import enquiries
 from tests.conftest import FIXED_NOW
@@ -21,6 +22,7 @@ def stored_enquiry(
     tenant_id: str = "tnt_bauer",
     subject: str = STANDARD_SUBJECT,
     body: str = STANDARD_BODY,
+    attachments: list[Attachment] | None = None,
 ) -> Enquiry:
     enquiry = Enquiry(
         id=enquiry_id,
@@ -32,7 +34,7 @@ def stored_enquiry(
         status_history=start_history(FIXED_NOW),
         created_at=FIXED_NOW,
     )
-    enquiries.insert_enquiry(connection, enquiry, attachments=[])
+    enquiries.insert_enquiry(connection, enquiry, attachments=attachments or [])
     return enquiry
 
 
