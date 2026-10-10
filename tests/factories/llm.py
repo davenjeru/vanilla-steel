@@ -62,11 +62,15 @@ class FakeLLMClient:
     """Extraction returns a fixed reading. As the agent, it follows the reference policy.
 
     Remembers every request, so tests can check what was asked.
+    call_id_prefix imitates a live model, whose tool-call IDs differ on every run.
     """
 
-    def __init__(self, output: dict[str, Any], extraction_error: Exception | None = None) -> None:
+    def __init__(
+        self, output: dict[str, Any], extraction_error: Exception | None = None, call_id_prefix: str = "toolu"
+    ) -> None:
         self.output = output
         self.extraction_error = extraction_error
+        self.call_id_prefix = call_id_prefix
         self.requests: list[LLMRequest] = []
         self.conversations: list[ConversationRequest] = []
 
@@ -82,7 +86,8 @@ class FakeLLMClient:
         if next_call is None:
             return conversation_response([{"type": "text", "text": "Done."}])
         name, arguments = next_call
-        return conversation_response([tool_call(name, arguments, call_id=f"toolu_{len(self.conversations):02d}")])
+        call_id = f"{self.call_id_prefix}_{len(self.conversations):02d}"
+        return conversation_response([tool_call(name, arguments, call_id=call_id)])
 
 
 class ScriptedLLMClient:

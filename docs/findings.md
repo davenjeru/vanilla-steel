@@ -122,3 +122,38 @@ which checks the exact body DeepEval would upload; on the previous runner it fin
 agent span, the model's own arguments for tool spans.
 **Open:** agent eval runs already uploaded contain this data. The owner should decide
 whether to delete those runs in Confident AI.
+
+## F-007: Two golden cases with the same email overwrite each other's recordings
+
+| | |
+|---|---|
+| Found | 2026-10-10, replay eval after a full live run (`2f0a055`): agent-007 "not recorded" although the live run had scored it |
+| Behaviour | agent-007 (resend) and agent-012 (same text, other tenant) both handle `enq_0002` with an identical email, so their first two agent requests are identical and share one recording each. Recording 012 after 007 replaced those answers. Their tool-call IDs are random per live call, so 007's third request (with 012's IDs and `duplicate_of: enq_0001`) was never recorded |
+| Layer | Test infrastructure: the record/replay store (`steel/llm/replay.py`, decision D16) holds one answer per request, but a live model can answer the same request differently in two runs |
+| Business risk | Eval reliability: a case silently drops out of replay, and re-recording one case breaks the other. Today it hides agent-007, a duplication case |
+
+**Reproduced by** `test_two_cases_with_the_same_email_both_replay_after_recording`
+(`tests/test_sandbox.py`, `xfail(strict=True)`), and on the real recordings: replaying agent-007
+reaches turn 3 with tool-call IDs that belong to agent-012's conversation.
+**Options (owner to choose):** (a) scope agent recordings by golden case (the case name joins
+the fixture key), so cases never share answers; costs one re-record of all agent cases.
+(b) within one recording session, reuse an existing answer for an identical request
+instead of calling the model again; cheaper, but a later single-case re-record can still
+overwrite. (c) give each case a distinct enquiry ID in the sandbox; works by accident, not design.
+Recommended: (a).
+
+## F-008: Subject and body give different quantities; the agent orders one of them
+
+| | |
+|---|---|
+| Found | 2026-10-10, live agent eval, case `agent-022-subject-and-body-disagree` |
+| Behaviour | Subject says 25 t, body says 30 t. Extraction returned 30 t with no warning; the agent called the spec "complete and unambiguous" and created an RFQ for stk_058 |
+| Layer | Extraction (the conflict is not detected or reported), then agent (no second look) |
+| Business risk | Business correctness: a guessed quantity is a wrong order for one of the two readings |
+
+**Reproduced by** agent-022 on replay: "Reaches the right decision" expects an escalation
+(ambiguous_spec, missing_information or other), gets an RFQ.
+**Open:** an extraction golden case with conflicting values would measure this at the
+layer where it starts. Fix options are a `conflicts` field in the extraction schema (the
+model reports both values) or a deterministic check comparing quantities found in subject
+and body; both need a decision before building.
