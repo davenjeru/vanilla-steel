@@ -84,12 +84,23 @@ is the only source of truth.
 
 **Reproduced by** `test_model_that_skips_the_duplicate_check_cannot_rfq_a_resent_enquiry`
 (`tests/agent/test_runner.py`): a scripted model skips `check_duplicate` on a forwarded
-resend and `rfq_0001` is created for `enq_0002`. Marked `xfail(strict=True)`, so the
-suite stays green today and turns red the moment the fix lands, forcing the marker off.
+resend and `rfq_0001` is created for `enq_0002`. It was marked `xfail(strict=True)`; the
+fix turned it into an unexpected pass, which failed the suite until the marker came off.
 Golden cases 007 and 008 catch it only if the model misbehaves in that run.
-**Proposed fix (not yet made):** `create_rfq` refuses when `find_earlier_duplicate`
-finds an earlier same-tenant enquiry, the same pattern as D25: the rule is enforced by
-code and the prompt is the second line.
+**Fixed:** `create_rfq` refuses when `find_earlier_duplicate` finds a same-tenant enquiry
+with the same fingerprint, the same pattern as D25: the rule is enforced by code and the
+prompt is the second line. Tool tests: `test_rfq_for_a_resent_enquiry_is_refused_and_not_stored`
+and `test_identical_enquiry_from_another_tenant_does_not_block_an_rfq`. No recorded
+conversation changed (no recorded run called `create_rfq` on a detected duplicate), so all
+31 agent cases replay with the same outcomes.
+**Side effects, open:**
+- F-005 gets stricter: the false duplicate in agent-031 (same text, new attachment) is now
+  blocked by code as well, so fixing F-005 means fixing the fingerprint, not the prompt.
+- `find_earlier_duplicate` matches any other same-tenant enquiry with that fingerprint, not
+  only earlier ones (no `created_at` condition). Today the agent runs as each enquiry
+  arrives, so the original is decided before its resend exists. If enquiries are ever
+  processed out of order or re-run, the original could be refused because of its own
+  resend. Worth a decision in Slice 3, when duplicate handling is reworked.
 
 ## F-005: Same email text with a new order attached is a false duplicate
 

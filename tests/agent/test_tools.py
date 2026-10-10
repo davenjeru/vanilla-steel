@@ -201,6 +201,25 @@ def test_second_rfq_for_the_same_enquiry_is_refused_and_not_stored(seeded_connec
     assert rfq_count == 1
 
 
+def test_rfq_for_a_resent_enquiry_is_refused_and_not_stored(seeded_connection: sqlite3.Connection) -> None:
+    """Finding F-004: a resend must never become a second RFQ, even if the model skipped check_duplicate."""
+    stored_enquiry(seeded_connection, enquiry_id="enq_0000")  # the original, same text
+    resend = searched_context(seeded_connection)
+
+    with pytest.raises(ToolError, match="duplicates enq_0000"):
+        create_rfq(resend, {"stock_item_id": "stk_058"})
+
+    assert rfqs.get_rfq_for_enquiry(seeded_connection, "tnt_bauer", "enq_0001") is None
+
+
+def test_identical_enquiry_from_another_tenant_does_not_block_an_rfq(seeded_connection: sqlite3.Connection) -> None:
+    """Data separation: another tenant's enquiry is invisible here, so it can neither block nor reveal anything."""
+    stored_enquiry(seeded_connection, enquiry_id="enq_0000", tenant_id="tnt_kowalski")
+    context = searched_context(seeded_connection)
+
+    assert create_rfq(context, {"stock_item_id": "stk_058"}) == {"rfq_id": "rfq_0001"}
+
+
 def test_rfq_after_escalation_is_refused(seeded_connection: sqlite3.Connection) -> None:
     context = searched_context(seeded_connection)
     escalate_to_human(context, {"reason": "other", "detail": "Customer called to cancel."})

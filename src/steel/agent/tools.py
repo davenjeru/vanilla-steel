@@ -176,6 +176,7 @@ def create_rfq(context: ToolContext, arguments: dict[str, Any]) -> dict[str, Any
     enquiry = context.load_enquiry()
     if enquiry.status in TERMINAL_STATUSES:
         raise ToolError(f"the enquiry is {enquiry.status}; no RFQ can be created")
+    _refuse_if_duplicate(context, enquiry)
     rfq = Rfq(
         id=context.new_rfq_id(),
         tenant_id=context.tenant_id,
@@ -190,6 +191,16 @@ def create_rfq(context: ToolContext, arguments: dict[str, Any]) -> dict[str, Any
         raise ToolError(f"an RFQ already exists for this enquiry ({already.existing.id}); none was added") from already
     context.rfq_id = rfq.id
     return {"rfq_id": rfq.id}
+
+
+def _refuse_if_duplicate(context: ToolContext, enquiry: Enquiry) -> None:
+    """Finding F-004: a resend must never become a second RFQ, so code checks again here instead of
+    trusting the model to have called check_duplicate and obeyed it. Same tenant only (D26)."""
+    duplicate_of = enquiries.find_earlier_duplicate(
+        context.connection, context.tenant_id, enquiry.fingerprint, enquiry.id
+    )
+    if duplicate_of is not None:
+        raise ToolError(f"this enquiry duplicates {duplicate_of}; escalate it as duplicate instead of creating an RFQ")
 
 
 # escalate_to_human

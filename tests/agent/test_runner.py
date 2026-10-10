@@ -6,8 +6,6 @@ scripted ones play a misbehaving model to prove the code's safety nets hold.
 
 import sqlite3
 
-import pytest
-
 from steel.agent.runner import MAX_TURNS, run_agent
 from steel.agent.trace import AgentRun
 from steel.domain.models import EnquiryStatus
@@ -187,7 +185,6 @@ def test_hallucinated_stock_id_never_becomes_an_rfq(seeded_connection: sqlite3.C
     assert rfqs.get_rfq_for_enquiry(seeded_connection, "tnt_bauer", "enq_0001") is None
 
 
-@pytest.mark.xfail(strict=True, reason="Finding F-004: create_rfq does not refuse a duplicate enquiry")
 def test_model_that_skips_the_duplicate_check_cannot_rfq_a_resent_enquiry(
     seeded_connection: sqlite3.Connection,
 ) -> None:
