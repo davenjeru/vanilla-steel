@@ -230,8 +230,12 @@
   },
   "response": {
     "output": {
-      "grade_written": "S355J2",
+      "quantity": {
+        "value": 30,
+        "unit": "t"
+      },
       "form": "plate",
+      "grade_written": "S355J2",
       "thickness": {
         "value": 15,
         "unit": "mm"
@@ -240,10 +244,6 @@
         "value": 1250,
         "unit": "mm"
       },
-      "quantity": {
-        "value": 30,
-        "unit": "t"
-      },
       "incoterm": "DAP",
       "delivery_city": "Poznań",
       "delivery_country": "PL"
@@ -251,6 +251,6 @@
     "model": "claude-haiku-4-5-20251001",
     "input_tokens": 2142,
     "output_tokens": 201,
-    "latency_ms": 1550.7
+    "latency_ms": 3554.7
   }
 }
