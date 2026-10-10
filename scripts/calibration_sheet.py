@@ -19,6 +19,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from evals.runs.shared.golden_cases import REPO_ROOT
+from evals.runs.shared.judge import JUDGE_MODEL
 
 CALIBRATION_DIR = REPO_ROOT / "evals" / "calibration"
 HUMAN_COLUMNS = ["your_verdict", "your_note"]
@@ -27,6 +28,7 @@ HUMAN_COLUMNS = ["your_verdict", "your_note"]
 class CalibrationRow(BaseModel):
     case: str
     metric: str
+    input: str
     output: str
     judge_score: float | None
     judge_passed: bool
@@ -35,17 +37,22 @@ class CalibrationRow(BaseModel):
 
 
 def judged_rows(run: dict[str, Any]) -> list[CalibrationRow]:
-    """One row per judged verdict; a metric is judged when it names the model that judged it."""
+    """One row per verdict of our pinned judge.
+
+    DeepEval records a default evaluation model even on Tool Correctness, which calls no model in
+    exact-match mode, so naming any model is not enough to count as judged.
+    """
     rows = []
     for case in run["testCases"]:
         for metric in case.get("metricsData") or []:
-            if not metric.get("evaluationModel"):
+            if metric.get("evaluationModel") != JUDGE_MODEL:
                 continue
             rows.append(
                 CalibrationRow(
                     case=case["name"],
                     metric=metric["name"],
-                    output=case.get("actualOutput") or "",
+                    input=case.get("input") or "",
+                    output=readable_output(case.get("actualOutput") or ""),
                     judge_score=metric.get("score"),
                     judge_passed=metric["success"],
                     judge_threshold=metric.get("threshold"),
@@ -53,6 +60,37 @@ def judged_rows(run: dict[str, Any]) -> list[CalibrationRow]:
                 )
             )
     return sorted(rows, key=lambda row: (row.case, row.metric))
+
+
+def readable_output(actual_output: str) -> str:
+    """Agent runs record their outcome as JSON; show a reviewer the decision and the tool path instead."""
+    try:
+        outcome = json.loads(actual_output)
+    except json.JSONDecodeError:
+        return actual_output
+    if not isinstance(outcome, dict) or "steps" not in outcome:
+        return actual_output
+    tool_calls = [step for step in outcome["steps"] if step["kind"] == "tool_call"]
+    lines = [_decision_line(outcome)]
+    for number, call in enumerate(tool_calls, start=1):
+        lines.append(f"{number}. {_tool_call_line(call)}")
+    return "\n".join(lines)
+
+
+def _decision_line(outcome: dict[str, Any]) -> str:
+    detail = outcome.get("escalation_reason") or outcome.get("rfq_stock_item_id")
+    if detail:
+        return f"Decision: {outcome['decision']} ({detail})"
+    return f"Decision: {outcome['decision']}"
+
+
+def _tool_call_line(call: dict[str, Any]) -> str:
+    arguments = ", ".join(f"{name}={value}" for name, value in call["arguments"].items())
+    line = f"{call['name']}({arguments})"
+    error = call["result"].get("error") if isinstance(call["result"], dict) else None
+    if error:
+        line += f" -> refused: {error}"
+    return line
 
 
 def sheet_path(run: dict[str, Any], directory: Path) -> Path:
