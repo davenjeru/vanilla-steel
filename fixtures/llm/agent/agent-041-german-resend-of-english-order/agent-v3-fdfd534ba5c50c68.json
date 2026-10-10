@@ -7,7 +7,7 @@
     "messages": [
       {
         "role": "user",
-        "content": "Handle enquiry enq_0002.\n<enquiry>\nSubject: Plates S355J2\n\nDear team,\n\nkindly send an offer for S355J2 plates 15x1250mm, quantity 30 tonnes, delivered DAP to Poznań.\n\nBest,\nAnna\n</enquiry>\nAttachments (extract_specs reads them): none"
+        "content": "Handle enquiry enq_0002.\n<enquiry>\nSubject: Anfrage S355J2 Bleche\n\nGuten Tag,\n\nbitte bieten Sie uns 30 t S355J2 Blech, 15 x 1250 mm, DAP Posen, Polen an.\n\nMit freundlichen Grüßen\nAnna Becker\n</enquiry>\nAttachments (extract_specs reads them): none"
       },
       {
         "role": "assistant",
@@ -18,7 +18,7 @@
           },
           {
             "type": "tool_use",
-            "id": "toolu_01Ckws48fRT6bJa6S4irTMe2",
+            "id": "toolu_0182mPGMwjaA9E5bMrmgGGGj",
             "name": "extract_specs",
             "input": {}
           }
@@ -29,8 +29,8 @@
         "content": [
           {
             "type": "tool_result",
-            "tool_use_id": "toolu_01Ckws48fRT6bJa6S4irTMe2",
-            "content": "{\"spec\": {\"grade\": \"S355J2\", \"grade_ambiguous\": false, \"form\": \"plate\", \"thickness_mm\": 15.0, \"width_mm\": 1250.0, \"quantity_t\": 30.0, \"incoterm\": \"DAP\", \"delivery_city\": \"Poznań\", \"delivery_country\": \"PL\"}, \"missing_fields\": [], \"warnings\": []}",
+            "tool_use_id": "toolu_0182mPGMwjaA9E5bMrmgGGGj",
+            "content": "{\"spec\": {\"grade\": \"S355J2\", \"grade_ambiguous\": false, \"form\": \"sheet\", \"thickness_mm\": 15.0, \"width_mm\": 1250.0, \"quantity_t\": 30.0, \"incoterm\": \"DAP\", \"delivery_city\": \"Poznań\", \"delivery_country\": \"PL\"}, \"missing_fields\": [], \"warnings\": []}",
             "is_error": false
           }
         ]
@@ -44,7 +44,7 @@
           },
           {
             "type": "tool_use",
-            "id": "toolu_01H5dx7eDiuthjNZErwDvnH1",
+            "id": "toolu_01QaWNjypE6U4m2TAMFk7aqD",
             "name": "check_duplicate",
             "input": {}
           }
@@ -55,7 +55,7 @@
         "content": [
           {
             "type": "tool_result",
-            "tool_use_id": "toolu_01H5dx7eDiuthjNZErwDvnH1",
+            "tool_use_id": "toolu_01QaWNjypE6U4m2TAMFk7aqD",
             "content": "{\"duplicate_of\": null}",
             "is_error": false
           }
@@ -70,11 +70,11 @@
           },
           {
             "type": "tool_use",
-            "id": "toolu_011FQuKuqoC87E6SaUjSUQYo",
+            "id": "toolu_01JENzTL9nwmD2RX3jAFNLLz",
             "name": "search_stock",
             "input": {
               "grade": "S355J2",
-              "form": "plate",
+              "form": "sheet",
               "thickness_mm": 15.0,
               "width_mm": 1250.0,
               "quantity_t": 30.0,
@@ -90,36 +90,8 @@
         "content": [
           {
             "type": "tool_result",
-            "tool_use_id": "toolu_011FQuKuqoC87E6SaUjSUQYo",
-            "content": "{\"offers\": [{\"rank\": 1, \"stock_item_id\": \"stk_058\", \"delivered_eur_per_t\": \"704.42\", \"available_t\": 54.0}, {\"rank\": 2, \"stock_item_id\": \"stk_116\", \"delivered_eur_per_t\": \"713.66\", \"available_t\": 50.0}], \"missing_fields\": [], \"warnings\": []}",
-            "is_error": false
-          }
-        ]
-      },
-      {
-        "role": "assistant",
-        "content": [
-          {
-            "type": "text",
-            "text": "Excellent! There are matching stock lots. I'll create an RFQ for the best-priced offer (rank 1)."
-          },
-          {
-            "type": "tool_use",
-            "id": "toolu_01N8aYyMv13Ew6hFZRPoneRK",
-            "name": "create_rfq",
-            "input": {
-              "stock_item_id": "stk_058"
-            }
-          }
-        ]
-      },
-      {
-        "role": "user",
-        "content": [
-          {
-            "type": "tool_result",
-            "tool_use_id": "toolu_01N8aYyMv13Ew6hFZRPoneRK",
-            "content": "{\"rfq_id\": \"rfq_0001\"}",
+            "tool_use_id": "toolu_01JENzTL9nwmD2RX3jAFNLLz",
+            "content": "{\"offers\": [], \"missing_fields\": [], \"warnings\": []}",
             "is_error": false
           }
         ]
@@ -401,21 +373,22 @@
     "content": [
       {
         "type": "text",
-        "text": "Now I'll draft the quote."
+        "text": "No stock available matching the specification. I'll escalate this to a human trader."
       },
       {
         "type": "tool_use",
-        "id": "toolu_011BW5yG6KWsft4sKSXgLtNt",
-        "name": "draft_quote",
+        "id": "toolu_01GWsEw1XnQSz4s2GYGqiCa6",
+        "name": "escalate_to_human",
         "input": {
-          "rfq_id": "rfq_0001"
+          "reason": "no_stock",
+          "detail": "Customer enquiry for 30 t S355J2 sheet, 15 x 1250 mm, DAP Poznań, Poland - no matching stock found."
         }
       }
     ],
     "stop_reason": "tool_use",
     "model": "claude-haiku-4-5-20251001",
-    "input_tokens": 3046,
-    "output_tokens": 68,
-    "latency_ms": 1142.9
+    "input_tokens": 2864,
+    "output_tokens": 129,
+    "latency_ms": 1817.9
   }
 }

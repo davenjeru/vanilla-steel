@@ -7,122 +7,7 @@
     "messages": [
       {
         "role": "user",
-        "content": "Handle enquiry enq_0002.\n<enquiry>\nSubject: Re: Enquiry S355J2 plates\n\nHi, any update on this?\n\nAnna\n\n> Hello,\n> \n> please quote 30 t of S355J2 plate, 15 x 1250 mm, DAP Poznań, Poland.\n> \n> Regards,\n> Anna Becker\n</enquiry>\nAttachments (extract_specs reads them): none"
-      },
-      {
-        "role": "assistant",
-        "content": [
-          {
-            "type": "text",
-            "text": "I'll handle this enquiry step by step."
-          },
-          {
-            "type": "tool_use",
-            "id": "toolu_011TkZz4N8hauTvUnRUDwHhf",
-            "name": "extract_specs",
-            "input": {}
-          }
-        ]
-      },
-      {
-        "role": "user",
-        "content": [
-          {
-            "type": "tool_result",
-            "tool_use_id": "toolu_011TkZz4N8hauTvUnRUDwHhf",
-            "content": "{\"spec\": {\"grade\": \"S355J2\", \"grade_ambiguous\": false, \"form\": \"plate\", \"thickness_mm\": 15.0, \"width_mm\": 1250.0, \"quantity_t\": 30.0, \"incoterm\": \"DAP\", \"delivery_city\": \"Poznań\", \"delivery_country\": \"PL\"}, \"missing_fields\": [], \"warnings\": []}",
-            "is_error": false
-          }
-        ]
-      },
-      {
-        "role": "assistant",
-        "content": [
-          {
-            "type": "text",
-            "text": "Good, the spec is complete and unambiguous. Now I'll check for duplicates."
-          },
-          {
-            "type": "tool_use",
-            "id": "toolu_01QJsf8E6Q6jeG2ZAH8SdJs2",
-            "name": "check_duplicate",
-            "input": {}
-          }
-        ]
-      },
-      {
-        "role": "user",
-        "content": [
-          {
-            "type": "tool_result",
-            "tool_use_id": "toolu_01QJsf8E6Q6jeG2ZAH8SdJs2",
-            "content": "{\"duplicate_of\": null}",
-            "is_error": false
-          }
-        ]
-      },
-      {
-        "role": "assistant",
-        "content": [
-          {
-            "type": "text",
-            "text": "No duplicate. Now I'll search for stock matching the spec."
-          },
-          {
-            "type": "tool_use",
-            "id": "toolu_01GNxyNgAAnhvoFBcBVboni3",
-            "name": "search_stock",
-            "input": {
-              "grade": "S355J2",
-              "form": "plate",
-              "thickness_mm": 15.0,
-              "width_mm": 1250.0,
-              "quantity_t": 30.0,
-              "incoterm": "DAP",
-              "delivery_city": "Poznań",
-              "delivery_country": "PL"
-            }
-          }
-        ]
-      },
-      {
-        "role": "user",
-        "content": [
-          {
-            "type": "tool_result",
-            "tool_use_id": "toolu_01GNxyNgAAnhvoFBcBVboni3",
-            "content": "{\"offers\": [{\"rank\": 1, \"stock_item_id\": \"stk_058\", \"delivered_eur_per_t\": \"704.42\", \"available_t\": 54.0}, {\"rank\": 2, \"stock_item_id\": \"stk_116\", \"delivered_eur_per_t\": \"713.66\", \"available_t\": 50.0}], \"missing_fields\": [], \"warnings\": []}",
-            "is_error": false
-          }
-        ]
-      },
-      {
-        "role": "assistant",
-        "content": [
-          {
-            "type": "text",
-            "text": "Excellent, there are offers available. I'll create an RFQ for the best-ranked offer (stk_058)."
-          },
-          {
-            "type": "tool_use",
-            "id": "toolu_01DSPqtqQxFfUsVTkMxf6BW8",
-            "name": "create_rfq",
-            "input": {
-              "stock_item_id": "stk_058"
-            }
-          }
-        ]
-      },
-      {
-        "role": "user",
-        "content": [
-          {
-            "type": "tool_result",
-            "tool_use_id": "toolu_01DSPqtqQxFfUsVTkMxf6BW8",
-            "content": "{\"rfq_id\": \"rfq_0001\"}",
-            "is_error": false
-          }
-        ]
+        "content": "Handle enquiry enq_0002.\n<enquiry>\nSubject: Anfrage S355J2 Bleche\n\nGuten Tag,\n\nbitte bieten Sie uns 30 t S355J2 Blech, 15 x 1250 mm, DAP Posen, Polen an.\n\nMit freundlichen Grüßen\nAnna Becker\n</enquiry>\nAttachments (extract_specs reads them): none"
       }
     ],
     "tools": [
@@ -401,21 +286,19 @@
     "content": [
       {
         "type": "text",
-        "text": "Now I'll draft the quote."
+        "text": "I'll handle this enquiry step by step."
       },
       {
         "type": "tool_use",
-        "id": "toolu_019b1C2CYRSzWZyz484Cg2Gv",
-        "name": "draft_quote",
-        "input": {
-          "rfq_id": "rfq_0001"
-        }
+        "id": "toolu_0182mPGMwjaA9E5bMrmgGGGj",
+        "name": "extract_specs",
+        "input": {}
       }
     ],
     "stop_reason": "tool_use",
     "model": "claude-haiku-4-5-20251001",
-    "input_tokens": 3072,
-    "output_tokens": 68,
-    "latency_ms": 1104.5
+    "input_tokens": 2397,
+    "output_tokens": 47,
+    "latency_ms": 1046.1
   }
 }

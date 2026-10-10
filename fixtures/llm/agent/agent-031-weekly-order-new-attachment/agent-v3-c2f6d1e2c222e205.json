@@ -7,18 +7,18 @@
     "messages": [
       {
         "role": "user",
-        "content": "Handle enquiry enq_0002.\n<enquiry>\nSubject: Re: Enquiry S355J2 plates\n\nHi, any update on this?\n\nAnna\n\n> Hello,\n> \n> please quote 30 t of S355J2 plate, 15 x 1250 mm, DAP Poznań, Poland.\n> \n> Regards,\n> Anna Becker\n</enquiry>\nAttachments (extract_specs reads them): none"
+        "content": "Handle enquiry enq_0002.\n<enquiry>\nSubject: Weekly order\n\nHello,\n\nplease see this week's order attached.\n\nRegards,\nAnna Becker\n</enquiry>\nAttachments (extract_specs reads them): order.xlsx"
       },
       {
         "role": "assistant",
         "content": [
           {
             "type": "text",
-            "text": "I'll handle this enquiry step by step."
+            "text": "I'll handle this enquiry by first extracting the specifications from the attached file."
           },
           {
             "type": "tool_use",
-            "id": "toolu_011TkZz4N8hauTvUnRUDwHhf",
+            "id": "toolu_01QY96oG3hJ6q3zGe5iCtsFW",
             "name": "extract_specs",
             "input": {}
           }
@@ -29,7 +29,7 @@
         "content": [
           {
             "type": "tool_result",
-            "tool_use_id": "toolu_011TkZz4N8hauTvUnRUDwHhf",
+            "tool_use_id": "toolu_01QY96oG3hJ6q3zGe5iCtsFW",
             "content": "{\"spec\": {\"grade\": \"S355J2\", \"grade_ambiguous\": false, \"form\": \"plate\", \"thickness_mm\": 15.0, \"width_mm\": 1250.0, \"quantity_t\": 30.0, \"incoterm\": \"DAP\", \"delivery_city\": \"Poznań\", \"delivery_country\": \"PL\"}, \"missing_fields\": [], \"warnings\": []}",
             "is_error": false
           }
@@ -40,11 +40,11 @@
         "content": [
           {
             "type": "text",
-            "text": "Good, the spec is complete and unambiguous. Now I'll check for duplicates."
+            "text": "Good, the spec is complete and unambiguous. Now I'll check if this is a duplicate enquiry."
           },
           {
             "type": "tool_use",
-            "id": "toolu_01QJsf8E6Q6jeG2ZAH8SdJs2",
+            "id": "toolu_01LrSAA5tT3BZS5TqRmSKQ3G",
             "name": "check_duplicate",
             "input": {}
           }
@@ -55,8 +55,71 @@
         "content": [
           {
             "type": "tool_result",
-            "tool_use_id": "toolu_01QJsf8E6Q6jeG2ZAH8SdJs2",
+            "tool_use_id": "toolu_01LrSAA5tT3BZS5TqRmSKQ3G",
             "content": "{\"duplicate_of\": null}",
+            "is_error": false
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "Not a duplicate. Now I'll search for stock matching this specification."
+          },
+          {
+            "type": "tool_use",
+            "id": "toolu_01FgTJMrPNtn5JdTHLCEvRpS",
+            "name": "search_stock",
+            "input": {
+              "grade": "S355J2",
+              "form": "plate",
+              "thickness_mm": 15.0,
+              "width_mm": 1250.0,
+              "quantity_t": 30.0,
+              "incoterm": "DAP",
+              "delivery_city": "Poznań",
+              "delivery_country": "PL"
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "toolu_01FgTJMrPNtn5JdTHLCEvRpS",
+            "content": "{\"offers\": [{\"rank\": 1, \"stock_item_id\": \"stk_058\", \"delivered_eur_per_t\": \"704.42\", \"available_t\": 54.0}, {\"rank\": 2, \"stock_item_id\": \"stk_116\", \"delivered_eur_per_t\": \"713.66\", \"available_t\": 50.0}], \"missing_fields\": [], \"warnings\": []}",
+            "is_error": false
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "Excellent! There are matching stock lots available. I'll create an RFQ for the best-priced offer (rank 1)."
+          },
+          {
+            "type": "tool_use",
+            "id": "toolu_01RvXeoSq7adsYag4AdmrRfY",
+            "name": "create_rfq",
+            "input": {
+              "stock_item_id": "stk_058"
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "toolu_01RvXeoSq7adsYag4AdmrRfY",
+            "content": "{\"rfq_id\": \"rfq_0001\"}",
             "is_error": false
           }
         ]
@@ -338,28 +401,21 @@
     "content": [
       {
         "type": "text",
-        "text": "No duplicate. Now I'll search for stock matching the spec."
+        "text": "Now I'll draft the quote for this RFQ."
       },
       {
         "type": "tool_use",
-        "id": "toolu_01GNxyNgAAnhvoFBcBVboni3",
-        "name": "search_stock",
+        "id": "toolu_01U8JRabShxMECDcwEXUcaqX",
+        "name": "draft_quote",
         "input": {
-          "grade": "S355J2",
-          "form": "plate",
-          "thickness_mm": 15.0,
-          "width_mm": 1250.0,
-          "quantity_t": 30.0,
-          "incoterm": "DAP",
-          "delivery_city": "Poznań",
-          "delivery_country": "PL"
+          "rfq_id": "rfq_0001"
         }
       }
     ],
     "stop_reason": "tool_use",
     "model": "claude-haiku-4-5-20251001",
-    "input_tokens": 2631,
-    "output_tokens": 212,
-    "latency_ms": 2022.2
+    "input_tokens": 3035,
+    "output_tokens": 73,
+    "latency_ms": 1252.1
   }
 }
