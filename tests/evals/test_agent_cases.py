@@ -54,6 +54,16 @@ def test_golden_expected_output_is_the_expected_agent_behaviour(agent_dataset_di
     )
 
 
+def test_golden_carries_the_tool_path_as_expected_tools(agent_dataset_dir: Path) -> None:
+    """Confident AI shows expected_tools in the dataset, and ToolCorrectnessMetric compares against them."""
+    write_agent_case(agent_dataset_dir)
+
+    [case] = load_dataset(agent_dataset_dir)
+    expected_tools = case.as_golden_fields()["expected_tools"]
+
+    assert [tool.name for tool in expected_tools] == HAPPY_PATH
+
+
 def test_earlier_enquiries_and_counterfactual_group_are_loaded(agent_dataset_dir: Path) -> None:
     earlier = [{"tenant": "other", "subject": "Plates", "body": "30 t S355J2"}]
     write_agent_case(agent_dataset_dir, earlier_enquiries=earlier, counterfactual_group="s355-plate-poznan")

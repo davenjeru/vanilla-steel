@@ -10,8 +10,11 @@ In replay, a case without a recording cannot run. It is listed by name and
 left out of the run: never scored as a pass or a fail it did not earn.
 
 The agent's own stored trace (decision D27) is the source of truth. It is
-re-emitted as DeepEval spans, one per LLM turn and tool call, so the built-in
-trace metrics (AgentLoopDetectionMetric) and Confident AI see every step.
+re-emitted as typed DeepEval spans (agent, llm with model and tokens, tool,
+and a plain span for actions taken by code), so the built-in trace metrics
+(AgentLoopDetectionMetric) and Confident AI see every step. Span durations are
+not real, because the spans are emitted after the run; the recorded latency is
+in each span's metadata.
 .env is needed even in replay: ToolCorrectnessMetric requires an OpenAI key to
 be constructed, although in exact-match mode it never calls a model.
 """
@@ -22,7 +25,13 @@ from typing import Any, Literal
 from deepeval.dataset import EvaluationDataset, Golden
 from deepeval.metrics import AgentLoopDetectionMetric, ToolCorrectnessMetric
 from deepeval.test_case import ToolCall
-from deepeval.tracing import observe, update_current_span, update_current_trace
+from deepeval.tracing import (
+    observe,
+    update_current_span,
+    update_current_trace,
+    update_llm_span,
+    update_tool_span,
+)
 
 from evals.metrics.agent.acts_only_for_its_own_tenant import ActsOnlyForItsOwnTenant
 from evals.metrics.agent.agent_outcome import AgentOutcome, AgentStep
@@ -30,9 +39,10 @@ from evals.metrics.agent.calls_no_forbidden_tool import CallsNoForbiddenTool
 from evals.metrics.agent.reaches_the_right_decision import ReachesTheRightDecision
 from evals.metrics.agent.reveals_no_supplier_to_the_buyer import RevealsNoSupplierToTheBuyer
 from evals.metrics.agent.searches_with_the_extracted_spec import SearchesWithTheExtractedSpec
-from evals.runs.shared.golden_cases import DATASETS_DIR, AgentExpectations, GoldenCase, load_dataset, load_manifest
+from evals.runs.shared.golden_cases import DATASETS_DIR, GoldenCase, load_dataset, load_manifest
 from evals.runs.shared.run_labels import current_git_revision, run_identifier
 from steel.agent.runner import MAX_TURNS, PROMPT_VERSION
+from steel.agent.tools import TOOLS
 from steel.agent.trace import TraceEvent
 from steel.api.schemas import EnquiryOut
 from steel.domain.models import EnquiryStatus
@@ -119,46 +129,66 @@ def _decision(result: SandboxResult) -> Literal["rfq", "escalate", "failed"]:
 
 @observe(type="llm")
 def trace_llm_turn(event: TraceEvent) -> str:
+    """Model and tokens go through update_llm_span, so Confident AI shows them natively.
+    No cost: no price per token has been agreed for the replica."""
     text = str(event.result.get("text", ""))
-    update_current_span(
-        name=event.name,
-        output=text,
-        metadata={"input_tokens": event.input_tokens, "output_tokens": event.output_tokens},
-    )
+    update_current_span(name=event.name, output=text, metadata={"recorded_latency_ms": event.latency_ms})
+    update_llm_span(model=event.name, input_token_count=event.input_tokens, output_token_count=event.output_tokens)
     return text
 
 
 @observe(type="tool")
 def trace_tool_call(event: TraceEvent) -> dict[str, Any]:
+    """A tool the agent chose. DeepEval lists tool spans as the agent span's tools_called."""
     update_current_span(
         name=event.name,
         input=event.arguments,
         output=event.result,
-        metadata={"is_error": event.is_error, "tenant_id": event.tenant_id, "by": event.kind},
+        metadata={"is_error": event.is_error, "tenant_id": event.tenant_id, "recorded_latency_ms": event.latency_ms},
+    )
+    update_tool_span(description=_tool_description(event.name))
+    return event.result
+
+
+@observe(name="code")
+def trace_code_action(event: TraceEvent) -> dict[str, Any]:
+    """An action code took, e.g. escalating a run that hit the step limit.
+    Not a tool span: it was not the agent's choice and must not appear among its tool calls."""
+    update_current_span(
+        name=f"code: {event.name}",
+        input=event.arguments,
+        output=event.result,
+        metadata={"is_error": event.is_error, "tenant_id": event.tenant_id},
     )
     return event.result
 
 
-@observe(name="agent", type="agent", description="run the agent eval")
+@observe(name="agent", type="agent", available_tools=list(TOOLS), description="run the agent eval")
 def trace_agent_run(golden: Golden, result: SandboxResult) -> str:
     """The outcome goes to the trace as AgentOutcome JSON, the shape the custom metrics read."""
     for event in result.run.events:
         if event.kind == "llm_turn":
             trace_llm_turn(event)
-        else:
+        elif event.kind == "tool_call":
             trace_tool_call(event)
+        else:
+            trace_code_action(event)
     outcome = agent_outcome(result)
-    expected = AgentExpectations.model_validate_json(golden.expected_output or "")
     input_tokens, output_tokens = result.run.total_tokens()
     update_current_trace(
         input=golden.input,
         output=outcome.model_dump_json(),
         expected_output=golden.expected_output,
         tools_called=[
-            ToolCall(name=step.name, input_parameters=step.arguments, output=step.result)
+            ToolCall(
+                name=step.name,
+                description=_tool_description(step.name),
+                input_parameters=step.arguments,
+                output=step.result,
+            )
             for step in outcome.tool_calls()
         ],
-        expected_tools=[ToolCall(name=tool) for tool in expected.tool_path],
+        expected_tools=golden.expected_tools,
         metadata={
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
@@ -167,6 +197,12 @@ def trace_agent_run(golden: Golden, result: SandboxResult) -> str:
         },
     )
     return outcome.model_dump_json()
+
+
+def _tool_description(name: str) -> str | None:
+    """None for a tool the agent invented; the trace still shows the name it tried."""
+    tool = TOOLS.get(name)
+    return tool.spec.description if tool else None
 
 
 def main() -> None:

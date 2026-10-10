@@ -3,12 +3,15 @@
 from pathlib import Path
 
 import pytest
+from deepeval.dataset import Golden
 
-from evals.runs.agent import agent_outcome, run_every_case
+from evals.runs.agent import agent_outcome, run_every_case, trace_agent_run
 from evals.runs.shared.golden_cases import DATASETS_DIR, GoldenCase, load_dataset
+from steel.agent.trace import TraceEvent
 from steel.llm.replay import ReplayLLMClient
 from steel.sandbox import SandboxResult, handle_in_sandbox
 from steel.settings import Settings
+from tests.factories.deepeval_traces import confident_ai_payload
 from tests.factories.llm import FakeLLMClient
 
 S355_PLATE_READING = {
@@ -69,5 +72,54 @@ def test_reports_progress_as_each_case_finishes(tmp_path: Path, capsys: pytest.C
     assert f"[1/1] {case.name}: not recorded" in capsys.readouterr().out
 
 
+# What Confident AI receives
+
+
+def test_confident_ai_shows_each_tool_the_agent_called_as_a_tool_span(
+    rfq_run: SandboxResult, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = confident_ai_payload(lambda: trace_agent_run(first_agent_golden(), rfq_run), monkeypatch)
+
+    assert [call["name"] for call in payload["agentSpans"][0]["toolsCalled"]] == [
+        "extract_specs",
+        "check_duplicate",
+        "search_stock",
+        "create_rfq",
+    ]
+
+
+def test_confident_ai_shows_model_and_tokens_on_every_llm_turn(
+    rfq_run: SandboxResult, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = confident_ai_payload(lambda: trace_agent_run(first_agent_golden(), rfq_run), monkeypatch)
+
+    turns = [(span["model"], span["inputTokenCount"] > 0) for span in payload["llmSpans"]]
+    assert turns == [("claude-test-model", True)] * len(rfq_run.run.tool_calls())
+
+
+def test_a_step_taken_by_code_is_not_shown_as_the_agents_tool_call(
+    rfq_run: SandboxResult, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Escalating a stalled run is a code safety net; listing it as the agent's choice would flatter the agent."""
+    code_escalation = TraceEvent(
+        seq=99, kind="system", name="escalate_to_human", tenant_id="tnt_bauer", arguments={"reason": "agent_step_limit"}
+    )
+    run_with_code_step = rfq_run.model_copy(
+        update={"run": rfq_run.run.model_copy(update={"events": [*rfq_run.run.events, code_escalation]})}
+    )
+
+    payload = confident_ai_payload(lambda: trace_agent_run(first_agent_golden(), run_with_code_step), monkeypatch)
+
+    agent_tool_calls = [call["name"] for call in payload["agentSpans"][0]["toolsCalled"]]
+    assert ("escalate_to_human" in agent_tool_calls, payload["baseSpans"][0]["name"]) == (
+        False,
+        "code: escalate_to_human",
+    )
+
+
 def first_agent_case() -> GoldenCase:
     return load_dataset(DATASETS_DIR / "agent")[0]
+
+
+def first_agent_golden() -> Golden:
+    return Golden(**first_agent_case().as_golden_fields())

@@ -30,6 +30,7 @@ import re
 from pathlib import Path
 from typing import Any, Literal
 
+from deepeval.test_case import ToolCall
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, ValidationError, model_validator
 
 from steel.agent.tools import TOOLS, AgentEscalationReason
@@ -198,11 +199,14 @@ class GoldenCase(BaseModel):
         The expected result travels as JSON in expected_output, not in metadata:
         it is the only golden field a trace-level metric receives inside
         evals_iterator, and Confident AI shows it next to the actual output.
+        Agent cases also carry their tool path as expected_tools, so the
+        dataset view shows it and ToolCorrectnessMetric can compare against it.
         """
         return {
             "name": self.name,
             "input": self._input(),
             "expected_output": self._expected_output(),
+            "expected_tools": self._expected_tools(),
             "additional_metadata": {
                 "dataset": self.dataset,
                 "version": self.dataset_version,
@@ -215,6 +219,14 @@ class GoldenCase(BaseModel):
         if self.kind == "matching":
             return _as_json(self.labels.input_spec)
         return self.email or ""
+
+    def _expected_tools(self) -> list[ToolCall] | None:
+        if self.labels.expected_agent is None:
+            return None
+        return [
+            ToolCall(name=tool, description=TOOLS[tool].spec.description)
+            for tool in self.labels.expected_agent.tool_path
+        ]
 
     def _expected_output(self) -> str | None:
         if self.kind == "agent":
