@@ -1,4 +1,4 @@
-"""Stays within the cost limit: $0.025 per enquiry at agreed prices (Haiku 4.5: $1 in, $5 out per million)."""
+"""Stays within the cost limit: $0.030 per enquiry at agreed prices (Haiku 4.5: $1 in, $5 out per million)."""
 
 from evals.metrics.agent.stays_within_the_cost_limit import StaysWithinTheCostLimit
 from tests.factories.eval_test_cases import agent_outcome, agent_test_case, expected_rfq, model_call
@@ -10,16 +10,16 @@ def test_typical_rfq_run_passes_and_reports_its_cost() -> None:
 
     score = metric.measure(agent_test_case(expected_rfq(), agent_outcome()))
 
-    assert (score, metric.reason) == (1.0, "$0.0145 for this enquiry (limit $0.025)")
+    assert (score, metric.reason) == (1.0, "$0.0145 for this enquiry (limit $0.030)")
 
 
 def test_run_over_the_cost_limit_fails() -> None:
-    """20,000 input and 1,200 output tokens: $0.026."""
+    """25,000 input and 1,200 output tokens: $0.031."""
     metric = StaysWithinTheCostLimit()
 
-    score = metric.measure(agent_test_case(expected_rfq(), agent_outcome(model_calls=[model_call(20_000, 1_200)])))
+    score = metric.measure(agent_test_case(expected_rfq(), agent_outcome(model_calls=[model_call(25_000, 1_200)])))
 
-    assert (score, metric.reason) == (0.0, "$0.0260 for this enquiry (limit $0.025)")
+    assert (score, metric.reason) == (0.0, "$0.0310 for this enquiry (limit $0.030)")
 
 
 def test_dated_model_id_is_priced_by_its_family() -> None:

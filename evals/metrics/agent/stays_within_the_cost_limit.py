@@ -43,4 +43,4 @@ def _reason(call_count: int, unpriced: list[str], cost_usd: float) -> str:
         return "No model calls were recorded, so the cost cannot be checked"
     if unpriced:
         return f"No agreed price for {', '.join(unpriced)}; add it to evals/metrics/agent/budget.py"
-    return f"${cost_usd:.4f} for this enquiry (limit ${MAX_COST_USD_PER_ENQUIRY})"
+    return f"${cost_usd:.4f} for this enquiry (limit ${MAX_COST_USD_PER_ENQUIRY:.3f})"

@@ -20,7 +20,7 @@ from steel.llm.client import ConversationRequest, LLMError, ToolUse
 from steel.storage import enquiries
 
 PROMPT_ID = "agent"
-PROMPT_VERSION = "v2"  # v2: draft_quote after create_rfq (Slice 5)
+PROMPT_VERSION = "v3"  # v2: draft_quote after create_rfq (Slice 5); v3: escalate obvious injections at once
 PROMPT_PATH = Path(__file__).parent / "prompts" / f"{PROMPT_ID}_{PROMPT_VERSION}.md"
 MAX_TURNS = 8
 
@@ -112,7 +112,9 @@ def _run_tool(context: ToolContext, use: ToolUse, recorder: TraceRecorder) -> di
         latency_ms=latency_ms,
         **_model_usage_fields(context.model_usage),
     )
-    return {"type": "tool_result", "tool_use_id": use.id, "content": json.dumps(result), "is_error": is_error}
+    # ensure_ascii=False: the model must read "Poznań", not "Poznań", or it copies the escape (F-010).
+    content = json.dumps(result, ensure_ascii=False)
+    return {"type": "tool_result", "tool_use_id": use.id, "content": content, "is_error": is_error}
 
 
 def _model_usage_fields(usage: ModelUsage | None) -> dict[str, Any]:

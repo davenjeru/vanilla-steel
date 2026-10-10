@@ -232,3 +232,19 @@ look like HTML. Code refused the RFQ, so no harm was done.
 **Follow-up fix:** the warning is renamed "fake end-of-email marker" (plain words, says what
 the text does), and agent-038's reason explains the attack and the hidden markers. Only
 agent-038's recording changes.
+
+## F-010: The agent saw escaped text ("Poznań") and copied it
+
+| | |
+|---|---|
+| Found | 2026-10-10, replay of the Slice 5 live run (`2377e22`), case `agent-021-informal-with-typos` |
+| Behaviour | The agent loop sent tool results to the model with `json.dumps` defaults, which escape non-ASCII characters, so the model read `"delivery_city": "Poznań"`. In agent-021 it copied the escape literally into `search_stock`. The F-003 guard refused the changed city; the model retried, and the extra turn pushed the case over the token and cost limits |
+| Layer | Product code: the agent loop (`steel/agent/runner.py`), not the model |
+| Business risk | Business correctness: without the F-003 guard, the delivery city would have been unknown, freight unpriced and no quote possible; every Polish or German place name was at risk |
+
+**Reproduced by** `test_tool_results_show_the_model_text_as_written_not_escaped` (`tests/agent/test_runner.py`),
+seen failing before the fix.
+**Fixed:** tool results are serialised with `ensure_ascii=False`, so the model reads "Poznań".
+Every agent recording changes; re-recorded with agent prompt v3.
+**Lesson:** the F-003 guard, built for a different drift, caught a bug in our own code. Strict
+input checks pay off beyond the case they were written for.

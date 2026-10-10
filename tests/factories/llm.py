@@ -3,7 +3,8 @@
 import json
 from typing import Any
 
-from steel.domain.injection import SUSPICIOUS_CONTENT_WARNING
+from steel.agent.tools import TOOLS
+from steel.domain.injection import REMOVED_BOUNDARY_TAG, SUSPICIOUS_CONTENT_WARNING, find_injection_signals
 from steel.llm.client import ConversationRequest, ConversationResponse, LLMRequest, LLMResponse
 from steel.quotes.cover_letter import PROMPT_ID as QUOTE_LETTER_PROMPT_ID
 
@@ -98,7 +99,7 @@ class FakeLLMClient:
 
     def converse(self, request: ConversationRequest) -> ConversationResponse:
         self.conversations.append(request)
-        next_call = reference_next_tool_call(tool_results(request.messages))
+        next_call = reference_next_tool_call(tool_results(request.messages), visible_customer_text(request.messages))
         if next_call is None:
             return conversation_response([{"type": "text", "text": "Done."}])
         name, arguments = next_call
@@ -156,8 +157,24 @@ def tool_results(messages: list[dict[str, Any]]) -> list[ToolResult]:
     return results
 
 
-def reference_next_tool_call(history: list[ToolResult]) -> tuple[str, dict[str, Any]] | None:
+def visible_customer_text(messages: list[dict[str, Any]]) -> str:
+    """The subject and body as the agent sees them: inside the fence of its opening message."""
+    opening = messages[0]["content"] if messages and isinstance(messages[0]["content"], str) else ""
+    _, _, inside = opening.partition("<enquiry>\n")
+    return inside.partition("\n</enquiry>")[0]
+
+
+def is_obvious_injection(customer_text: str) -> bool:
+    """Prompt v3: instruction-like text the agent can see, or a fake end-of-email marker that code removed.
+    Uses the product's own patterns, so the reference path and the labels agree on what 'obvious' means."""
+    signals = find_injection_signals(customer_text, tool_names=list(TOOLS))
+    return bool(signals) or REMOVED_BOUNDARY_TAG in customer_text
+
+
+def reference_next_tool_call(history: list[ToolResult], customer_text: str = "") -> tuple[str, dict[str, Any]] | None:
     """The next tool a correct agent calls, or None when it is done."""
+    if not history and is_obvious_injection(customer_text):
+        return "escalate_to_human", {"reason": "suspicious_content", "detail": "Instructions aimed at the system."}
     if not history:
         return "extract_specs", {}
     name, result, is_error = history[-1]

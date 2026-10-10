@@ -19,6 +19,8 @@ from collections.abc import Iterable
 from pydantic import BaseModel
 
 SUSPICIOUS_CONTENT_WARNING = "suspicious content"
+# What replaces a customer-written <enquiry> tag; agent prompt v3 names it as a reason to escalate at once.
+REMOVED_BOUNDARY_TAG = "[enquiry tag removed]"
 
 IGNORE_PREVIOUS_INSTRUCTIONS = [
     re.compile(
@@ -84,7 +86,7 @@ def remove_boundary_tags(customer_text: str) -> str:
     """Finding F-009: an email writing </enquiry> closed the fence around customer data early, so the text
     after it reached the model as if it were ours. Customer text is cleaned before it is fenced; the scan
     for instruction-like text still reads the original, so the attempt is flagged all the same."""
-    return ENQUIRY_BOUNDARY_TAG.sub("[enquiry tag removed]", customer_text)
+    return ENQUIRY_BOUNDARY_TAG.sub(REMOVED_BOUNDARY_TAG, customer_text)
 
 
 def _tool_name_pattern(tool_names: Iterable[str]) -> re.Pattern[str]:
