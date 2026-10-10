@@ -1,4 +1,4 @@
-.PHONY: install check lint format test seed eval-extraction eval-extraction-live eval-matching record-fixtures run-agent run-agent-live
+.PHONY: install check lint format test seed eval-extraction eval-extraction-live eval-matching eval-agent eval-agent-live record-fixtures run-agent run-agent-live
 
 install:
 	uv sync
@@ -31,6 +31,15 @@ eval-extraction-live:
 
 eval-matching:
 	uv run python -m evals.runs.matching
+
+## Replays recorded agent runs; cases without a recording are listed, not scored.
+## Reads .env because DeepEval's ToolCorrectnessMetric needs an OpenAI key to be built (it calls no model here).
+eval-agent:
+	uv run --env-file .env python -m evals.runs.agent
+
+## Calls Claude for every agent case (costs money) and records the answers to fixtures/llm/. Commit them.
+eval-agent-live:
+	uv run --env-file .env python -m evals.runs.agent --live
 
 ## Calls Claude for every extraction golden case and saves the answers to fixtures/llm/. Commit them.
 record-fixtures:

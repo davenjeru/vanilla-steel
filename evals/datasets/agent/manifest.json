@@ -1,11 +1,15 @@
 {
-  "version": "0",
+  "version": "1",
   "kind": "agent",
   "description": "Enquiry emails with the decision and tool path a correct agent must take, covering business correctness, duplication, data separation, supplier anonymity, security, fairness and robustness.",
   "changelog": [
     {
       "version": "0",
       "change": "First 23 cases (llm-drafted, unverified)."
+    },
+    {
+      "version": "1",
+      "change": "Added agent-024, the regression case for finding F-003 (agent re-adds an Incoterm extraction dropped)."
     }
   ]
 }
