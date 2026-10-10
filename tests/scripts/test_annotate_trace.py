@@ -2,7 +2,7 @@
 
 import pytest
 
-from evals.annotate_trace import thumbs_rating, trace_uuid_for_case
+from scripts.annotate_trace import thumbs_rating, trace_uuid_for_case
 
 LATEST_RUN = {
     "testCases": [

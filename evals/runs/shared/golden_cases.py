@@ -29,7 +29,7 @@ from steel.domain.models import MaterialSpec
 from steel.extraction.attachments import Attachment
 from steel.storage.seed import build_stock
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[3]  # evals/runs/shared/golden_cases.py -> repo root
 DATASETS_DIR = REPO_ROOT / "evals" / "datasets"
 
 MANIFEST_FILE = "manifest.json"

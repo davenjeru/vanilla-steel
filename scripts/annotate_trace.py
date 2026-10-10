@@ -1,8 +1,8 @@
 """Attach a human annotation (thumbs up or down, plus an explanation) to an eval trace on Confident AI.
 
 Usage:
-    uv run python -m evals.annotate_trace --case de-001-blech-dezimalkomma-posen --down --explanation "..."
-    uv run python -m evals.annotate_trace --trace 4d61c57a-... --down --explanation "..."
+    uv run python -m scripts.annotate_trace --case de-001-blech-dezimalkomma-posen --down --explanation "..."
+    uv run python -m scripts.annotate_trace --trace 4d61c57a-... --down --explanation "..."
 
 --case looks the trace up in the latest local run (.deepeval/.latest_run_full.json),
 so annotate before the next eval run replaces that file. --trace takes the UUID
