@@ -37,17 +37,23 @@ def test_response_contract_has_exactly_the_documented_fields(api_client: TestCli
         "spec",
         "warnings",
         "failure_code",
+        "escalation_reason",
         "offers_available",
         "created_at",
     }
 
 
-def test_extracted_enquiry_moves_from_received_to_extracted(api_client: TestClient) -> None:
+def test_enquiry_is_received_then_extracted_before_anything_else(api_client: TestClient) -> None:
     response = api_client.post("/v1/enquiries", json=enquiry_payload(), headers=BAUER)
 
-    body = response.json()
-    assert body["status"] == "extracted"
-    assert [change["status"] for change in body["status_history"]] == ["received", "extracted"]
+    assert [change["status"] for change in response.json()["status_history"]][:2] == ["received", "extracted"]
+
+
+def test_enquiry_without_stock_ends_escalated_as_no_stock(api_client: TestClient) -> None:
+    """The standard St37 sheet enquiry matches no seed stock, so a trader must take over."""
+    body = api_client.post("/v1/enquiries", json=enquiry_payload(), headers=BAUER).json()
+
+    assert (body["status"], body["escalation_reason"]) == ("escalated", "no_stock")
 
 
 def test_extraction_uses_the_configured_model(api_client: TestClient, fake_llm: FakeLLMClient) -> None:
@@ -103,7 +109,8 @@ def test_corrupt_excel_attachment_is_a_warning_not_a_server_error(api_client: Te
 def test_extraction_failure_still_stores_the_enquiry_as_failed(
     make_api_client: Callable[[LLMClient], TestClient],
 ) -> None:
-    client = make_api_client(FailingLLMClient(LLMError("Anthropic API returned 529: overloaded")))
+    llm = FakeLLMClient(output={}, extraction_error=LLMError("Anthropic API returned 529: overloaded"))
+    client = make_api_client(llm)
 
     response = client.post("/v1/enquiries", json=enquiry_payload(), headers=BAUER)
 
@@ -119,6 +126,17 @@ def test_extraction_failure_details_are_not_shown_to_the_customer(
     response = client.post("/v1/enquiries", json=enquiry_payload(), headers=BAUER)
 
     assert "Anthropic" not in response.text
+
+
+def test_agent_failure_still_stores_the_enquiry_as_failed(
+    make_api_client: Callable[[LLMClient], TestClient],
+) -> None:
+    client = make_api_client(FailingLLMClient(LLMError("Anthropic API unreachable: ConnectTimeout")))
+
+    response = client.post("/v1/enquiries", json=enquiry_payload(), headers=BAUER)
+
+    assert response.status_code == 201
+    assert (response.json()["status"], response.json()["failure_code"]) == ("failed", "agent_failed")
 
 
 # Reading back
@@ -242,11 +260,17 @@ def test_rejected_payload_triggers_no_llm_call(api_client: TestClient, fake_llm:
 
 
 def test_api_runs_on_recorded_answers_without_a_live_model(
-    make_api_client: Callable[[LLMClient], TestClient], fake_llm: FakeLLMClient, tmp_path: Path
+    make_isolated_api_client: Callable[[LLMClient], TestClient], fake_llm: FakeLLMClient, tmp_path: Path
 ) -> None:
-    """How CI runs: answers recorded once, replayed with no API key and no network."""
-    make_api_client(RecordingLLMClient(fake_llm, tmp_path)).post("/v1/enquiries", json=enquiry_payload(), headers=BAUER)
+    """How CI runs: answers recorded once, replayed with no API key and no network.
 
-    replayed = make_api_client(ReplayLLMClient(tmp_path)).post("/v1/enquiries", json=enquiry_payload(), headers=BAUER)
+    Every agent turn is replayed, so the second run needs identical state: its own fresh database.
+    """
+    recordings = tmp_path / "recordings"
+    recorded = make_isolated_api_client(RecordingLLMClient(fake_llm, recordings))
+    recorded.post("/v1/enquiries", json=enquiry_payload(), headers=BAUER)
 
-    assert replayed.json()["spec"]["grade"] == "S235JR"
+    replayed = make_isolated_api_client(ReplayLLMClient(recordings))
+    body = replayed.post("/v1/enquiries", json=enquiry_payload(), headers=BAUER).json()
+
+    assert (body["spec"]["grade"], body["status"], body["escalation_reason"]) == ("S235JR", "escalated", "no_stock")

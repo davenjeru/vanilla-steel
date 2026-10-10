@@ -5,7 +5,23 @@ from pathlib import Path
 import pytest
 
 from steel.llm.replay import MissingFixture, RecordingLLMClient, ReplayLLMClient
-from tests.factories.llm import FakeLLMClient, llm_request
+from tests.factories.llm import FakeLLMClient, conversation_request, llm_request
+
+
+def test_recorded_agent_turn_is_replayed_exactly(tmp_path: Path) -> None:
+    live = FakeLLMClient(output={})
+    recorded = RecordingLLMClient(live, tmp_path).converse(conversation_request())
+
+    assert ReplayLLMClient(tmp_path).converse(conversation_request()) == recorded
+
+
+def test_agent_turn_after_a_different_tool_result_needs_a_new_recording(tmp_path: Path) -> None:
+    """A replay is only valid while the whole conversation, every earlier tool result included, is identical."""
+    RecordingLLMClient(FakeLLMClient(output={}), tmp_path).converse(conversation_request())
+    different_history = [{"role": "user", "content": "Handle enquiry enq_0002."}]
+
+    with pytest.raises(MissingFixture):
+        ReplayLLMClient(tmp_path).converse(conversation_request(messages=different_history))
 
 
 def test_recorded_answer_is_replayed_exactly(tmp_path: Path) -> None:

@@ -18,11 +18,16 @@ def random_enquiry_id() -> str:
     return f"enq_{uuid.uuid4().hex[:12]}"
 
 
+def random_rfq_id() -> str:
+    return f"rfq_{uuid.uuid4().hex[:12]}"
+
+
 def create_app(
     settings: Settings,
     llm: LLMClient,
     clock: Callable[[], datetime] = utc_now,
     new_enquiry_id: Callable[[], str] = random_enquiry_id,
+    new_rfq_id: Callable[[], str] = random_rfq_id,
 ) -> FastAPI:
     """Build the API. Tests inject their own LLM, clock and ID generator so results are deterministic."""
     app = FastAPI(title="Steel procurement pipeline")
@@ -30,6 +35,7 @@ def create_app(
     app.state.llm = llm
     app.state.clock = clock
     app.state.new_enquiry_id = new_enquiry_id
+    app.state.new_rfq_id = new_rfq_id
     app.include_router(enquiries.router)
 
     @app.get("/health")

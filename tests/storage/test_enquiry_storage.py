@@ -3,6 +3,7 @@
 import sqlite3
 
 from steel.domain.enquiry import Enquiry
+from steel.domain.fingerprint import enquiry_fingerprint
 from steel.domain.models import EnquiryStatus
 from steel.domain.status import advance, start_history
 from steel.extraction.attachments import Attachment
@@ -18,6 +19,7 @@ def bauer_enquiry() -> Enquiry:
         sender="anna@bauer-metallbau.example",
         subject="Enquiry",
         body="25 t St37-2",
+        fingerprint=enquiry_fingerprint("Enquiry", "25 t St37-2"),
         status_history=start_history(FIXED_NOW),
         created_at=FIXED_NOW,
     )

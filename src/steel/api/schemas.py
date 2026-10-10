@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import Base64Bytes, BaseModel, ConfigDict, Field
 
-from steel.domain.enquiry import Enquiry
+from steel.domain.enquiry import Enquiry, EscalationReason
 from steel.domain.models import EnquiryStatus, MaterialSpec
 from steel.domain.status import StatusChange
 
@@ -32,7 +32,12 @@ class EnquiryOut(BaseModel):
     status_history: list[StatusChange]
     spec: MaterialSpec | None
     warnings: list[str]
-    failure_code: str | None = Field(description="Set when status is failed; details stay internal")
+    failure_code: str | None = Field(
+        description="extraction_failed or agent_failed when status is failed; details stay internal"
+    )
+    escalation_reason: EscalationReason | None = Field(
+        description="Why a human trader took over; the agent's explanation stays internal"
+    )
     offers_available: int = Field(
         description="Stock lots meeting every requirement. Which suppliers and at what cost stays internal."
     )
@@ -46,7 +51,13 @@ class EnquiryOut(BaseModel):
             status_history=enquiry.status_history,
             spec=enquiry.spec,
             warnings=enquiry.warnings,
-            failure_code="extraction_failed" if enquiry.failure_reason else None,
+            failure_code=_failure_code(enquiry.failure_reason),
+            escalation_reason=enquiry.escalation_reason,
             offers_available=len(enquiry.matches),
             created_at=enquiry.created_at,
         )
+
+
+def _failure_code(failure_reason: str | None) -> str | None:
+    """Failure reasons are stored as '<code>: <internal detail>'; only the code is shown."""
+    return failure_reason.split(":", maxsplit=1)[0] if failure_reason else None

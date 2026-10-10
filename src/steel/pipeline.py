@@ -1,4 +1,8 @@
-"""What happens when an enquiry arrives. Synchronous: each step updates the enquiry's status."""
+"""What happens when an enquiry arrives: store it, then let the agent handle it.
+
+Synchronous. The agent's tools move the enquiry through its statuses; the
+agent run (every LLM turn and tool call) is stored for evals and audits.
+"""
 
 import sqlite3
 from collections.abc import Callable
@@ -7,15 +11,14 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from steel.agent.runner import run_agent
+from steel.agent.tools import ToolContext
 from steel.domain.enquiry import Enquiry
-from steel.domain.geography import locate_delivery
-from steel.domain.matching import MatchOutcome, find_matches
-from steel.domain.models import EnquiryStatus
-from steel.domain.status import advance, start_history
+from steel.domain.fingerprint import enquiry_fingerprint
+from steel.domain.status import start_history
 from steel.extraction.attachments import Attachment
-from steel.extraction.extractor import EnquiryDocument, extract_spec
-from steel.llm.client import LLMClient, LLMError
-from steel.storage import enquiries, repositories
+from steel.llm.client import LLMClient
+from steel.storage import agent_runs, enquiries
 
 
 class EnquirySubmission(BaseModel):
@@ -32,8 +35,10 @@ class Pipeline:
     connection: sqlite3.Connection
     llm: LLMClient
     extraction_model: str
+    agent_model: str
     clock: Callable[[], datetime]
     new_enquiry_id: Callable[[], str]
+    new_rfq_id: Callable[[], str]
 
 
 def receive_enquiry(pipeline: Pipeline, tenant_id: str, submission: EnquirySubmission) -> Enquiry:
@@ -44,50 +49,21 @@ def receive_enquiry(pipeline: Pipeline, tenant_id: str, submission: EnquirySubmi
         sender=submission.sender,
         subject=submission.subject,
         body=submission.body,
+        fingerprint=enquiry_fingerprint(submission.subject, submission.body),
         status_history=start_history(received_at),
         created_at=received_at,
     )
     enquiries.insert_enquiry(pipeline.connection, enquiry, submission.attachments)
-    enquiry = _extract(pipeline, enquiry, submission.attachments)
-    if enquiry.status is EnquiryStatus.EXTRACTED:
-        enquiry = _match(pipeline, enquiry)
-    enquiries.update_pipeline_state(pipeline.connection, tenant_id, enquiry)
-    return enquiry
 
-
-def _extract(pipeline: Pipeline, enquiry: Enquiry, attachments: list[Attachment]) -> Enquiry:
-    document = EnquiryDocument(subject=enquiry.subject, body=enquiry.body, attachments=attachments)
-    try:
-        result = extract_spec(document, pipeline.llm, pipeline.extraction_model)
-    except LLMError as error:
-        history = advance(enquiry.status_history, EnquiryStatus.FAILED, pipeline.clock())
-        return enquiry.model_copy(update={"status_history": history, "failure_reason": str(error)})
-    history = advance(enquiry.status_history, EnquiryStatus.EXTRACTED, pipeline.clock())
-    return enquiry.model_copy(update={"status_history": history, "spec": result.spec, "warnings": result.warnings})
-
-
-def _match(pipeline: Pipeline, enquiry: Enquiry) -> Enquiry:
-    """Matched only if some stock meets every hard constraint. Otherwise the enquiry stays
-    extracted, with the reason as a warning, and the agent (Slice 4) decides what happens next."""
-    spec = enquiry.spec
-    if spec is None:
-        return enquiry
-    outcome = find_matches(
-        spec,
-        stock=repositories.list_stock(pipeline.connection),
-        suppliers={supplier.id: supplier for supplier in repositories.list_suppliers(pipeline.connection)},
-        delivery=locate_delivery(spec.delivery_city, spec.delivery_country),
+    context = ToolContext(
+        tenant_id=tenant_id,
+        enquiry_id=enquiry.id,
+        connection=pipeline.connection,
+        llm=pipeline.llm,
+        extraction_model=pipeline.extraction_model,
+        clock=pipeline.clock,
+        new_rfq_id=pipeline.new_rfq_id,
     )
-    warnings = enquiry.warnings + outcome.warnings + _no_match_warnings(outcome)
-    if not outcome.matches:
-        return enquiry.model_copy(update={"warnings": warnings})
-    history = advance(enquiry.status_history, EnquiryStatus.MATCHED, pipeline.clock())
-    return enquiry.model_copy(update={"status_history": history, "matches": outcome.matches, "warnings": warnings})
-
-
-def _no_match_warnings(outcome: MatchOutcome) -> list[str]:
-    if outcome.missing_fields:
-        return [f"not matched: missing {', '.join(outcome.missing_fields)}"]
-    if not outcome.matches:
-        return ["not matched: no stock meets every requirement"]
-    return []
+    run = run_agent(context, pipeline.agent_model)
+    agent_runs.save_agent_run(pipeline.connection, tenant_id, run)
+    return context.load_enquiry()

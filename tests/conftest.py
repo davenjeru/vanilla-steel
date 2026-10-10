@@ -32,15 +32,32 @@ ST37_SHEET_READING = {
 }
 
 
-@pytest.fixture
-def seeded_database_path(tmp_path: Path) -> Path:
-    """A fresh seeded SQLite file per test, so tests never share state."""
-    database_path = tmp_path / "steel.db"
+def seeded_database_file(database_path: Path) -> Path:
     connection = connect(database_path)
     create_schema(connection)
     seed_database(connection)
     connection.close()
     return database_path
+
+
+def build_api_client(database_path: Path, llm: LLMClient) -> TestClient:
+    """An API client with a fixed clock and IDs counting from 1 (enq_0001, rfq_0001)."""
+    enquiry_numbers = itertools.count(1)
+    rfq_numbers = itertools.count(1)
+    app = create_app(
+        Settings(database_path=database_path, extraction_model="claude-test-model", agent_model="claude-test-model"),
+        llm=llm,
+        clock=lambda: FIXED_NOW,
+        new_enquiry_id=lambda: f"enq_{next(enquiry_numbers):04d}",
+        new_rfq_id=lambda: f"rfq_{next(rfq_numbers):04d}",
+    )
+    return TestClient(app)
+
+
+@pytest.fixture
+def seeded_database_path(tmp_path: Path) -> Path:
+    """A fresh seeded SQLite file per test, so tests never share state."""
+    return seeded_database_file(tmp_path / "steel.db")
 
 
 @pytest.fixture
@@ -63,17 +80,30 @@ def make_api_client(seeded_database_path: Path) -> Callable[[LLMClient], TestCli
     Clients built in one test share the database, so they share one ID sequence too.
     """
     enquiry_numbers = itertools.count(1)
+    rfq_numbers = itertools.count(1)
 
     def build(llm: LLMClient) -> TestClient:
         app = create_app(
-            Settings(database_path=seeded_database_path, extraction_model="claude-test-model"),
+            Settings(
+                database_path=seeded_database_path,
+                extraction_model="claude-test-model",
+                agent_model="claude-test-model",
+            ),
             llm=llm,
             clock=lambda: FIXED_NOW,
             new_enquiry_id=lambda: f"enq_{next(enquiry_numbers):04d}",
+            new_rfq_id=lambda: f"rfq_{next(rfq_numbers):04d}",
         )
         return TestClient(app)
 
     return build
+
+
+@pytest.fixture
+def make_isolated_api_client(tmp_path: Path) -> Callable[[LLMClient], TestClient]:
+    """Each call gets its own freshly seeded database and IDs from 1, so two runs see identical state."""
+    database_numbers = itertools.count(1)
+    return lambda llm: build_api_client(seeded_database_file(tmp_path / f"isolated-{next(database_numbers)}.db"), llm)
 
 
 @pytest.fixture

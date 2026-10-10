@@ -12,15 +12,17 @@ router = APIRouter(prefix="/v1/enquiries", tags=["enquiries"])
 
 @router.post("", status_code=201)
 def create_enquiry(body: EnquiryCreate, tenant: CurrentTenant, connection: Connection, request: Request) -> EnquiryOut:
-    """Receive an enquiry and extract its spec. Extraction failure still returns 201 with status failed."""
+    """Receive an enquiry and let the agent handle it. Failure still returns 201 with status failed."""
     settings: Settings = request.app.state.settings
     _check_attachment_limits(body, settings)
     pipeline = Pipeline(
         connection=connection,
         llm=request.app.state.llm,
         extraction_model=settings.extraction_model,
+        agent_model=settings.agent_model,
         clock=request.app.state.clock,
         new_enquiry_id=request.app.state.new_enquiry_id,
+        new_rfq_id=request.app.state.new_rfq_id,
     )
     enquiry = receive_enquiry(pipeline, tenant.id, _submission(body))
     return EnquiryOut.from_enquiry(enquiry)

@@ -8,7 +8,7 @@ import pytest
 
 from steel.llm.anthropic_client import AnthropicClient
 from steel.llm.client import LLMError
-from tests.factories.llm import llm_request
+from tests.factories.llm import conversation_request, llm_request
 
 TOOL_CALL_REPLY: dict[str, Any] = {
     "model": "claude-test-model",
@@ -79,3 +79,49 @@ def test_missing_api_key_explains_how_to_provide_it(monkeypatch: pytest.MonkeyPa
 
     with pytest.raises(LLMError, match="--env-file .env"):
         AnthropicClient.from_environment()
+
+
+# The agent's conversation turns
+
+CONVERSATION_REPLY: dict[str, Any] = {
+    "model": "claude-test-model",
+    "stop_reason": "tool_use",
+    "content": [
+        {"type": "text", "text": "I will extract the spec first."},
+        {"type": "tool_use", "id": "toolu_01", "name": "extract_specs", "input": {}, "caller": "ignored"},
+    ],
+    "usage": {"input_tokens": 1200, "output_tokens": 80},
+}
+
+
+def test_conversation_turn_returns_the_tool_calls_the_model_asked_for() -> None:
+    response = client_replying(200, CONVERSATION_REPLY, sent=[]).converse(conversation_request())
+
+    assert [(use.id, use.name, use.input) for use in response.tool_uses()] == [("toolu_01", "extract_specs", {})]
+
+
+def test_conversation_turn_keeps_only_the_fields_the_next_turn_needs() -> None:
+    """Recordings stay small and stable when unknown response fields change."""
+    response = client_replying(200, CONVERSATION_REPLY, sent=[]).converse(conversation_request())
+
+    assert response.content[1] == {"type": "tool_use", "id": "toolu_01", "name": "extract_specs", "input": {}}
+
+
+def test_conversation_turn_lets_the_model_choose_any_tool() -> None:
+    sent: list[httpx.Request] = []
+
+    client_replying(200, CONVERSATION_REPLY, sent).converse(conversation_request())
+
+    assert json.loads(sent[0].content)["tool_choice"] == {"type": "auto"}
+
+
+def test_network_failure_becomes_an_llm_error() -> None:
+    """Without this, a timeout would crash the request instead of marking the enquiry failed."""
+
+    def times_out(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("timed out", request=request)
+
+    client = AnthropicClient(api_key="test-key", http=httpx.Client(transport=httpx.MockTransport(times_out)))
+
+    with pytest.raises(LLMError, match="unreachable: ConnectTimeout"):
+        client.converse(conversation_request())

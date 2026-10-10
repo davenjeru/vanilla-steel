@@ -43,9 +43,13 @@ CREATE TABLE IF NOT EXISTS enquiries (
     warnings       TEXT NOT NULL,  -- JSON list of strings
     failure_reason TEXT,
     matches        TEXT NOT NULL,  -- JSON list of ranked matches; internal, holds supplier IDs
+    fingerprint    TEXT NOT NULL,  -- same for resent or forwarded enquiries (Slice 4)
+    escalation_reason TEXT,        -- why a human must take over (Slice 4)
+    escalation_detail TEXT,        -- internal explanation from the agent
     created_at     TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS enquiries_by_tenant ON enquiries (tenant_id);
+CREATE INDEX IF NOT EXISTS enquiries_by_fingerprint ON enquiries (tenant_id, fingerprint);
 
 CREATE TABLE IF NOT EXISTS enquiry_attachments (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,4 +57,20 @@ CREATE TABLE IF NOT EXISTS enquiry_attachments (
     filename     TEXT NOT NULL,
     content_type TEXT NOT NULL,
     content      BLOB NOT NULL
+);
+
+-- Slice 4: at most one RFQ per enquiry, enforced by the database, not only by the agent.
+CREATE TABLE IF NOT EXISTS rfqs (
+    id            TEXT PRIMARY KEY,
+    tenant_id     TEXT NOT NULL REFERENCES tenants (id),
+    enquiry_id    TEXT NOT NULL UNIQUE REFERENCES enquiries (id),
+    stock_item_id TEXT NOT NULL REFERENCES stock_items (id),
+    created_at    TEXT NOT NULL
+);
+
+-- Slice 4: one agent run per enquiry, with every LLM turn and tool call. Internal only.
+CREATE TABLE IF NOT EXISTS agent_runs (
+    enquiry_id TEXT PRIMARY KEY REFERENCES enquiries (id),
+    tenant_id  TEXT NOT NULL REFERENCES tenants (id),
+    run        TEXT NOT NULL  -- JSON AgentRun
 );

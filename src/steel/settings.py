@@ -15,6 +15,7 @@ class Settings:
     database_path: Path = Path("data/steel.db")
     # Confirm the current Haiku model ID with Anthropic before recording; a wrong ID fails loudly (HTTP 404).
     extraction_model: str = "claude-haiku-4-5"
+    agent_model: str = "claude-haiku-4-5"
     llm_fixtures_dir: Path = REPO_ROOT / "fixtures" / "llm"
     max_attachments: int = 5
     max_attachment_bytes: int = 2_000_000

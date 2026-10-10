@@ -60,22 +60,22 @@ def test_buyer_sees_how_many_offers_are_available(client_for: Callable[[dict[str
     assert submit(client_for(S355_PLATE_READING))["offers_available"] == 2
 
 
-def test_enquiry_without_matching_stock_stays_extracted_and_says_why(
+def test_enquiry_without_matching_stock_is_escalated_as_no_stock(
     client_for: Callable[[dict[str, Any]], TestClient],
 ) -> None:
     reading = S355_PLATE_READING | {"thickness": {"value": 99, "unit": "mm"}}
 
     body = submit(client_for(reading))
 
-    assert (body["status"], body["offers_available"]) == ("extracted", 0)
-    assert "not matched: no stock meets every requirement" in body["warnings"]
+    assert (body["status"], body["escalation_reason"], body["offers_available"]) == ("escalated", "no_stock", 0)
 
 
-def test_ambiguous_grade_is_not_matched_and_says_why(client_for: Callable[[dict[str, Any]], TestClient]) -> None:
+def test_ambiguous_grade_is_escalated_without_searching_stock(
+    client_for: Callable[[dict[str, Any]], TestClient],
+) -> None:
     body = submit(client_for(S355_PLATE_READING | {"grade_written": "S355"}))
 
-    assert body["status"] == "extracted"
-    assert "not matched: missing grade" in body["warnings"]
+    assert (body["status"], body["escalation_reason"], body["offers_available"]) == ("escalated", "ambiguous_spec", 0)
 
 
 def test_matches_are_kept_internally_with_their_suppliers(
