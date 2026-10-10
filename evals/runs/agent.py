@@ -67,15 +67,26 @@ def run_every_case(cases: list[GoldenCase], llm: LLMClient) -> dict[str, Sandbox
     """Results by case name. Cases without a recording are reported, not scored."""
     results: dict[str, SandboxResult] = {}
     unrecorded: list[str] = []
-    for case in cases:
+    for number, case in enumerate(cases, start=1):
         try:
             results[case.name] = run_in_sandbox(case, llm)
         except MissingFixture:
             unrecorded.append(case.name)
+        # Live runs take minutes before DeepEval's own progress bar starts, so report each case as it finishes.
+        print(f"[{number}/{len(cases)}] {case.name}: {_progress_note(results.get(case.name))}", flush=True)
     if unrecorded:
         print(f"Not recorded, so not scored ({len(unrecorded)} of {len(cases)}): {', '.join(unrecorded)}")
         print("Record them with: make run-agent-live CASE=<name>")
     return results
+
+
+def _progress_note(result: SandboxResult | None) -> str:
+    if result is None:
+        return "not recorded"
+    outcome = f"RFQ for {result.rfq.stock_item_id}" if result.rfq else str(result.enquiry.status)
+    if result.enquiry.escalation_reason:
+        outcome += f" ({result.enquiry.escalation_reason})"
+    return f"{outcome}, {len(result.run.tool_calls())} tool calls"
 
 
 def agent_outcome(result: SandboxResult) -> AgentOutcome:

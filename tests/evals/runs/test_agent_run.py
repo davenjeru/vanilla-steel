@@ -60,5 +60,14 @@ def test_cases_without_a_recording_are_left_out_not_scored(tmp_path: Path, capsy
     assert (results, case.name in capsys.readouterr().out) == ({}, True)
 
 
+def test_reports_progress_as_each_case_finishes(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Live runs take minutes before DeepEval's progress bar appears; the owner must see they are moving."""
+    case = first_agent_case()
+
+    run_every_case([case], ReplayLLMClient(tmp_path))
+
+    assert f"[1/1] {case.name}: not recorded" in capsys.readouterr().out
+
+
 def first_agent_case() -> GoldenCase:
     return load_dataset(DATASETS_DIR / "agent")[0]
