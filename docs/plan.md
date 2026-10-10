@@ -142,16 +142,19 @@ Owner: release gate, test strategy, regression demo.
 ## Planned eval metrics by slice
 
 Agreed list of DeepEval built-in and custom metrics. Claude flags each group at
-the start of its slice. Rule: deterministic wherever the answer is knowable;
+the start of its slice. Metric display names (`__name__`) are business-readable
+statements where a pass is good news; class names may stay technical. Rule: deterministic wherever the answer is knowable;
 judge-model metrics only where code cannot decide.
 
 | Slice | Metric | Type | Checks | Risk |
 |---|---|---|---|---|
 | 1 | `FieldMatch` per field | Custom, deterministic | **Done.** Each of 14 MaterialSpec fields against its label | Extraction |
 | 1 | `JsonCorrectnessMetric` | Built-in | Optional: output conforms to the schema. Low value, since the forced tool call and RawSpec validation already enforce it | Extraction |
-| 2 | Hard-constraint violations | Custom, deterministic, zero tolerance | Wrong grade, size outside tolerance, second choice offered for prime | Business correctness |
-| 2 | Top-1 / top-k match | Custom, deterministic | Expected stock items ranked first or within k | Business correctness |
-| 2 | Ranking quality | Custom, deterministic | Cheaper and nearer ranks above dearer and farther | Business correctness |
+| 2 | **No unsuitable offers** (hard constraints) | Custom, deterministic, zero tolerance | None of the labelled "must not match" stock is offered: wrong grade, size outside tolerance, second choice for prime | Business correctness |
+| 2 | **Best offer comes first** (top-1) | Custom, deterministic | The expected best offer is ranked first | Business correctness |
+| 2 | **Best offer in the top 3** (top-k, k=3) | Custom, deterministic | The expected best offer is among the first 3 a trader sees | Business correctness |
+| 2 | **Offers in the right order** (ranking) | Custom, deterministic | Expected offers appear in the expected order, by delivered cost | Business correctness |
+| 2 | **Finds every suitable offer** (completeness) | Custom, deterministic | Every expected offer appears and nothing else; catches lost sales | Business correctness |
 | 3 | Near-duplicate precision and recall | Custom, deterministic | Over labelled email pairs (forwarded, reworded, resent) | Duplication |
 | 4 | `ToolPermissionMetric` | Built-in, deterministic | Only allowed tools called; prompt injection uses `denied_tools` | Data separation, business correctness |
 | 4 | `ToolCorrectnessMetric` | Built-in | Right tools, order and arguments against `expected_tools`; escalation present when required | Business correctness |
