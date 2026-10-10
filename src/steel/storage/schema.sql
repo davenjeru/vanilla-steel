@@ -29,3 +29,26 @@ CREATE TABLE IF NOT EXISTS stock_items (
     quality         TEXT NOT NULL CHECK (quality IN ('prime', 'second_choice')),
     price_eur_per_t TEXT NOT NULL  -- Decimal stored as text to avoid float rounding
 );
+
+-- Slice 1: enquiries are tenant-owned. Every query filters by tenant_id.
+CREATE TABLE IF NOT EXISTS enquiries (
+    id             TEXT PRIMARY KEY,
+    tenant_id      TEXT NOT NULL REFERENCES tenants (id),
+    sender         TEXT NOT NULL,
+    subject        TEXT NOT NULL,
+    body           TEXT NOT NULL,
+    status_history TEXT NOT NULL,  -- JSON list of {status, at}; the last entry is the current status
+    spec           TEXT,           -- JSON MaterialSpec once extracted
+    warnings       TEXT NOT NULL,  -- JSON list of strings
+    failure_reason TEXT,
+    created_at     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS enquiries_by_tenant ON enquiries (tenant_id);
+
+CREATE TABLE IF NOT EXISTS enquiry_attachments (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    enquiry_id   TEXT NOT NULL REFERENCES enquiries (id),
+    filename     TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    content      BLOB NOT NULL
+);

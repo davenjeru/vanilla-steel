@@ -13,6 +13,7 @@ SCORED_FIELDS = [
     "grade",
     "grade_ambiguous",  # drives escalation instead of guessing
     "form",
+    "rolling",
     "quality",
     "coating",
     # Dimensions and quantity

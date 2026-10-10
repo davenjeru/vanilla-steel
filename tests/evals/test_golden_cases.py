@@ -112,6 +112,15 @@ def test_expected_output_keeps_city_names_readable(extraction_dataset_dir: Path)
     assert "Poznań" in case.as_golden_fields()["expected_output"]
 
 
+def test_attachments_load_with_their_content_type(extraction_dataset_dir: Path) -> None:
+    write_case(extraction_dataset_dir, attachments={"order.csv": b"grade;qty\nS235JR;25\n"})
+
+    [case] = load_dataset(extraction_dataset_dir)
+    [attachment] = case.load_attachments()
+
+    assert (attachment.filename, attachment.content_type) == ("order.csv", "text/csv")
+
+
 @pytest.mark.parametrize(("verified", "counts"), [(True, True), ("back-translated", True), (False, False)])
 def test_only_unverified_cases_are_excluded_from_the_gate(
     extraction_dataset_dir: Path, verified: bool | str, counts: bool

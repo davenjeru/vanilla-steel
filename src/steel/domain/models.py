@@ -17,6 +17,13 @@ class ProductForm(StrEnum):
     COIL = "coil"
 
 
+class Rolling(StrEnum):
+    """How the steel was rolled. It changes surface, tolerances and price, so a mix-up is a wrong offer."""
+
+    HOT_ROLLED = "hot_rolled"
+    COLD_ROLLED = "cold_rolled"
+
+
 class Quality(StrEnum):
     PRIME = "prime"
     SECOND_CHOICE = "second_choice"
@@ -91,6 +98,7 @@ class MaterialSpec(BaseModel):
     grade_raw: str | None = Field(default=None, description="As written, e.g. St37-2")
     grade_ambiguous: bool = False
     form: ProductForm | None = None
+    rolling: Rolling | None = None
     thickness_mm: float | None = Field(default=None, gt=0)
     width_mm: float | None = Field(default=None, gt=0)
     length_mm: float | None = Field(default=None, gt=0)

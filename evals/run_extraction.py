@@ -16,7 +16,7 @@ from deepeval.tracing import observe, update_current_trace
 
 from evals.golden_cases import DATASETS_DIR, load_dataset, load_manifest
 from evals.metrics.field_match import SCORED_FIELDS, FieldMatch
-from steel.domain.models import Incoterm, MaterialSpec, ProductForm
+from steel.domain.models import Incoterm, MaterialSpec, ProductForm, Rolling
 
 EXTRACTION_DATASET_DIR = DATASETS_DIR / "extraction"
 COMPONENT_VERSION = "stub-0"
@@ -35,6 +35,7 @@ def stub_extractor(email: str) -> MaterialSpec:
         grade="S235JR",
         grade_ambiguous=False,
         form=ProductForm.SHEET,
+        rolling=Rolling.HOT_ROLLED,
         thickness_mm=3,
         width_mm=1500,
         length_mm=3000,

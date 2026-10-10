@@ -12,6 +12,7 @@ such as "reasn" fails loudly instead of being silently dropped.
 """
 
 import json
+import mimetypes
 import re
 from pathlib import Path
 from typing import Any, Literal
@@ -19,6 +20,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, ValidationError, model_validator
 
 from steel.domain.models import MaterialSpec
+from steel.extraction.attachments import Attachment
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DATASETS_DIR = REPO_ROOT / "evals" / "datasets"
@@ -83,6 +85,17 @@ class GoldenCase(BaseModel):
     def counts_toward_gate(self) -> bool:
         """Unverified cases are recorded but never count (back-translated is decided per metric)."""
         return self.labels.verified is not False
+
+    def load_attachments(self) -> list[Attachment]:
+        """The case's attachment files, ready to pass to the extractor."""
+        return [
+            Attachment(
+                filename=path.name,
+                content_type=mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+                content=path.read_bytes(),
+            )
+            for path in self.attachments
+        ]
 
     def as_golden_fields(self) -> dict[str, Any]:
         """Keyword arguments for deepeval's Golden: Golden(**case.as_golden_fields()).

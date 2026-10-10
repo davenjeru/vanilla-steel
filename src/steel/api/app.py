@@ -1,13 +1,36 @@
+import uuid
+from collections.abc import Callable
+from datetime import UTC, datetime
+
 from fastapi import FastAPI
 
+from steel.api import enquiries
+from steel.llm.client import LLMClient
 from steel.settings import Settings
 from steel.storage.db import connect
 
 
-def create_app(settings: Settings) -> FastAPI:
-    """Build the API. Tests pass their own settings (and, from Slice 1, their own LLM client)."""
+def utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def random_enquiry_id() -> str:
+    return f"enq_{uuid.uuid4().hex[:12]}"
+
+
+def create_app(
+    settings: Settings,
+    llm: LLMClient,
+    clock: Callable[[], datetime] = utc_now,
+    new_enquiry_id: Callable[[], str] = random_enquiry_id,
+) -> FastAPI:
+    """Build the API. Tests inject their own LLM, clock and ID generator so results are deterministic."""
     app = FastAPI(title="Steel procurement pipeline")
     app.state.settings = settings
+    app.state.llm = llm
+    app.state.clock = clock
+    app.state.new_enquiry_id = new_enquiry_id
+    app.include_router(enquiries.router)
 
     @app.get("/health")
     def health() -> dict[str, str | int]:
