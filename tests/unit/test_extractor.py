@@ -81,6 +81,38 @@ def test_llm_output_of_the_wrong_shape_is_an_llm_error() -> None:
         extract_spec(ENQUIRY, llm, model="claude-test-model")
 
 
+FREI_HAUS_ENQUIRY = EnquiryDocument(subject="Anfrage", body="18 t Bleche S235JR, Lieferung frei Haus Posen.")
+
+
+def test_incoterm_the_customer_never_wrote_is_dropped() -> None:
+    """Regression (golden case de-001): Claude read 'frei Haus' as DDP although no Incoterm was written.
+
+    DAP and DDP put import duties on different parties, so a guessed Incoterm can make a quote wrong.
+    """
+    llm = FakeLLMClient(output={"grade_written": "S235JR", "incoterm": "DDP"})
+
+    result = extract_spec(FREI_HAUS_ENQUIRY, llm, model="claude-test-model")
+
+    assert result.spec.incoterm is None
+
+
+def test_dropped_incoterm_is_reported_as_a_warning() -> None:
+    llm = FakeLLMClient(output={"grade_written": "S235JR", "incoterm": "DDP"})
+
+    result = extract_spec(FREI_HAUS_ENQUIRY, llm, model="claude-test-model")
+
+    assert "incoterm: DDP is not stated in the enquiry" in result.warnings
+
+
+def test_raw_reading_keeps_what_the_llm_claimed() -> None:
+    """For debugging, the raw reading shows the model's answer before the evidence check."""
+    llm = FakeLLMClient(output={"grade_written": "S235JR", "incoterm": "DDP"})
+
+    result = extract_spec(FREI_HAUS_ENQUIRY, llm, model="claude-test-model")
+
+    assert result.raw.incoterm == "DDP"
+
+
 def test_email_text_round_trips_through_the_golden_case_format() -> None:
     """API enquiries and golden email.txt files render identically, so they share LLM recordings."""
     email_text = "Subject: Enquiry St37 sheets\n\nHi,\n\nwe need 25 t.\n\nRegards, Anna"

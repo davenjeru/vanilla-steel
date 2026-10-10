@@ -6,6 +6,7 @@ from pydantic import BaseModel, ValidationError
 
 from steel.domain.models import MaterialSpec
 from steel.extraction.attachments import Attachment, UnsupportedAttachment, attachment_as_text
+from steel.extraction.evidence import drop_unstated_claims
 from steel.extraction.normalise import normalise_spec
 from steel.extraction.raw_spec import RawSpec
 from steel.llm.client import LLMClient, LLMError, LLMRequest, LLMResponse
@@ -42,11 +43,16 @@ class ExtractionResult(BaseModel):
 
 
 def extract_spec(document: EnquiryDocument, llm: LLMClient, model: str) -> ExtractionResult:
+    """The LLM reads; code then drops claims the text does not support, and normalises the rest.
+
+    `raw` keeps the model's answer as given, so a dropped claim stays visible for debugging.
+    """
     warnings: list[str] = []
     request = build_request(document, model, warnings)
     response = llm.complete(request)
     raw = _parse_raw_spec(response)
-    normalised = normalise_spec(raw)
+    supported = drop_unstated_claims(raw, enquiry_text=request.user, warnings=warnings)
+    normalised = normalise_spec(supported)
     return ExtractionResult(spec=normalised.spec, raw=raw, warnings=warnings + normalised.warnings, llm=response)
 
 
