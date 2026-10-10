@@ -1,4 +1,4 @@
-.PHONY: install check lint format test seed eval-extraction eval-extraction-live eval-matching eval-agent eval-agent-live record-fixtures run-agent run-agent-live
+.PHONY: install check lint format test seed eval-extraction eval-extraction-live eval-matching eval-agent eval-agent-live record-fixtures run-agent run-agent-live export-candidates
 
 install:
 	uv sync
@@ -52,3 +52,8 @@ run-agent:
 ## Same, calling Claude (costs money) and recording every turn to fixtures/llm/. Commit them.
 run-agent-live:
 	uv run --env-file .env python -m scripts.run_agent --case $(CASE) --live
+
+## Feedback loop (D13): escalated, failed or flagged enquiries become candidate cases in evals/candidates/ (git-ignored).
+## make export-candidates TENANT=tnt_bauer [ENQUIRIES="enq_0042 enq_0057"]
+export-candidates:
+	uv run python -m scripts.export_candidates --tenant $(TENANT) $(foreach id,$(ENQUIRIES),--enquiry $(id))

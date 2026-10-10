@@ -10,3 +10,6 @@ data/
 .claude/worktrees/
 
 .deepeval/
+
+# Feedback-loop candidates hold tenants' raw emails; they are anonymised before joining a dataset (D13).
+evals/candidates/

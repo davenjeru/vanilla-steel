@@ -62,6 +62,14 @@ def get_enquiry(connection: sqlite3.Connection, tenant_id: str, enquiry_id: str)
     return _enquiry_from_row(row) if row else None
 
 
+def list_enquiries(connection: sqlite3.Connection, tenant_id: str) -> list[Enquiry]:
+    """One tenant's enquiries, oldest first. There is deliberately no way to list across tenants."""
+    rows = connection.execute(
+        "SELECT * FROM enquiries WHERE tenant_id = ? ORDER BY created_at, id", (tenant_id,)
+    ).fetchall()
+    return [_enquiry_from_row(row) for row in rows]
+
+
 def list_attachments(connection: sqlite3.Connection, tenant_id: str, enquiry_id: str) -> list[Attachment]:
     rows = connection.execute(
         """

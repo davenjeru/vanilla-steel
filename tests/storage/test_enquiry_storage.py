@@ -9,6 +9,7 @@ from steel.domain.status import advance, start_history
 from steel.extraction.attachments import Attachment
 from steel.storage import enquiries
 from tests.conftest import FIXED_NOW
+from tests.factories.agent import stored_enquiry
 from tests.factories.specs import complete_s235_sheet_spec
 
 
@@ -61,3 +62,13 @@ def test_attachments_are_stored_with_the_enquiry(seeded_connection: sqlite3.Conn
     row = seeded_connection.execute("SELECT filename, content FROM enquiry_attachments").fetchone()
 
     assert (row["filename"], row["content"]) == ("order.csv", csv.content)
+
+
+def test_listing_returns_only_the_tenants_own_enquiries_oldest_first(seeded_connection: sqlite3.Connection) -> None:
+    """Data separation: the feedback-loop script exports one tenant at a time and must never see another's."""
+    for enquiry_id, tenant_id in [("enq_0002", "tnt_bauer"), ("enq_0001", "tnt_bauer"), ("enq_0003", "tnt_kowalski")]:
+        stored_enquiry(seeded_connection, enquiry_id=enquiry_id, tenant_id=tenant_id)
+
+    listed = enquiries.list_enquiries(seeded_connection, "tnt_bauer")
+
+    assert [enquiry.id for enquiry in listed] == ["enq_0001", "enq_0002"]

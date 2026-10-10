@@ -2,11 +2,13 @@
 
 import itertools
 import sqlite3
+from typing import Any
 
 from steel.agent.tools import ToolContext
 from steel.domain.enquiry import Enquiry
 from steel.domain.fingerprint import enquiry_fingerprint
-from steel.domain.status import start_history
+from steel.domain.models import EnquiryStatus, MaterialSpec
+from steel.domain.status import advance, start_history
 from steel.extraction.attachments import Attachment
 from steel.llm.client import LLMClient
 from steel.storage import enquiries
@@ -36,6 +38,24 @@ def stored_enquiry(
     )
     enquiries.insert_enquiry(connection, enquiry, attachments=attachments or [])
     return enquiry
+
+
+def handled_enquiry(
+    connection: sqlite3.Connection,
+    enquiry_id: str,
+    statuses: list[EnquiryStatus],
+    spec: MaterialSpec | None = None,
+    **outcome: Any,
+) -> Enquiry:
+    """A stored enquiry the pipeline has already moved through `statuses`, e.g. [EXTRACTED, ESCALATED].
+    `outcome` sets escalation_reason, escalation_detail or failure_reason."""
+    enquiry = stored_enquiry(connection, enquiry_id=enquiry_id)
+    history = enquiry.status_history
+    for status in statuses:
+        history = advance(history, status, FIXED_NOW)
+    handled = enquiry.model_copy(update={"status_history": history, "spec": spec, **outcome})
+    enquiries.update_pipeline_state(connection, handled.tenant_id, handled)
+    return handled
 
 
 def tool_context(
