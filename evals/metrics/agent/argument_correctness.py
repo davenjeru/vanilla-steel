@@ -45,4 +45,16 @@ def _takes_no_arguments(tool_name: str) -> bool:
 
 
 def _with_judged_calls_only(test_case: LLMTestCase) -> LLMTestCase:
-    return test_case.model_copy(update={"tools_called": calls_to_judge(test_case.tools_called or [])})
+    calls = test_case.tools_called or []
+    return test_case.model_copy(
+        update={"input": _input_with_evidence(test_case.input, calls), "tools_called": calls_to_judge(calls)}
+    )
+
+
+def _input_with_evidence(email: str, tools_called: list[ToolCall]) -> str:
+    """The email plus what the left-out calls returned: the agent read these results (the extracted spec,
+    attachment warnings, duplicate_of) before choosing its arguments, so the judge must read them too."""
+    evidence = [f"- {call.name} returned: {call.output}" for call in tools_called if _takes_no_arguments(call.name)]
+    if not evidence:
+        return email
+    return email + "\n\nWhat the agent learned from tools that take no arguments:\n" + "\n".join(evidence)

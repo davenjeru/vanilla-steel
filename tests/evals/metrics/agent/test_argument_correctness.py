@@ -12,8 +12,8 @@ from evals.metrics.agent.argument_correctness import ArgumentCorrectnessForTools
 from tests.factories.judge import ScriptedJudge
 
 
-def call(name: str, arguments: dict | None = None) -> ToolCall:
-    return ToolCall(name=name, input_parameters=arguments or {})
+def call(name: str, arguments: dict | None = None, output: dict | None = None) -> ToolCall:
+    return ToolCall(name=name, input_parameters=arguments or {}, output=output)
 
 
 def test_calls_to_tools_without_arguments_are_not_judged() -> None:
@@ -49,9 +49,31 @@ def test_judge_receives_deepevals_prompt_with_only_the_calls_that_take_arguments
     metric.measure(LLMTestCase(input="Fwd: Enquiry S355J2 plates", actual_output="escalated", tools_called=calls))
 
     verdict_prompt = judge.prompts[0]
-    assert "escalate_to_human" in verdict_prompt
-    assert "extract_specs" not in verdict_prompt and "check_duplicate" not in verdict_prompt
+    assert 'name="escalate_to_human"' in verdict_prompt
+    assert 'name="extract_specs"' not in verdict_prompt and 'name="check_duplicate"' not in verdict_prompt
     assert (metric.score, metric.__name__) == (1.0, "Argument Correctness (tools that take arguments)")
+
+
+def test_judge_sees_what_the_calls_without_arguments_returned() -> None:
+    """Regression: with those calls left out, the judge lost the evidence the agent acted on and failed every
+    duplicate escalation for "no evidence that it duplicates enq_0001" (agent-v8 re-judged run). The agent saw
+    these results before choosing its arguments, so the judge must see them too."""
+    judge = ScriptedJudge()
+    metric = ArgumentCorrectnessForToolsWithArguments(model=judge, async_mode=False)
+    calls = [
+        call("extract_specs", output={"spec": {"grade": "S355J2"}, "warnings": []}),
+        call("check_duplicate", output={"duplicate_of": "enq_0001", "is_correction": False}),
+        call("escalate_to_human", {"reason": "duplicate", "detail": "Duplicate of enq_0001."}),
+    ]
+
+    metric.measure(
+        LLMTestCase(input="Subject: Fwd: Enquiry S355J2 plates", actual_output="escalated", tools_called=calls)
+    )
+
+    verdict_prompt = judge.prompts[0]
+    assert "Subject: Fwd: Enquiry S355J2 plates" in verdict_prompt
+    assert "check_duplicate returned" in verdict_prompt and "'duplicate_of': 'enq_0001'" in verdict_prompt
+    assert "extract_specs returned" in verdict_prompt and "'grade': 'S355J2'" in verdict_prompt
 
 
 def test_call_to_an_unknown_tool_is_left_to_the_judge() -> None:
