@@ -7,7 +7,7 @@ scripted ones play a misbehaving model to prove the code's safety nets hold.
 import sqlite3
 
 from steel.agent.runner import MAX_TURNS, run_agent
-from steel.agent.trace import AgentRun
+from steel.agent.trace import AgentRun, TraceEvent
 from steel.domain.models import EnquiryStatus
 from steel.llm.client import LLMClient, LLMError
 from steel.storage import enquiries, rfqs
@@ -148,6 +148,48 @@ def test_reworded_resend_escalates_as_duplicate_without_an_rfq(seeded_connection
 
 
 # The trace
+
+
+def llm_turns(agent_run: AgentRun) -> list[TraceEvent]:
+    return [event for event in agent_run.events if event.kind == "llm_turn"]
+
+
+def test_first_turn_records_the_email_the_model_received(seeded_connection: sqlite3.Connection) -> None:
+    """A reviewer must see what each turn was answering; the first turn answers the email."""
+    stored_enquiry(seeded_connection)
+
+    agent_run = run(seeded_connection, FakeLLMClient(output=S355_PLATE_READING))
+
+    first_turn = llm_turns(agent_run)[0]
+    assert "<enquiry>\nSubject: " + STANDARD_SUBJECT in first_turn.received
+
+
+def test_later_turn_records_the_tool_results_the_model_received(seeded_connection: sqlite3.Connection) -> None:
+    stored_enquiry(seeded_connection)
+
+    agent_run = run(seeded_connection, FakeLLMClient(output=S355_PLATE_READING))
+
+    second_turn = llm_turns(agent_run)[1]
+    assert second_turn.received.startswith('extract_specs returned: {"spec": {"grade": "S355J2"')
+
+
+def test_tool_event_records_the_model_call_it_made(seeded_connection: sqlite3.Connection) -> None:
+    stored_enquiry(seeded_connection)
+
+    agent_run = run(seeded_connection, FakeLLMClient(output=S355_PLATE_READING))
+
+    extraction = agent_run.tool_calls()[0]
+    assert STANDARD_SUBJECT in extraction.model_input and "grade_written" in extraction.model_output
+
+
+def test_refusal_is_recorded_as_what_the_next_turn_received(seeded_connection: sqlite3.Connection) -> None:
+    """Agent-024 retried after a refusal; the trace must show the refusal the retry answered."""
+    stored_enquiry(seeded_connection)
+    searches_first = ScriptedLLMClient(turns=[[tool_call("search_stock", S355_PLATE_SEARCH)]])
+
+    agent_run = run(seeded_connection, searches_first)
+
+    assert llm_turns(agent_run)[1].received.startswith("search_stock refused: call extract_specs first")
 
 
 def test_every_step_is_recorded_for_the_enquirys_tenant(seeded_connection: sqlite3.Connection) -> None:

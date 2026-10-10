@@ -19,6 +19,9 @@ class TraceEvent(BaseModel):
     tenant_id: str  # the tenant the step acted for; must always equal the enquiry's tenant
     arguments: dict[str, Any] = {}
     result: dict[str, Any] = {}
+    # llm_turn: what the model received for this turn (the email first, then the tool results it asked for),
+    # so a reviewer sees what each reply answers without storing the whole conversation every turn.
+    received: str = ""
     is_error: bool = False
     latency_ms: float = 0.0
     input_tokens: int = 0
@@ -27,6 +30,8 @@ class TraceEvent(BaseModel):
     # read from the trace include every model call, not only the agent's own turns.
     model: str | None = None
     model_latency_ms: float = 0.0
+    model_input: str = ""  # what that model was sent, e.g. the email for the extractor
+    model_output: str = ""  # what it answered, before code acted on it
 
 
 class ModelUsage(BaseModel):
@@ -36,6 +41,8 @@ class ModelUsage(BaseModel):
     input_tokens: int
     output_tokens: int
     latency_ms: float
+    input_text: str = ""
+    output_text: str = ""
 
 
 class AgentRun(BaseModel):

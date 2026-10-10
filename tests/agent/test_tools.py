@@ -1,5 +1,6 @@
 """Each tool enforces its own rules, so a confused or manipulated model cannot break them."""
 
+import json
 import sqlite3
 from datetime import timedelta
 from typing import Any
@@ -494,6 +495,28 @@ def rfq_ready_context(connection: sqlite3.Connection, cover_letter: str = PLAIN_
     search_stock(context, S355_PLATE_SEARCH)
     create_rfq(context, {"stock_item_id": "stk_058"})
     return context
+
+
+def test_extraction_records_what_the_extractor_read_and_answered(seeded_connection: sqlite3.Connection) -> None:
+    """For the trace: the email the extractor model saw and its own reading, before code normalised it."""
+    context = extracted_context(seeded_connection)
+
+    usage = context.model_usage
+    assert usage is not None
+    assert "<enquiry>\nSubject: " + STANDARD_SUBJECT in usage.input_text
+    assert json.loads(usage.output_text)["grade_written"] == "S355J2"
+
+
+def test_cover_letter_records_what_the_writer_saw_and_wrote(seeded_connection: sqlite3.Connection) -> None:
+    """For the trace: the priced quote and language the writer saw, and the letter it wrote."""
+    context = rfq_ready_context(seeded_connection)
+
+    draft_quote(context, {"rfq_id": "rfq_0001"})
+
+    usage = context.model_usage
+    assert usage is not None
+    assert json.loads(usage.input_text)["language"] == "de"
+    assert usage.output_text == PLAIN_COVER_LETTER
 
 
 def test_quote_is_priced_stored_and_the_enquiry_marked_quoted(seeded_connection: sqlite3.Connection) -> None:

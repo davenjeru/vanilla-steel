@@ -5,6 +5,7 @@ The tenant comes from the ToolContext, set by code. No tool takes a tenant
 argument, so no prompt, honest or injected, can point a tool at another tenant.
 """
 
+import json
 import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -92,6 +93,8 @@ def extract_specs(context: ToolContext, arguments: dict[str, Any]) -> dict[str, 
         input_tokens=result.llm.input_tokens,
         output_tokens=result.llm.output_tokens,
         latency_ms=result.llm.latency_ms,
+        input_text=result.model_input,
+        output_text=json.dumps(result.llm.output, ensure_ascii=False),
     )
     history = advance(enquiry.status_history, EnquiryStatus.EXTRACTED, context.clock())
     suspicions = [suspicious_content_warning(signal) for signal in _injection_signals(context, enquiry)]
@@ -344,6 +347,8 @@ def _cover_letter(context: ToolContext, enquiry: Enquiry, priced: PricedQuote) -
         input_tokens=letter.llm.input_tokens,
         output_tokens=letter.llm.output_tokens,
         latency_ms=letter.llm.latency_ms,
+        input_text=letter.model_input,
+        output_text=letter.text,
     )
     _refuse_unsafe_letter(context, enquiry, letter.text)
     return letter

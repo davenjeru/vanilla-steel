@@ -46,6 +46,7 @@ class ExtractionResult(BaseModel):
     raw: RawSpec
     warnings: list[str]
     llm: LLMResponse
+    model_input: str  # the enquiry exactly as the model read it, attachments as text tables
 
 
 def extract_spec(document: EnquiryDocument, llm: LLMClient, model: str) -> ExtractionResult:
@@ -68,6 +69,7 @@ def extract_spec(document: EnquiryDocument, llm: LLMClient, model: str) -> Extra
         raw=raw,
         warnings=warnings + normalised.warnings,
         llm=response,
+        model_input=request.user,
     )
 
 

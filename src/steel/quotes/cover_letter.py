@@ -29,6 +29,7 @@ class CoverLetter(BaseModel):
     text: str
     language: str
     llm: LLMResponse
+    model_input: str  # exactly what the writer saw: the language and the priced quote
 
 
 def write_cover_letter(quote: PricedQuote, language: str | None, llm: LLMClient, model: str) -> CoverLetter:
@@ -47,7 +48,7 @@ def write_cover_letter(quote: PricedQuote, language: str | None, llm: LLMClient,
         output = CoverLetterOutput.model_validate(response.output)
     except ValidationError as error:
         raise LLMError(f"LLM output does not match CoverLetterOutput: {error}") from error
-    return CoverLetter(text=output.text, language=letter_language, llm=response)
+    return CoverLetter(text=output.text, language=letter_language, llm=response, model_input=request.user)
 
 
 def _letter_request(quote: PricedQuote, language: str) -> str:

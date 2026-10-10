@@ -1,6 +1,7 @@
 """The agent eval runner: what it records for each case, and how it treats cases it cannot replay."""
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -24,7 +25,7 @@ from steel.llm.replay import ReplayLLMClient
 from steel.sandbox import SandboxResult, handle_in_sandbox
 from steel.settings import Settings
 from tests.factories.deepeval_traces import confident_ai_payload
-from tests.factories.llm import PLAIN_COVER_LETTER, FakeLLMClient
+from tests.factories.llm import PLAIN_COVER_LETTER, FakeLLMClient, ScriptedLLMClient, tool_call
 
 S355_PLATE_READING = {
     "grade_written": "S355J2",
@@ -284,3 +285,84 @@ def test_agent_judged_modes_add_argument_correctness_and_task_completion(
         ("ArgumentCorrectnessForToolsWithArguments", JUDGE_MODEL),
         ("TaskCompletionMetric", JUDGE_MODEL),
     ]
+
+
+# Readable traces: every span says what it saw and did, in the order it happened
+
+
+def all_spans(payload: dict) -> list[dict]:
+    spans = payload["llmSpans"] + payload["toolSpans"] + payload.get("baseSpans", [])
+    return sorted(spans, key=lambda span: span["startTime"])
+
+
+def seconds_between(start: str, end: str) -> float:
+    return (datetime.fromisoformat(end) - datetime.fromisoformat(start)).total_seconds()
+
+
+@pytest.fixture
+def refused_search_run() -> SandboxResult:
+    """The model searches before extracting; search_stock refuses, then the scripted model stops."""
+    searches_first = ScriptedLLMClient(turns=[[tool_call("search_stock", {"grade": "S355J2"})]])
+    return handle_in_sandbox("Plates", "30 t S355J2 15 x 1250, DAP Poznań", [], searches_first, SETTINGS)
+
+
+def test_trace_is_named_after_the_golden_case(rfq_run: SandboxResult, monkeypatch: pytest.MonkeyPatch) -> None:
+    golden = first_agent_golden()
+
+    payload = confident_ai_payload(lambda: trace_agent_run(golden, rfq_run), monkeypatch)
+
+    assert payload["name"] == golden.name
+
+
+def test_spans_appear_in_the_order_the_agent_took_them(rfq_run: SandboxResult, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Confident AI orders spans by start time; spans created in the same millisecond came out shuffled."""
+    payload = confident_ai_payload(lambda: trace_agent_run(first_agent_golden(), rfq_run), monkeypatch)
+
+    shown = [
+        span["name"] for span in all_spans(payload) if not span["name"].startswith(("extract_specs:", "draft_quote:"))
+    ]
+    assert shown == [event.name for event in rfq_run.run.events]
+
+
+def test_each_span_lasts_as_long_as_its_step_took(rfq_run: SandboxResult, monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = confident_ai_payload(lambda: trace_agent_run(first_agent_golden(), rfq_run), monkeypatch)
+
+    first_turn = all_spans(payload)[0]
+    recorded = rfq_run.run.events[0].latency_ms / 1000
+    assert seconds_between(first_turn["startTime"], first_turn["endTime"]) == pytest.approx(recorded, abs=0.002)
+
+
+def test_first_agent_turn_shows_the_email_it_answered(rfq_run: SandboxResult, monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = confident_ai_payload(lambda: trace_agent_run(first_agent_golden(), rfq_run), monkeypatch)
+
+    first_turn = all_spans(payload)[0]
+    assert "<enquiry>\nSubject: Plates" in first_turn["input"]
+
+
+def test_later_agent_turn_shows_the_tool_results_it_answered(
+    rfq_run: SandboxResult, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = confident_ai_payload(lambda: trace_agent_run(first_agent_golden(), rfq_run), monkeypatch)
+
+    agent_turns = [span for span in all_spans(payload) if span["name"] == "claude-test-model"]
+    assert agent_turns[1]["input"].startswith("extract_specs returned: ")
+
+
+def test_extractor_span_shows_the_email_it_read_and_its_answer(
+    rfq_run: SandboxResult, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = confident_ai_payload(lambda: trace_agent_run(first_agent_golden(), rfq_run), monkeypatch)
+
+    [extractor] = [span for span in payload["llmSpans"] if span["name"].startswith("extract_specs:")]
+    assert "Subject: Plates" in extractor["input"]
+    assert json.loads(extractor["output"])["grade_written"] == "S355J2"
+
+
+def test_refused_tool_call_is_marked_as_an_error(
+    refused_search_run: SandboxResult, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = confident_ai_payload(lambda: trace_agent_run(first_agent_golden(), refused_search_run), monkeypatch)
+
+    [search] = [span for span in payload["toolSpans"] if span["name"] == "search_stock"]
+    [refusal] = refused_search_run.run.tool_calls()
+    assert (search["status"], search["error"]) == ("ERRORED", refusal.result["error"])

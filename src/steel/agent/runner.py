@@ -28,7 +28,9 @@ MAX_TURNS = 8
 def run_agent(context: ToolContext, model: str) -> AgentRun:
     recorder = TraceRecorder(context.tenant_id)
     enquiry = context.load_enquiry()
-    messages: list[dict[str, Any]] = [{"role": "user", "content": opening_message(context, enquiry)}]
+    opening = opening_message(context, enquiry)
+    messages: list[dict[str, Any]] = [{"role": "user", "content": opening}]
+    received = opening  # what the next turn is answering, kept in the trace for reviewers
     turns_used = 0
     while turns_used < MAX_TURNS and not context.decision_made():
         turns_used += 1
@@ -41,6 +43,7 @@ def run_agent(context: ToolContext, model: str) -> AgentRun:
             "llm_turn",
             response.model,
             result={"text": response.text(), "stop_reason": response.stop_reason},
+            received=received,
             latency_ms=response.latency_ms,
             input_tokens=response.input_tokens,
             output_tokens=response.output_tokens,
@@ -49,7 +52,9 @@ def run_agent(context: ToolContext, model: str) -> AgentRun:
         if not tool_uses:
             break
         messages.append({"role": "assistant", "content": response.content})
-        messages.append({"role": "user", "content": [_run_tool(context, use, recorder) for use in tool_uses]})
+        tool_results = [_run_tool(context, use, recorder) for use in tool_uses]
+        messages.append({"role": "user", "content": tool_results})
+        received = _readable_tool_results(tool_uses, tool_results)
 
     if not context.decision_made():
         reason = (
@@ -117,6 +122,17 @@ def _run_tool(context: ToolContext, use: ToolUse, recorder: TraceRecorder) -> di
     return {"type": "tool_result", "tool_use_id": use.id, "content": content, "is_error": is_error}
 
 
+def _readable_tool_results(tool_uses: list[ToolUse], tool_results: list[dict[str, Any]]) -> str:
+    """The tool results the model reads next, one line per call, e.g. 'search_stock refused: ...'."""
+    lines = []
+    for use, block in zip(tool_uses, tool_results, strict=True):
+        if block["is_error"]:
+            lines.append(f"{use.name} refused: {json.loads(block['content'])['error']}")
+        else:
+            lines.append(f"{use.name} returned: {block['content']}")
+    return "\n".join(lines)
+
+
 def _model_usage_fields(usage: ModelUsage | None) -> dict[str, Any]:
     """Trace fields for a model the tool called itself; none for tools that call no model."""
     if usage is None:
@@ -126,6 +142,8 @@ def _model_usage_fields(usage: ModelUsage | None) -> dict[str, Any]:
         "input_tokens": usage.input_tokens,
         "output_tokens": usage.output_tokens,
         "model_latency_ms": usage.latency_ms,
+        "model_input": usage.input_text,
+        "model_output": usage.output_text,
     }
 
 

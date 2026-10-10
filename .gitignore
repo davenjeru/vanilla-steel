@@ -13,3 +13,6 @@ data/
 
 # Feedback-loop candidates hold tenants' raw emails; they are anonymised before joining a dataset (D13).
 evals/candidates/
+
+# Personal Claude Code session notes
+CLAUDE.local.md

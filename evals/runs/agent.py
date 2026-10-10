@@ -22,6 +22,7 @@ be constructed, although in exact-match mode it never calls a model.
 """
 
 from collections.abc import Callable
+from time import perf_counter
 from typing import Any, Literal
 
 from deepeval.dataset import EvaluationDataset, Golden
@@ -29,12 +30,14 @@ from deepeval.metrics import AgentLoopDetectionMetric, BaseMetric, ToolCorrectne
 from deepeval.test_case import ToolCall
 from deepeval.tracing import (
     current_span_context,
+    current_trace_context,
     observe,
     update_current_span,
     update_current_trace,
     update_llm_span,
     update_tool_span,
 )
+from deepeval.tracing.types import BaseSpan, TraceSpanStatus
 
 from evals.metrics.agent.acts_only_for_its_own_tenant import ActsOnlyForItsOwnTenant
 from evals.metrics.agent.agent_outcome import AgentOutcome, AgentStep, ModelCall
@@ -180,6 +183,54 @@ def _decision(result: SandboxResult) -> Literal["rfq", "escalate", "failed"]:
     return "failed"
 
 
+# Confident AI shows times to the millisecond; a step shorter than that would tie with the next one.
+SHORTEST_STEP_SECONDS = 0.001
+
+
+class Timeline:
+    """Puts the replayed steps on the clock one after another, each as long as it took when it ran.
+
+    Spans are created after the run, all within a millisecond, so Confident AI showed them shuffled
+    and 0 ms long. Times and refusals are applied once every span has closed, because DeepEval sets
+    a span's end time and status itself when it closes.
+    """
+
+    def __init__(self, start: float) -> None:
+        self.cursor = start
+        self.times: list[tuple[BaseSpan, float, float]] = []
+        self.refusals: list[tuple[BaseSpan, str]] = []
+
+    def place_next(self, span: BaseSpan, seconds: float) -> float:
+        start = self.cursor
+        self.times.append((span, start, start + seconds))
+        self.cursor += max(seconds, SHORTEST_STEP_SECONDS)
+        return start
+
+    def place_within(self, span: BaseSpan, start: float, seconds: float) -> None:
+        """A model call a tool made: it starts with the tool and does not move the clock on."""
+        self.times.append((span, start, start + seconds))
+
+    def mark_refused(self, span: BaseSpan, message: str) -> None:
+        self.refusals.append((span, message))
+
+    def apply(self) -> None:
+        for span, start, end in self.times:
+            span.start_time, span.end_time = start, end
+        for span, message in self.refusals:
+            span.status, span.error = TraceSpanStatus.ERRORED, message
+
+
+def step_seconds(event: TraceEvent) -> float:
+    return event.latency_ms / 1000
+
+
+def open_span() -> BaseSpan:
+    span = current_span_context.get()
+    if span is None:
+        raise RuntimeError("called outside an @observe span")
+    return span
+
+
 def set_span_input(value: Any) -> None:
     """Set the current span's input directly, even when it is empty.
 
@@ -194,27 +245,29 @@ def set_span_input(value: Any) -> None:
 
 
 @observe(type="llm")
-def trace_llm_turn(event: TraceEvent) -> str:
+def trace_llm_turn(event: TraceEvent, timeline: Timeline) -> str:
+    """Input: what this turn answered (the email, then the tool results it asked for); output: its reply."""
     text = str(event.result.get("text", ""))
-    set_span_input("not recorded: the agent trace stores each turn's reply only")
+    set_span_input(event.received)
     update_current_span(name=event.name, output=text, metadata={"recorded_latency_ms": event.latency_ms})
     record_model_use(event.name, event.input_tokens, event.output_tokens)
+    timeline.place_next(open_span(), step_seconds(event))
     return text
 
 
 @observe(type="llm")
-def trace_model_call_inside_tool(event: TraceEvent, model: str) -> str:
+def trace_model_call_inside_tool(event: TraceEvent, model: str, timeline: Timeline, tool_start: float) -> str:
     """A model call a tool makes itself (extract_specs' extraction, draft_quote's cover letter), as an LLM
-    span nested under the tool's span, so the trace view shows every model call an enquiry costs."""
-    note = f"see the {event.name} result"
-    set_span_input("not recorded: the agent trace stores the tool's result only")
+    span nested under the tool's span: what that model was sent and what it answered, before code acted."""
+    set_span_input(event.model_input)
     update_current_span(
         name=f"{event.name}: {model}",
-        output=note,
+        output=event.model_output,
         metadata={"recorded_latency_ms": event.model_latency_ms},
     )
     record_model_use(model, event.input_tokens, event.output_tokens)
-    return note
+    timeline.place_within(open_span(), tool_start, event.model_latency_ms / 1000)
+    return event.model_output
 
 
 def record_model_use(model: str, input_tokens: int, output_tokens: int) -> None:
@@ -231,7 +284,7 @@ def record_model_use(model: str, input_tokens: int, output_tokens: int) -> None:
 
 
 @observe(type="tool")
-def trace_tool_call(event: TraceEvent, enquiry: Enquiry) -> dict[str, Any]:
+def trace_tool_call(event: TraceEvent, enquiry: Enquiry, timeline: Timeline) -> dict[str, Any]:
     """A tool the agent chose. DeepEval lists tool spans as the agent span's tools_called.
 
     The input stays exactly what the model sent, often {}; the context code
@@ -248,8 +301,12 @@ def trace_tool_call(event: TraceEvent, enquiry: Enquiry) -> dict[str, Any]:
         },
     )
     update_tool_span(description=_tool_description(event.name))
+    span = open_span()
+    start = timeline.place_next(span, step_seconds(event))
+    if event.is_error:
+        timeline.mark_refused(span, str(event.result.get("error", "")))
     if event.model is not None:
-        trace_model_call_inside_tool(event, event.model)
+        trace_model_call_inside_tool(event, event.model, timeline, start)
     return event.result
 
 
@@ -266,7 +323,7 @@ def _context_supplied_by_code(event: TraceEvent, enquiry: Enquiry) -> dict[str, 
 
 
 @observe(name="code")
-def trace_code_action(event: TraceEvent) -> dict[str, Any]:
+def trace_code_action(event: TraceEvent, timeline: Timeline) -> dict[str, Any]:
     """An action code took, e.g. escalating a run that hit the step limit.
     Not a tool span: it was not the agent's choice and must not appear among its tool calls."""
     set_span_input(event.arguments)
@@ -275,6 +332,7 @@ def trace_code_action(event: TraceEvent) -> dict[str, Any]:
         output=event.result,
         metadata={"is_error": event.is_error, "tenant_id": event.tenant_id},
     )
+    timeline.place_next(open_span(), step_seconds(event))
     return event.result
 
 
@@ -282,15 +340,18 @@ def trace_code_action(event: TraceEvent) -> dict[str, Any]:
 def trace_agent_run(golden: Golden, result: SandboxResult) -> str:
     """The outcome goes to the trace as AgentOutcome JSON, the shape the custom metrics read."""
     set_span_input(golden.input)
+    timeline = _timeline_ending_now(result.run.events)
     for event in result.run.events:
         if event.kind == "llm_turn":
-            trace_llm_turn(event)
+            trace_llm_turn(event, timeline)
         elif event.kind == "tool_call":
-            trace_tool_call(event, result.enquiry)
+            trace_tool_call(event, result.enquiry, timeline)
         else:
-            trace_code_action(event)
+            trace_code_action(event, timeline)
+    timeline.apply()
     outcome = agent_outcome(result)
     update_current_trace(
+        name=golden.name,
         input=golden.input,
         output=outcome.model_dump_json(),
         expected_output=golden.expected_output,
@@ -311,6 +372,17 @@ def trace_agent_run(golden: Golden, result: SandboxResult) -> str:
         },
     )
     return outcome.model_dump_json()
+
+
+def _timeline_ending_now(events: list[TraceEvent]) -> Timeline:
+    """Starts the agent span and its trace as long ago as the run took, so the replayed steps end now."""
+    run_seconds = sum(max(step_seconds(event), SHORTEST_STEP_SECONDS) for event in events)
+    start = perf_counter() - run_seconds
+    open_span().start_time = start
+    trace = current_trace_context.get()
+    if trace is not None:
+        trace.start_time = start
+    return Timeline(start)
 
 
 def enquiry_totals(outcome: AgentOutcome) -> dict[str, Any]:
