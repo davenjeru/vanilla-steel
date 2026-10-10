@@ -9,7 +9,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from steel.domain.models import Incoterm, ProductForm, Quality, Rolling
+from steel.domain.models import Incoterm, Quality, Rolling
+
+# The form as the customer named it. sheet_or_plate is the generic word (Blech, blacha); code decides
+# which by thickness (steel.domain.forms, finding F-011), because that is a domain rule, not reading.
+WrittenForm = Literal["sheet", "plate", "coil", "sheet_or_plate"]
 
 
 class Measurement(BaseModel):
@@ -44,7 +48,7 @@ class Conflict(BaseModel):
 
 class RawSpec(BaseModel):
     grade_written: str | None = Field(default=None, description="Steel grade exactly as written, e.g. St37-2")
-    form: ProductForm | None = None
+    form: WrittenForm | None = None
     rolling: Rolling | None = Field(default=None, description="Only if stated, e.g. hot rolled, warmgewalzt, HR")
     quality: Quality | None = Field(default=None, description="Only if prime or second choice is stated")
     coating: str | None = Field(default=None, description="Zinc coating mass as written, e.g. Z275")
@@ -58,6 +62,10 @@ class RawSpec(BaseModel):
     delivery_date: date | None = Field(default=None, description="Latest acceptable delivery date")
     language: str | None = Field(
         default=None, description="ISO 639-1 code of the language the customer wrote in, e.g. en, de, pl"
+    )
+    is_correction: bool = Field(
+        default=False,
+        description="True only if the customer says this email changes or corrects an enquiry they sent before",
     )
     conflicts: list[Conflict] = Field(
         default=[],

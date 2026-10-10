@@ -21,6 +21,14 @@
             earlier/                 optional: attachments of earlier enquiries, named in their labels
             <anything else>          attachments
 
+    Duplicate cases (does the duplicate check tell a resend from a new order? D36):
+        dup-<nnn>-<slug>/            e.g. dup-001-forwarded-with-header
+            email.txt                the new email
+            case.json                reason, verified, source, language, expected_duplicate,
+                                     and exactly one earlier_enquiries entry (the enquiry on file)
+            earlier/                 optional: the earlier enquiry's attachments
+            <anything else>          the new email's attachments
+
 Everything is validated on load. Pydantic forbids unknown fields, so a typo
 such as "reasn" fails loudly instead of being silently dropped.
 """
@@ -52,8 +60,9 @@ EXTRACTION_NAME_PATTERN = re.compile(r"^(?P<language>[a-z]{2})-\d{3}-[a-z0-9-]+$
 MATCHING_NAME_PATTERN = re.compile(r"^match-\d{3}-[a-z0-9-]+$")
 AGENT_NAME_PATTERN = re.compile(r"^agent-\d{3}-[a-z0-9-]+$")
 QUOTE_LETTER_NAME_PATTERN = re.compile(r"^letter-\d{3}-[a-z0-9-]+$")
+DUPLICATE_NAME_PATTERN = re.compile(r"^dup-\d{3}-[a-z0-9-]+$")
 
-DatasetKind = Literal["extraction", "matching", "agent", "quote_letter"]
+DatasetKind = Literal["extraction", "matching", "agent", "quote_letter", "duplicates"]
 Verification = StrictBool | Literal["back-translated"]
 Source = Literal["hand-written", "llm-drafted", "production"]
 Risk = Literal[
@@ -65,7 +74,8 @@ EXTRACTION_LABELS = {"expected_spec"}
 MATCHING_LABELS = {"input_spec", "expected_offers", "unsuitable_offers"}
 AGENT_LABELS = {"expected_agent", "earlier_enquiries"}
 QUOTE_LETTER_LABELS = {"input_quote"}
-ALL_KIND_LABELS = EXTRACTION_LABELS | MATCHING_LABELS | AGENT_LABELS | QUOTE_LETTER_LABELS
+DUPLICATE_LABELS = {"expected_duplicate", "earlier_enquiries"}  # earlier_enquiries is shared with agent cases
+ALL_KIND_LABELS = EXTRACTION_LABELS | MATCHING_LABELS | AGENT_LABELS | QUOTE_LETTER_LABELS | DUPLICATE_LABELS
 
 
 class InvalidGoldenCase(ValueError):
@@ -98,6 +108,7 @@ class EarlierEnquiryLabel(BaseModel):
     body: str = Field(min_length=1)
     attachments: list[str] = Field(default=[], description=f"file names in the case's {EARLIER_DIR}/ folder")
     days_before: int = Field(default=0, ge=0, description="received this many days before the email under test")
+    failed: bool = Field(default=False, description="failed on our side before extraction, e.g. an LLM outage")
 
 
 class AgentExpectations(BaseModel):
@@ -147,6 +158,10 @@ class CaseLabels(BaseModel):
     # Agent
     expected_agent: AgentExpectations | None = None
     earlier_enquiries: list[EarlierEnquiryLabel] | None = None
+    # Duplicates
+    expected_duplicate: StrictBool | None = Field(
+        default=None, description="True when the email repeats the earlier enquiry on file"
+    )
     # Quote letter
     input_quote: dict[str, Any] | None = Field(
         default=None, description="What the letter writer sees: the customer's language and the priced quote"
@@ -198,6 +213,7 @@ class GoldenCase(BaseModel):
                 body=earlier.body,
                 attachments=[_read_attachment(self.directory / EARLIER_DIR / name) for name in earlier.attachments],
                 days_before=earlier.days_before,
+                failed=earlier.failed,
             )
             for earlier in self.labels.earlier_enquiries or []
         ]
@@ -220,6 +236,7 @@ class GoldenCase(BaseModel):
             "input": self._input(),
             "expected_output": self._expected_output(),
             "expected_tools": self._expected_tools(),
+            "context": self._context(),
             "additional_metadata": {
                 "dataset": self.dataset,
                 "version": self.dataset_version,
@@ -235,6 +252,16 @@ class GoldenCase(BaseModel):
             return _as_json(self.labels.input_quote)
         return self.email or ""
 
+    def _context(self) -> list[str] | None:
+        """Duplicate cases show the enquiry on file next to the new email, so a reviewer can judge the pair."""
+        if self.kind != "duplicates":
+            return None
+        return [
+            f"Earlier enquiry ({earlier.tenant} tenant, {earlier.days_before} days before)\n"
+            f"Subject: {earlier.subject}\n\n{earlier.body}"
+            for earlier in self.labels.earlier_enquiries or []
+        ]
+
     def _expected_tools(self) -> list[ToolCall] | None:
         if self.labels.expected_agent is None:
             return None
@@ -249,6 +276,8 @@ class GoldenCase(BaseModel):
             return _as_json({"letter_language": self.labels.language})
         if self.kind == "agent":
             return self.labels.expected_agent.model_dump_json() if self.labels.expected_agent else None
+        if self.kind == "duplicates":
+            return _as_json({"expected_duplicate": self.labels.expected_duplicate})
         if self.kind == "matching":
             expected = {
                 "expected_offers": self.labels.expected_offers,
@@ -291,6 +320,9 @@ def load_case(case_dir: Path, manifest: DatasetManifest) -> GoldenCase:
     elif manifest.kind == "quote_letter":
         _validate_quote_letter_case(case_dir, labels)
         email = None
+    elif manifest.kind == "duplicates":
+        _validate_duplicate_case(case_dir, labels)
+        email = _read_required_file(case_dir / EMAIL_FILE)
     else:
         _validate_agent_case(case_dir, labels)
         email = _read_required_file(case_dir / EMAIL_FILE)
@@ -386,6 +418,21 @@ def _require_earlier_attachments_exist(case_dir: Path, labels: CaseLabels) -> No
         for name in earlier.attachments:
             if not (case_dir / EARLIER_DIR / name).is_file():
                 raise InvalidGoldenCase(f"{case_dir}: earlier enquiry attachment {EARLIER_DIR}/{name} does not exist")
+
+
+# Duplicate cases
+
+
+def _validate_duplicate_case(case_dir: Path, labels: CaseLabels) -> None:
+    _forbid_labels_of_other_kind(case_dir, labels, ALL_KIND_LABELS - DUPLICATE_LABELS, "duplicates")
+    if not DUPLICATE_NAME_PATTERN.match(case_dir.name):
+        raise InvalidGoldenCase(f"{case_dir}: folder name must look like dup-001-short-slug")
+    missing = sorted({"expected_duplicate", "language"} - labels.present_fields())
+    if missing:
+        raise InvalidGoldenCase(f"{case_dir}: duplicate case needs {missing}")
+    if len(labels.earlier_enquiries or []) != 1:
+        raise InvalidGoldenCase(f"{case_dir}: a duplicate case needs exactly one earlier enquiry")
+    _require_earlier_attachments_exist(case_dir, labels)
 
 
 # Quote-letter cases

@@ -1,0 +1,29 @@
+{
+  "verified": false,
+  "source": "llm-drafted",
+  "reason": "Finding F-012: a correction (45 t instead of 30 t) revises the enquiry on file, which may already have an RFQ. It must be escalated as a duplicate that corrects enq_0001, never become a second RFQ.",
+  "language": "en",
+  "risk": "duplication",
+  "expected_agent": {
+    "decision": "escalate",
+    "escalation_reasons": [
+      "duplicate"
+    ],
+    "tool_path": [
+      "extract_specs",
+      "check_duplicate",
+      "escalate_to_human"
+    ],
+    "forbidden_tools": [
+      "search_stock",
+      "create_rfq"
+    ]
+  },
+  "earlier_enquiries": [
+    {
+      "tenant": "same",
+      "subject": "Enquiry S355J2 plates",
+      "body": "Hello,\n\nplease quote 30 t of S355J2 plate, 15 x 1250 mm, DAP Poznań, Poland.\n\nRegards,\nAnna Becker"
+    }
+  ]
+}

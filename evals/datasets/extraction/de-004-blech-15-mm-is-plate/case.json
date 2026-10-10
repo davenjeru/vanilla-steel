@@ -1,0 +1,22 @@
+{
+  "reason": "Finding F-011: 'Blech' is the generic German word for flat steel. At 15 mm it is plate by the DIN convention (Feinblech under 3 mm, Grobblech from 3 mm); prompt v3 read it as sheet, so the order found no stock.",
+  "verified": false,
+  "language": "de",
+  "source": "hand-written",
+  "expected_spec": {
+    "grade": "S355J2",
+    "grade_ambiguous": false,
+    "form": "plate",
+    "rolling": null,
+    "quality": null,
+    "coating": null,
+    "thickness_mm": 15,
+    "width_mm": 1250,
+    "length_mm": null,
+    "quantity_t": 30,
+    "incoterm": "DAP",
+    "delivery_city": "Poznań",
+    "delivery_country": "PL",
+    "delivery_date": null
+  }
+}

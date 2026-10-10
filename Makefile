@@ -1,4 +1,4 @@
-.PHONY: install check lint format test seed eval-extraction eval-extraction-live eval-matching eval-agent eval-agent-live eval-agent-judge-recorded eval-quote-letter eval-quote-letter-live eval-quote-letter-judge-recorded record-fixtures run-agent run-agent-live export-candidates
+.PHONY: install check lint format test seed eval-extraction eval-extraction-live eval-matching eval-duplicates eval-duplicates-live eval-agent eval-agent-live eval-agent-judge-recorded eval-quote-letter eval-quote-letter-live eval-quote-letter-judge-recorded record-fixtures run-agent run-agent-live export-candidates
 
 install:
 	uv sync
@@ -31,6 +31,14 @@ eval-extraction-live:
 
 eval-matching:
 	uv run python -m evals.runs.matching
+
+## Duplicate check (D36): labelled email pairs, precision and recall. Replays recorded extraction.
+eval-duplicates:
+	uv run python -m evals.runs.duplicates
+
+## Same, calling Claude for extraction and recording the answers (costs money). Commit fixtures/llm/.
+eval-duplicates-live:
+	uv run --env-file .env python -m evals.runs.duplicates --live
 
 ## Replays recorded agent runs; cases without a recording are listed, not scored.
 ## Reads .env because DeepEval's ToolCorrectnessMetric needs an OpenAI key to be built (it calls no model here).

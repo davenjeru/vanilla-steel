@@ -1,0 +1,14 @@
+{
+  "verified": false,
+  "source": "llm-drafted",
+  "reason": "Finding F-012 in Polish ('korekta', 'zamiast'): the correction revises the earlier enquiry.",
+  "language": "pl",
+  "expected_duplicate": true,
+  "earlier_enquiries": [
+    {
+      "tenant": "same",
+      "subject": "Zapytanie blacha gruba S355J2",
+      "body": "Dzień dobry,\n\nprosimy o ofertę na 30 ton blachy grubej S355J2, 15 x 1250 mm, DAP Poznań.\n\nPozdrawiam\nAnna Becker"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "verified": false,
+  "source": "llm-drafted",
+  "reason": "Finding F-012 in German ('Korrektur', 'statt'): the correction revises the earlier enquiry.",
+  "language": "de",
+  "expected_duplicate": true,
+  "earlier_enquiries": [
+    {
+      "tenant": "same",
+      "subject": "Anfrage S355J2 Grobblech",
+      "body": "Guten Tag,\n\nbitte bieten Sie 30 t S355J2 Grobblech an, 15 x 1250 mm, DAP Posen.\n\nMit freundlichen Grüßen\nAnna Becker"
+    }
+  ]
+}

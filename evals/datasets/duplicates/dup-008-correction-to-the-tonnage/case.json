@@ -1,0 +1,14 @@
+{
+  "verified": false,
+  "source": "llm-drafted",
+  "reason": "Finding F-012: a correction revises the enquiry on file; it must go to a human, not become a second RFQ. The changed tonnage makes it a different lot, so only recognising the correction connects the two.",
+  "language": "en",
+  "expected_duplicate": true,
+  "earlier_enquiries": [
+    {
+      "tenant": "same",
+      "subject": "Enquiry S355J2 plates",
+      "body": "Hello,\n\nplease quote 30 t of S355J2 plate, 15 x 1250 mm, DAP Poznań, Poland.\n\nRegards,\nAnna Becker"
+    }
+  ]
+}

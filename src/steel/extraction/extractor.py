@@ -14,7 +14,9 @@ from steel.extraction.raw_spec import RawSpec
 from steel.llm.client import LLMClient, LLMError, LLMRequest, LLMResponse
 
 PROMPT_ID = "extract_spec"
-PROMPT_VERSION = "v3"  # v2: reports conflicting values (F-008); v3: the customer's language (Slice 5)
+PROMPT_VERSION = (
+    "v4"  # v2: conflicts (F-008); v3: the customer's language (Slice 5); v4: generic Blech (F-011), corrections (F-012)
+)
 PROMPT_PATH = Path(__file__).parent / "prompts" / f"{PROMPT_ID}_{PROMPT_VERSION}.md"
 OUTPUT_NAME = "record_spec"
 
@@ -40,6 +42,7 @@ class EnquiryDocument(BaseModel):
 class ExtractionResult(BaseModel):
     spec: MaterialSpec
     language: str | None  # the customer's, for the quote letter; not part of the steel spec
+    is_correction: bool  # the customer corrects an earlier enquiry (F-012); decides duplicates, not the spec
     raw: RawSpec
     warnings: list[str]
     llm: LLMResponse
@@ -59,7 +62,12 @@ def extract_spec(document: EnquiryDocument, llm: LLMClient, model: str) -> Extra
     normalised = normalise_spec(unambiguous)
     language = normalise_language(raw.language, warnings)
     return ExtractionResult(
-        spec=normalised.spec, language=language, raw=raw, warnings=warnings + normalised.warnings, llm=response
+        spec=normalised.spec,
+        language=language,
+        is_correction=raw.is_correction,
+        raw=raw,
+        warnings=warnings + normalised.warnings,
+        llm=response,
     )
 
 

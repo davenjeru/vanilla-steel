@@ -14,6 +14,14 @@ def extraction_dataset_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def duplicates_dataset_dir(tmp_path: Path) -> Path:
+    """A duplicates dataset with a valid manifest and no cases yet."""
+    dataset_dir = tmp_path / "duplicates"
+    write_manifest(dataset_dir, valid_manifest(kind="duplicates"))
+    return dataset_dir
+
+
+@pytest.fixture
 def agent_dataset_dir(tmp_path: Path) -> Path:
     """An agent dataset with a valid manifest and no cases yet."""
     dataset_dir = tmp_path / "agent"

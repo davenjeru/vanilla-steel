@@ -1,0 +1,14 @@
+{
+  "verified": false,
+  "source": "llm-drafted",
+  "reason": "A chaser that quotes the original enquiry: the order read from the quote is the same one.",
+  "language": "en",
+  "expected_duplicate": true,
+  "earlier_enquiries": [
+    {
+      "tenant": "same",
+      "subject": "Enquiry S355J2 plates",
+      "body": "Hello,\n\nplease quote 30 t of S355J2 plate, 15 x 1250 mm, DAP Poznań, Poland.\n\nRegards,\nAnna Becker"
+    }
+  ]
+}

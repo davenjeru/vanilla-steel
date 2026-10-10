@@ -97,7 +97,13 @@ def extract_specs(context: ToolContext, arguments: dict[str, Any]) -> dict[str, 
     suspicions = [suspicious_content_warning(signal) for signal in _injection_signals(context, enquiry)]
     warnings = result.warnings + suspicions
     extracted = enquiry.model_copy(
-        update={"status_history": history, "spec": result.spec, "warnings": warnings, "language": result.language}
+        update={
+            "status_history": history,
+            "spec": result.spec,
+            "warnings": warnings,
+            "language": result.language,
+            "is_correction": result.is_correction,
+        }
     )
     context.save_enquiry(extracted)
     return _spec_summary(extracted)
@@ -130,7 +136,8 @@ def check_duplicate(context: ToolContext, arguments: dict[str, Any]) -> dict[str
     duplicate_of = enquiries.find_earlier_duplicate(context.connection, context.tenant_id, enquiry)
     # Kept on the enquiry so the buyer learns which earlier enquiry is already handling the order.
     context.save_enquiry(enquiry.model_copy(update={"duplicate_of": duplicate_of}))
-    return {"duplicate_of": duplicate_of}
+    # A correction (F-012) changes the earlier order; the trader needs to know that, not just "duplicate".
+    return {"duplicate_of": duplicate_of, "is_correction": duplicate_of is not None and enquiry.is_correction}
 
 
 # search_stock
@@ -415,8 +422,9 @@ TOOLS: dict[str, AgentTool] = {
         AgentTool(
             ToolSpec(
                 name="check_duplicate",
-                description="Check whether this customer already sent the same enquiry. "
-                "Returns duplicate_of: an enquiry ID, or null.",
+                description="Check whether this customer already sent the same enquiry, or one this email "
+                "corrects. Returns duplicate_of: an enquiry ID, or null; and is_correction: true when this email "
+                "changes that earlier enquiry rather than repeating it.",
                 input_schema=NO_ARGUMENTS,
             ),
             check_duplicate,

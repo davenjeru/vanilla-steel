@@ -7,8 +7,10 @@ an order, because a human reviews every escalation.
 
 from datetime import UTC, datetime, timedelta
 
-from steel.domain.duplicates import is_same_order, is_within_duplicate_window
-from steel.domain.models import MaterialSpec, ProductForm
+from steel.domain.duplicates import is_on_file, is_same_order, is_within_duplicate_window, repeats
+from steel.domain.enquiry import Enquiry
+from steel.domain.models import EnquiryStatus, MaterialSpec, ProductForm
+from steel.domain.status import advance, start_history
 
 RECEIVED_AT = datetime(2026, 10, 9, 9, 0, tzinfo=UTC)
 PLATE_ORDER = MaterialSpec(
@@ -87,3 +89,44 @@ def test_earlier_enquiry_exactly_14_days_old_is_within_the_window() -> None:
 def test_earlier_enquiry_15_days_old_is_outside_the_window() -> None:
     """After two weeks, the same lot again is most likely a new order (D36)."""
     assert not is_within_duplicate_window(earlier_at=RECEIVED_AT - timedelta(days=15), received_at=RECEIVED_AT)
+
+
+# Which earlier enquiries are on file (owner decisions, D36 amended)
+
+
+def enquiry_received(days_before: int, failed: bool = False) -> Enquiry:
+    received_at = RECEIVED_AT - timedelta(days=days_before)
+    history = start_history(received_at)
+    if failed:
+        history = advance(history, EnquiryStatus.FAILED, received_at)
+    return Enquiry(
+        id="enq_0001",
+        tenant_id="tnt_bauer",
+        sender="buyer@example.com",
+        subject="Enquiry S355J2 plates",
+        body="30 t S355J2 plate 15 x 1250 mm",
+        fingerprint="same-email",
+        status_history=history,
+        spec=PLATE_ORDER,
+        created_at=received_at,
+    )
+
+
+def test_last_weeks_enquiry_is_on_file() -> None:
+    assert is_on_file(enquiry_received(days_before=7), received_at=RECEIVED_AT)
+
+
+def test_enquiry_older_than_14_days_is_not_on_file_even_for_an_identical_email() -> None:
+    assert not is_on_file(enquiry_received(days_before=15), received_at=RECEIVED_AT)
+
+
+def test_enquiry_that_failed_on_our_side_is_not_on_file() -> None:
+    """It has no RFQ, so a resend cannot double anything; the resend must be handled."""
+    assert not is_on_file(enquiry_received(days_before=0, failed=True), received_at=RECEIVED_AT)
+
+
+def test_identical_email_repeats_even_when_its_order_was_not_extracted() -> None:
+    earlier = enquiry_received(days_before=1).model_copy(update={"spec": None})
+    resend = enquiry_received(days_before=0).model_copy(update={"id": "enq_0002", "spec": None})
+
+    assert repeats(resend, earlier)

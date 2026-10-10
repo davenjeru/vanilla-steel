@@ -4,10 +4,11 @@ import re
 
 from pydantic import BaseModel
 
+from steel.domain.forms import form_for_generic_flat_word
 from steel.domain.grades import IMPLIED_ROLLING, normalise_grade
-from steel.domain.models import MaterialSpec, Rolling
+from steel.domain.models import MaterialSpec, ProductForm, Rolling
 from steel.domain.units import UnknownUnit, to_millimetres, to_tonnes
-from steel.extraction.raw_spec import Measurement, RawSpec
+from steel.extraction.raw_spec import Measurement, RawSpec, WrittenForm
 
 COATING_PATTERN = re.compile(r"^Z\d{2,3}$")
 COUNTRY_PATTERN = re.compile(r"^[A-Z]{2}$")
@@ -23,15 +24,16 @@ def normalise_spec(raw: RawSpec) -> NormalisedSpec:
     """A value that cannot be normalised becomes None with a warning, never a guess."""
     warnings: list[str] = []
     grade = normalise_grade(raw.grade_written) if raw.grade_written else None
+    thickness_mm = _millimetres("thickness", raw.thickness, warnings)
     spec = MaterialSpec(
         grade=grade.grade if grade else None,
         grade_raw=raw.grade_written,
         grade_ambiguous=grade.ambiguous if grade else False,
-        form=raw.form,
+        form=_form(raw.form, thickness_mm, warnings),
         rolling=_rolling(raw.rolling, grade.grade if grade else None, warnings),
         quality=raw.quality,
         coating=_coating(raw.coating, warnings),
-        thickness_mm=_millimetres("thickness", raw.thickness, warnings),
+        thickness_mm=thickness_mm,
         width_mm=_millimetres("width", raw.width, warnings),
         length_mm=_millimetres("length", raw.length, warnings),
         quantity_t=_tonnes(raw.quantity, warnings),
@@ -41,6 +43,18 @@ def normalise_spec(raw: RawSpec) -> NormalisedSpec:
         delivery_date=raw.delivery_date,
     )
     return NormalisedSpec(spec=spec, warnings=warnings)
+
+
+def _form(written: WrittenForm | None, thickness_mm: float | None, warnings: list[str]) -> ProductForm | None:
+    """The customer's own word wins; the generic Blech or blacha is decided by thickness (F-011)."""
+    if written is None:
+        return None
+    if written != "sheet_or_plate":
+        return ProductForm(written)
+    form = form_for_generic_flat_word(thickness_mm)
+    if form is None:
+        warnings.append("form: 'Blech' or 'blacha' without a thickness can be sheet or plate")
+    return form
 
 
 def _rolling(stated: Rolling | None, grade: str | None, warnings: list[str]) -> Rolling | None:

@@ -20,7 +20,7 @@ from steel.llm.client import ConversationRequest, LLMError, ToolUse
 from steel.storage import enquiries
 
 PROMPT_ID = "agent"
-PROMPT_VERSION = "v3"  # v2: draft_quote after create_rfq (Slice 5); v3: escalate obvious injections at once
+PROMPT_VERSION = "v4"  # v2: draft_quote (Slice 5); v3: obvious injections at once; v4: corrections (F-012)
 PROMPT_PATH = Path(__file__).parent / "prompts" / f"{PROMPT_ID}_{PROMPT_VERSION}.md"
 MAX_TURNS = 8
 

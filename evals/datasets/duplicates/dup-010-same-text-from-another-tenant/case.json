@@ -1,0 +1,14 @@
+{
+  "verified": false,
+  "source": "llm-drafted",
+  "reason": "Data separation (D6): the identical email from another tenant is that tenant's own new order and must neither be blocked nor reveal the other tenant's enquiry.",
+  "language": "en",
+  "expected_duplicate": false,
+  "earlier_enquiries": [
+    {
+      "tenant": "other",
+      "subject": "Enquiry S355J2 plates",
+      "body": "Hello,\n\nplease quote 30 t of S355J2 plate, 15 x 1250 mm, DAP Poznań, Poland.\n\nRegards,\nAnna Becker"
+    }
+  ]
+}

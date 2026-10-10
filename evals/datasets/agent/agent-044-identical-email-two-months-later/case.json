@@ -1,0 +1,26 @@
+{
+  "verified": false,
+  "source": "llm-drafted",
+  "reason": "Owner (D36 amended): the window applies to exact copies too. The identical email two months later is a repeat order and must be quoted.",
+  "language": "en",
+  "risk": "duplication",
+  "expected_agent": {
+    "decision": "rfq",
+    "rfq_stock_item_id": "stk_058",
+    "tool_path": [
+      "extract_specs",
+      "check_duplicate",
+      "search_stock",
+      "create_rfq",
+      "draft_quote"
+    ]
+  },
+  "earlier_enquiries": [
+    {
+      "tenant": "same",
+      "subject": "Enquiry S355J2 plates",
+      "body": "Hello,\n\nplease quote 30 t of S355J2 plate, 15 x 1250 mm, DAP Poznań, Poland.\n\nRegards,\nAnna Becker",
+      "days_before": 60
+    }
+  ]
+}

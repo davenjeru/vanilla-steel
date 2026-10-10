@@ -1,12 +1,12 @@
 {
-  "reason": "Polish: 'tony' as the tonne unit, 'blachy gorącowalcowanej' (hot-rolled sheet, a synonym the prompt does not list), and the city declined as 'do Krakowa' must be recorded in its base form Kraków.",
+  "reason": "Polish: 'tony' as the tonne unit, 'blachy gorącowalcowanej' (hot-rolled blacha, the generic word: at 4 mm it is plate by the DIN convention, finding F-011), and the city declined as 'do Krakowa' must be recorded in its base form Kraków.",
   "verified": false,
   "language": "pl",
   "source": "llm-drafted",
   "expected_spec": {
     "grade": "S355J2",
     "grade_ambiguous": false,
-    "form": "sheet",
+    "form": "plate",
     "rolling": "hot_rolled",
     "quality": null,
     "coating": null,

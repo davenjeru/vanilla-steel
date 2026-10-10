@@ -1,0 +1,18 @@
+{
+  "verified": false,
+  "source": "llm-drafted",
+  "reason": "Finding F-005: the same email text each week with a new order in the spreadsheet (last week S235JR sheet, this week S355J2 plate) is a new order.",
+  "language": "en",
+  "expected_duplicate": false,
+  "earlier_enquiries": [
+    {
+      "tenant": "same",
+      "subject": "Weekly order",
+      "body": "Hello,\n\nplease see this week's order attached.\n\nRegards,\nAnna Becker",
+      "attachments": [
+        "week-40-order.xlsx"
+      ],
+      "days_before": 7
+    }
+  ]
+}

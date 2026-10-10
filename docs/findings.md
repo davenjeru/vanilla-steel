@@ -253,3 +253,30 @@ seen failing before the fix.
 Every agent recording changes; re-recorded with agent prompt v3.
 **Lesson:** the F-003 guard, built for a different drift, caught a bug in our own code. Strict
 input checks pay off beyond the case they were written for.
+
+## F-011: German "Blech" for 15 mm plate was read as sheet
+
+| | |
+|---|---|
+| Found | 2026-10-10, live recording of agent case `agent-041-german-resend-of-english-order` (Slice 3) |
+| Behaviour | Extraction prompt v3 maps "Blech" and "blacha" to sheet and only "Grobblech" and "blacha gruba" to plate. In German and Polish trade "Blech" and "blacha" are the generic words for flat steel; by the DIN convention Feinblech is under 3 mm and Grobblech 3 mm and up. "30 t S355J2 Blech, 15 x 1250 mm" was extracted as sheet, so the German resend of an English plate order was not seen as the same order, and the stock search for 15 mm sheet found nothing |
+| Layer | Extraction: a domain rule written into the prompt instead of code (against D15) |
+| Business risk | Extraction accuracy and business correctness: every German or Polish order for plate written as "Blech" or "blacha" is searched as sheet and escalated as no stock, a lost or delayed sale. Duplication: the resend was missed; only the lack of 15 mm sheet in stock stopped a second RFQ |
+
+**Reproduced by** `agent-041-german-resend-of-english-order` (escalated as no_stock instead of
+duplicate) and extraction case `de-004-blech-15-mm-is-plate`.
+**Owner decision:** follow the DIN convention: the generic word means sheet under 3 mm and plate
+from 3 mm. Extraction case `pl-001` ("blacha", 4 mm) is relabelled from sheet to plate accordingly.
+
+## F-012: A correction to an earlier enquiry was treated as a new order
+
+| | |
+|---|---|
+| Found | 2026-10-10, design review of the duplicates dataset, pair `dup-008-correction-to-the-tonnage` |
+| Behaviour | "A correction to our enquiry from this morning: please make it 45 t instead of 30 t" revises the enquiry on file. The order-based duplicate check (D36) compares lots, so a changed tonnage reads as a new order |
+| Layer | Product code: the duplicate rule (`steel/domain/duplicates.py`, `steel/storage/enquiries.py`) |
+| Business risk | Duplication: the first enquiry may already have an RFQ for 30 t; the correction would create a second RFQ for 45 t, and the customer would receive two quotes, or two deliveries, for one need |
+
+**Reproduced by** `dup-008-correction-to-the-tonnage` (labelled duplicate, missed today).
+**Owner decision:** close it: recognise corrections.
+**Fixed:** reading whether an email corrects an earlier enquiry is the extractor's job (D15): extraction prompt v4 adds `is_correction`, true only when the customer says the email changes an enquiry they sent before ("correction", "instead of", "Korrektur", "statt", "korekta", "zamiast"); a reminder or resend is not one. Code then points a correction to the tenant's latest enquiry on file within 14 days (`steel/domain/duplicates.py`), so `check_duplicate` returns it with `is_correction: true` and `create_rfq` refuses it. With nothing on file, the correction is the customer's latest wish and is handled as new. Tests: `tests/agent/test_tools.py` (corrections section); pairs dup-008, dup-017 (German), dup-018 (Polish); agent case agent-042.

@@ -5,7 +5,7 @@ import sqlite3
 
 from pydantic import TypeAdapter
 
-from steel.domain.duplicates import is_same_order, is_within_duplicate_window
+from steel.domain.duplicates import is_on_file, repeats
 from steel.domain.enquiry import Enquiry
 from steel.domain.matching import Match
 from steel.domain.models import MaterialSpec
@@ -23,8 +23,8 @@ def insert_enquiry(connection: sqlite3.Connection, enquiry: Enquiry, attachments
             INSERT INTO enquiries (
                 id, tenant_id, sender, subject, body, fingerprint, created_at,
                 status_history, spec, warnings, failure_reason, matches, escalation_reason, escalation_detail,
-                language, duplicate_of
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                language, duplicate_of, is_correction
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 enquiry.id,
@@ -50,7 +50,8 @@ def update_pipeline_state(connection: sqlite3.Connection, tenant_id: str, enquir
             """
             UPDATE enquiries SET
                 status_history = ?, spec = ?, warnings = ?, failure_reason = ?, matches = ?,
-                escalation_reason = ?, escalation_detail = ?, language = ?, duplicate_of = ?
+                escalation_reason = ?, escalation_detail = ?, language = ?, duplicate_of = ?,
+                is_correction = ?
             WHERE id = ? AND tenant_id = ?
             """,
             (*_pipeline_values(enquiry), enquiry.id, tenant_id),
@@ -87,47 +88,30 @@ def list_attachments(connection: sqlite3.Connection, tenant_id: str, enquiry_id:
 
 
 def find_earlier_duplicate(connection: sqlite3.Connection, tenant_id: str, enquiry: Enquiry) -> str | None:
-    """The earlier enquiry this one repeats (D36), or None. Other tenants' enquiries never count.
+    """The earlier enquiry this one repeats or corrects (D36, F-012), or None. Other tenants' never count.
 
-    First the same fingerprint, at any time; then the same extracted order within the duplicate window.
+    Rules in steel.domain.duplicates. A repeat points to the oldest match, so a chain of resends leads
+    back to the original; a correction points to the latest enquiry on file, the one being corrected.
     """
-    same_text = _oldest_with_fingerprint(connection, tenant_id, enquiry)
-    if same_text is not None:
-        return same_text
-    if enquiry.spec is None:
-        return None
-    return _oldest_with_same_order(connection, tenant_id, enquiry, enquiry.spec)
-
-
-def _oldest_with_fingerprint(connection: sqlite3.Connection, tenant_id: str, enquiry: Enquiry) -> str | None:
-    row = connection.execute(
-        """
-        SELECT id FROM enquiries
-        WHERE tenant_id = ? AND fingerprint = ? AND id != ?
-        ORDER BY created_at, id
-        LIMIT 1
-        """,
-        (tenant_id, enquiry.fingerprint, enquiry.id),
-    ).fetchone()
-    return row["id"] if row else None
-
-
-def _oldest_with_same_order(
-    connection: sqlite3.Connection, tenant_id: str, enquiry: Enquiry, order: MaterialSpec
-) -> str | None:
-    for earlier in _earlier_extracted_enquiries(connection, tenant_id, enquiry):
-        received_in_window = is_within_duplicate_window(earlier.created_at, enquiry.created_at)
-        if received_in_window and earlier.spec is not None and is_same_order(order, earlier.spec):
+    on_file = [
+        earlier
+        for earlier in _earlier_enquiries(connection, tenant_id, enquiry)
+        if is_on_file(earlier, enquiry.created_at)
+    ]
+    if enquiry.is_correction:
+        return on_file[-1].id if on_file else None
+    for earlier in on_file:
+        if repeats(enquiry, earlier):
             return earlier.id
     return None
 
 
-def _earlier_extracted_enquiries(connection: sqlite3.Connection, tenant_id: str, enquiry: Enquiry) -> list[Enquiry]:
-    """Oldest first, so a chain of resends always points back to the original."""
+def _earlier_enquiries(connection: sqlite3.Connection, tenant_id: str, enquiry: Enquiry) -> list[Enquiry]:
+    """This tenant's other enquiries received up to this one, oldest first."""
     rows = connection.execute(
         """
         SELECT * FROM enquiries
-        WHERE tenant_id = ? AND id != ? AND spec IS NOT NULL AND created_at <= ?
+        WHERE tenant_id = ? AND id != ? AND created_at <= ?
         ORDER BY created_at, id
         """,
         (tenant_id, enquiry.id, enquiry.created_at.isoformat()),
@@ -135,7 +119,7 @@ def _earlier_extracted_enquiries(connection: sqlite3.Connection, tenant_id: str,
     return [_enquiry_from_row(row) for row in rows]
 
 
-def _pipeline_values(enquiry: Enquiry) -> tuple[str | None, ...]:
+def _pipeline_values(enquiry: Enquiry) -> tuple[str | bool | None, ...]:
     return (
         STATUS_HISTORY.dump_json(enquiry.status_history).decode(),
         enquiry.spec.model_dump_json() if enquiry.spec else None,
@@ -146,6 +130,7 @@ def _pipeline_values(enquiry: Enquiry) -> tuple[str | None, ...]:
         enquiry.escalation_detail,
         enquiry.language,
         enquiry.duplicate_of,
+        enquiry.is_correction,
     )
 
 
@@ -166,5 +151,6 @@ def _enquiry_from_row(row: sqlite3.Row) -> Enquiry:
         escalation_detail=row["escalation_detail"],
         language=row["language"],
         duplicate_of=row["duplicate_of"],
+        is_correction=bool(row["is_correction"]),
         created_at=row["created_at"],
     )

@@ -174,6 +174,16 @@ def test_earlier_enquiry_can_be_dated_days_before(agent_dataset_dir: Path) -> No
     assert case.earlier_enquiries_for_sandbox()[0].days_before == 15
 
 
+def test_earlier_enquiry_can_have_failed_on_our_side(agent_dataset_dir: Path) -> None:
+    """Needed to test that a resend after our own failure is handled, not held as a duplicate."""
+    earlier = [{"tenant": "same", "subject": "Plates", "body": "30 t S355J2", "failed": True}]
+    write_agent_case(agent_dataset_dir, earlier_enquiries=earlier)
+
+    [case] = load_dataset(agent_dataset_dir)
+
+    assert case.earlier_enquiries_for_sandbox()[0].failed is True
+
+
 def test_rejects_earlier_enquiry_with_an_unknown_tenant_choice(agent_dataset_dir: Path) -> None:
     write_agent_case(agent_dataset_dir, earlier_enquiries=[{"tenant": "tnt_kowalski", "subject": "a", "body": "b"}])
 

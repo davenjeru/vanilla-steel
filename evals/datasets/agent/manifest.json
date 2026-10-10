@@ -1,5 +1,5 @@
 {
-  "version": "7",
+  "version": "8",
   "kind": "agent",
   "description": "Enquiry emails with the decision and tool path a correct agent must take, covering business correctness, duplication, data separation, supplier anonymity, security, fairness and robustness.",
   "changelog": [
@@ -34,6 +34,10 @@
     {
       "version": "7",
       "change": "Slice 3 duplicates (D36): agent-009, 010, 011 (forward with header, reply quoting the original, rewording) and 031 (F-005, new spreadsheet) are no longer known limitations; 031's earlier enquiry now carries last week's own spreadsheet (earlier/week-40-order.xlsx) and is dated 7 days before. New: agent-040 (same order 21 days later: outside the window, RFQ) and agent-041 (German resend of an English order: duplicate)."
+    },
+    {
+      "version": "8",
+      "change": "Owner decisions on duplicates: agent-042 (a correction is escalated as a duplicate, F-012), agent-043 (a resend after our own failure is quoted), agent-044 (the identical email two months later is quoted: the 14-day window applies to exact copies)."
     }
   ]
 }

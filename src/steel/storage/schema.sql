@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS enquiries (
     escalation_detail TEXT,        -- internal explanation from the agent
     language       TEXT,           -- the customer's ISO 639-1 code, for the quote letter (Slice 5)
     duplicate_of   TEXT,           -- the same tenant's earlier enquiry this one repeats (Slice 3)
+    is_correction  INTEGER NOT NULL DEFAULT 0,  -- the customer corrects an earlier enquiry (F-012)
     created_at     TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS enquiries_by_tenant ON enquiries (tenant_id);

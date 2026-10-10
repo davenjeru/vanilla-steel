@@ -127,3 +127,33 @@ def test_unstated_language_stays_empty_without_a_warning() -> None:
     warnings: list[str] = []
 
     assert (normalise_language(None, warnings), warnings) == (None, [])
+
+
+# Generic flat-steel words (finding F-011)
+
+
+def test_generic_blech_of_15_mm_becomes_plate() -> None:
+    raw = RawSpec(form="sheet_or_plate", thickness=Measurement(value=15, unit="mm"))
+
+    assert normalise_spec(raw).spec.form is ProductForm.PLATE
+
+
+def test_generic_blech_is_judged_after_unit_conversion() -> None:
+    """0.4 cm is 4 mm: plate. Comparing the number as written (0.4) would wrongly say sheet."""
+    raw = RawSpec(form="sheet_or_plate", thickness=Measurement(value=0.4, unit="cm"))
+
+    assert normalise_spec(raw).spec.form is ProductForm.PLATE
+
+
+def test_generic_blech_without_thickness_leaves_the_form_empty_with_a_warning() -> None:
+    normalised = normalise_spec(RawSpec(form="sheet_or_plate"))
+
+    assert normalised.spec.form is None
+    assert normalised.warnings == ["form: 'Blech' or 'blacha' without a thickness can be sheet or plate"]
+
+
+def test_explicit_sheet_is_kept_even_when_thick() -> None:
+    """The customer's own word wins; only the generic word is decided by thickness."""
+    raw = RawSpec(form="sheet", thickness=Measurement(value=8, unit="mm"))
+
+    assert normalise_spec(raw).spec.form is ProductForm.SHEET

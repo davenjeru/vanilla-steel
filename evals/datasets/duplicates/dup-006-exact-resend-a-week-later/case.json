@@ -1,0 +1,15 @@
+{
+  "verified": false,
+  "source": "llm-drafted",
+  "reason": "The identical email sent again a week later: the exact fingerprint matches.",
+  "language": "en",
+  "expected_duplicate": true,
+  "earlier_enquiries": [
+    {
+      "tenant": "same",
+      "subject": "Enquiry S355J2 plates",
+      "body": "Hello,\n\nplease quote 30 t of S355J2 plate, 15 x 1250 mm, DAP Poznań, Poland.\n\nRegards,\nAnna Becker",
+      "days_before": 7
+    }
+  ]
+}

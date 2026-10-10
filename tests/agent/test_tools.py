@@ -27,6 +27,7 @@ from tests.factories.agent import (
     STANDARD_BODY,
     STANDARD_SUBJECT,
     earlier_enquiry_for_order,
+    handled_enquiry,
     stored_enquiry,
     tool_context,
 )
@@ -179,7 +180,10 @@ def test_extraction_failure_marks_the_enquiry_failed(seeded_connection: sqlite3.
 def test_new_enquiry_is_not_a_duplicate(seeded_connection: sqlite3.Connection) -> None:
     stored_enquiry(seeded_connection)
 
-    assert check_duplicate(tool_context(seeded_connection, FakeLLMClient(output={})), {}) == {"duplicate_of": None}
+    assert check_duplicate(tool_context(seeded_connection, FakeLLMClient(output={})), {}) == {
+        "duplicate_of": None,
+        "is_correction": False,
+    }
 
 
 def test_forwarded_resend_from_the_same_tenant_is_a_duplicate(seeded_connection: sqlite3.Connection) -> None:
@@ -187,7 +191,7 @@ def test_forwarded_resend_from_the_same_tenant_is_a_duplicate(seeded_connection:
     stored_enquiry(seeded_connection, enquiry_id="enq_0002", subject="Fwd: " + STANDARD_SUBJECT)
     context = tool_context(seeded_connection, FakeLLMClient(output={}), enquiry_id="enq_0002")
 
-    assert check_duplicate(context, {}) == {"duplicate_of": "enq_0001"}
+    assert check_duplicate(context, {}) == {"duplicate_of": "enq_0001", "is_correction": False}
 
 
 def test_identical_enquiry_from_another_tenant_is_not_a_duplicate(seeded_connection: sqlite3.Connection) -> None:
@@ -196,7 +200,7 @@ def test_identical_enquiry_from_another_tenant_is_not_a_duplicate(seeded_connect
     stored_enquiry(seeded_connection, enquiry_id="enq_0002", tenant_id="tnt_bauer")
     context = tool_context(seeded_connection, FakeLLMClient(output={}), enquiry_id="enq_0002")
 
-    assert check_duplicate(context, {}) == {"duplicate_of": None}
+    assert check_duplicate(context, {}) == {"duplicate_of": None, "is_correction": False}
 
 
 def test_reworded_resend_of_the_same_order_is_a_duplicate(seeded_connection: sqlite3.Connection) -> None:
@@ -204,7 +208,7 @@ def test_reworded_resend_of_the_same_order_is_a_duplicate(seeded_connection: sql
     earlier_enquiry_for_order(seeded_connection, S355_PLATE_ORDER)
     resend = extracted_context(seeded_connection)
 
-    assert check_duplicate(resend, {}) == {"duplicate_of": "enq_0000"}
+    assert check_duplicate(resend, {}) == {"duplicate_of": "enq_0000", "is_correction": False}
 
 
 def test_same_order_from_another_tenant_is_not_a_duplicate(seeded_connection: sqlite3.Connection) -> None:
@@ -212,21 +216,99 @@ def test_same_order_from_another_tenant_is_not_a_duplicate(seeded_connection: sq
     earlier_enquiry_for_order(seeded_connection, S355_PLATE_ORDER, tenant_id="tnt_kowalski")
     resend = extracted_context(seeded_connection)
 
-    assert check_duplicate(resend, {}) == {"duplicate_of": None}
+    assert check_duplicate(resend, {}) == {"duplicate_of": None, "is_correction": False}
 
 
 def test_same_order_sent_more_than_14_days_ago_is_not_a_duplicate(seeded_connection: sqlite3.Connection) -> None:
     earlier_enquiry_for_order(seeded_connection, S355_PLATE_ORDER, received_at=FIXED_NOW - timedelta(days=15))
     repeat_order = extracted_context(seeded_connection)
 
-    assert check_duplicate(repeat_order, {}) == {"duplicate_of": None}
+    assert check_duplicate(repeat_order, {}) == {"duplicate_of": None, "is_correction": False}
 
 
 def test_different_order_is_not_a_duplicate(seeded_connection: sqlite3.Connection) -> None:
     earlier_enquiry_for_order(seeded_connection, S355_PLATE_ORDER.model_copy(update={"quantity_t": 60}))
     new_order = extracted_context(seeded_connection)
 
-    assert check_duplicate(new_order, {}) == {"duplicate_of": None}
+    assert check_duplicate(new_order, {}) == {"duplicate_of": None, "is_correction": False}
+
+
+def test_identical_email_sent_more_than_14_days_ago_is_not_a_duplicate(seeded_connection: sqlite3.Connection) -> None:
+    """Owner (D36 amended): the window applies to exact copies too; after two weeks it is most likely a repeat order."""
+    stored_enquiry(seeded_connection, enquiry_id="enq_0000", received_at=FIXED_NOW - timedelta(days=15))
+    repeat_order = extracted_context(seeded_connection)
+
+    assert check_duplicate(repeat_order, {})["duplicate_of"] is None
+
+
+def test_resend_after_our_own_failure_is_not_a_duplicate(seeded_connection: sqlite3.Connection) -> None:
+    """Owner: the first enquiry failed on our side and has no RFQ, so the resend cannot double anything.
+    Escalating it as a duplicate would make the customer wait twice for one failure."""
+    handled_enquiry(
+        seeded_connection,
+        "enq_0000",
+        [EnquiryStatus.EXTRACTED, EnquiryStatus.FAILED],
+        spec=S355_PLATE_ORDER,
+        failure_reason="agent_failed: Anthropic API unreachable",
+    )
+    resend = extracted_context(seeded_connection)
+
+    assert check_duplicate(resend, {})["duplicate_of"] is None
+
+
+# Corrections (finding F-012)
+
+CORRECTION_TO_45_T = S355_PLATE_READING | {"quantity": {"value": 45, "unit": "t"}, "is_correction": True}
+
+
+def test_extraction_records_that_the_email_corrects_an_earlier_enquiry(seeded_connection: sqlite3.Connection) -> None:
+    context = extracted_context(seeded_connection, CORRECTION_TO_45_T)
+
+    assert context.load_enquiry().is_correction is True
+
+
+def test_correction_points_to_the_enquiry_it_corrects(seeded_connection: sqlite3.Connection) -> None:
+    """45 t instead of 30 t is a different lot, so only recognising the correction connects the two."""
+    earlier_enquiry_for_order(seeded_connection, S355_PLATE_ORDER)
+    correction = extracted_context(seeded_connection, CORRECTION_TO_45_T)
+
+    assert check_duplicate(correction, {}) == {"duplicate_of": "enq_0000", "is_correction": True}
+
+
+def test_correction_points_to_the_latest_enquiry_on_file(seeded_connection: sqlite3.Connection) -> None:
+    """A customer corrects what they sent last; a human trader confirms, as for every duplicate."""
+    earlier_enquiry_for_order(
+        seeded_connection, S355_PLATE_ORDER, enquiry_id="enq_0098", received_at=FIXED_NOW - timedelta(days=3)
+    )
+    earlier_enquiry_for_order(
+        seeded_connection, S355_PLATE_ORDER, enquiry_id="enq_0099", received_at=FIXED_NOW - timedelta(hours=2)
+    )
+    correction = extracted_context(seeded_connection, CORRECTION_TO_45_T)
+
+    assert check_duplicate(correction, {})["duplicate_of"] == "enq_0099"
+
+
+def test_correction_with_nothing_on_file_is_handled_as_a_new_order(seeded_connection: sqlite3.Connection) -> None:
+    """Nothing to double: the email states the customer's latest wish, so it can be quoted."""
+    correction = extracted_context(seeded_connection, CORRECTION_TO_45_T)
+
+    assert check_duplicate(correction, {}) == {"duplicate_of": None, "is_correction": False}
+
+
+def test_correction_never_points_to_another_tenants_enquiry(seeded_connection: sqlite3.Connection) -> None:
+    earlier_enquiry_for_order(seeded_connection, S355_PLATE_ORDER, tenant_id="tnt_kowalski")
+    correction = extracted_context(seeded_connection, CORRECTION_TO_45_T)
+
+    assert check_duplicate(correction, {})["duplicate_of"] is None
+
+
+def test_correction_to_an_enquiry_older_than_14_days_is_handled_as_a_new_order(
+    seeded_connection: sqlite3.Connection,
+) -> None:
+    earlier_enquiry_for_order(seeded_connection, S355_PLATE_ORDER, received_at=FIXED_NOW - timedelta(days=15))
+    correction = extracted_context(seeded_connection, CORRECTION_TO_45_T)
+
+    assert check_duplicate(correction, {})["duplicate_of"] is None
 
 
 # search_stock
@@ -370,6 +452,16 @@ def test_rfq_for_a_reworded_resend_is_refused(seeded_connection: sqlite3.Connect
 
     with pytest.raises(ToolError, match="duplicates enq_0000"):
         create_rfq(resend, {"stock_item_id": "stk_058"})
+
+
+def test_rfq_for_a_correction_is_refused(seeded_connection: sqlite3.Connection) -> None:
+    """F-004 applies to corrections too: the earlier enquiry may already have an RFQ for the old tonnage."""
+    earlier_enquiry_for_order(seeded_connection, S355_PLATE_ORDER)
+    correction = extracted_context(seeded_connection, CORRECTION_TO_45_T)
+    search_stock(correction, S355_PLATE_SEARCH | {"quantity_t": 45})
+
+    with pytest.raises(ToolError, match="duplicates enq_0000"):
+        create_rfq(correction, {"stock_item_id": "stk_058"})
 
 
 def test_identical_enquiry_from_another_tenant_does_not_block_an_rfq(seeded_connection: sqlite3.Connection) -> None:

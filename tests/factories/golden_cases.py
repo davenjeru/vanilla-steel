@@ -99,6 +99,26 @@ def valid_quote_letter_labels(**overrides: Any) -> dict[str, Any]:
     return labels | overrides
 
 
+ORIGINAL_ENQUIRY = {
+    "tenant": "same",
+    "subject": "Enquiry S355J2 plates",
+    "body": "Please quote 30 t of S355J2 plate, 15 x 1250 mm, DAP Poznań.",
+}
+
+
+def valid_duplicate_labels(**overrides: Any) -> dict[str, Any]:
+    """A forwarded copy of an enquiry the same tenant sent the same day: a duplicate."""
+    labels = {
+        "reason": "Forwarded copy of the same enquiry",
+        "verified": True,
+        "source": "hand-written",
+        "language": "en",
+        "expected_duplicate": True,
+        "earlier_enquiries": [ORIGINAL_ENQUIRY],
+    }
+    return labels | overrides
+
+
 def write_manifest(dataset_dir: Path, manifest: dict[str, Any]) -> None:
     dataset_dir.mkdir(parents=True, exist_ok=True)
     (dataset_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")

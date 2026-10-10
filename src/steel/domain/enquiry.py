@@ -41,6 +41,7 @@ class Enquiry(BaseModel):
     escalation_detail: str | None = None
     language: str | None = None  # ISO 639-1, from extraction; the quote letter is written in it
     duplicate_of: str | None = None  # the same tenant's earlier enquiry this one repeats (D36)
+    is_correction: bool = False  # the customer corrects an earlier enquiry (F-012), from extraction
     created_at: datetime
 
     @property

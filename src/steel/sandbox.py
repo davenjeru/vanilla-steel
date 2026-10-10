@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from steel.agent.trace import AgentRun
 from steel.domain.enquiry import Enquiry, Rfq
 from steel.domain.fingerprint import enquiry_fingerprint
-from steel.domain.models import EnquiryStatus
+from steel.domain.models import EnquiryStatus, MaterialSpec
 from steel.domain.quote import Quote
 from steel.domain.status import advance, start_history
 from steel.extraction.attachments import Attachment
@@ -45,6 +45,7 @@ class EarlierEnquiry(BaseModel):
     body: str
     attachments: list[Attachment] = []
     days_before: int = Field(default=0, ge=0, description="received this many days before the enquiry under test")
+    failed: bool = Field(default=False, description="failed on our side before extraction, e.g. an LLM outage")
 
 
 class SandboxResult(BaseModel):
@@ -52,6 +53,14 @@ class SandboxResult(BaseModel):
     run: AgentRun
     rfq: Rfq | None
     quote: Quote | None
+
+
+class DuplicateCheckOutcome(BaseModel):
+    """What the duplicate check decided for one pair, with both extracted orders so a reviewer can see why."""
+
+    duplicate_of: str | None
+    order: MaterialSpec | None
+    earlier_order: MaterialSpec | None
 
 
 def handle_in_sandbox(
@@ -64,9 +73,7 @@ def handle_in_sandbox(
 ) -> SandboxResult:
     """Earlier enquiries take IDs enq_0001, enq_0002, ...; the enquiry under test gets the next one."""
     with tempfile.TemporaryDirectory() as directory:
-        connection = connect(Path(directory) / "sandbox.db")
-        create_schema(connection)
-        seed_database(connection)
+        connection = _seeded_database(Path(directory))
         enquiry_numbers, rfq_numbers, quote_numbers = itertools.count(1), itertools.count(1), itertools.count(1)
         for earlier in earlier_enquiries or []:
             _store_earlier_enquiry(connection, earlier, f"enq_{next(enquiry_numbers):04d}", llm, settings)
@@ -92,9 +99,37 @@ def handle_in_sandbox(
     return SandboxResult(enquiry=enquiry, run=run, rfq=rfq, quote=quote)
 
 
+def check_duplicate_in_sandbox(
+    subject: str,
+    body: str,
+    attachments: list[Attachment],
+    earlier: EarlierEnquiry,
+    llm: LLMClient,
+    settings: Settings,
+) -> DuplicateCheckOutcome:
+    """The duplicate check alone, for the duplicates eval: both emails are stored and extracted, then the check
+    runs exactly as check_duplicate does. No agent, so the eval measures the check, not the model's choices.
+    The earlier enquiry is enq_0001; the new email is enq_0002, received at SANDBOX_TIME."""
+    new_email = EarlierEnquiry(tenant_id=SANDBOX_TENANT, subject=subject, body=body, attachments=attachments)
+    with tempfile.TemporaryDirectory() as directory:
+        connection = _seeded_database(Path(directory))
+        on_file = _store_earlier_enquiry(connection, earlier, "enq_0001", llm, settings)
+        enquiry = _store_earlier_enquiry(connection, new_email, "enq_0002", llm, settings)
+        duplicate_of = enquiries.find_earlier_duplicate(connection, SANDBOX_TENANT, enquiry)
+        connection.close()
+    return DuplicateCheckOutcome(duplicate_of=duplicate_of, order=enquiry.spec, earlier_order=on_file.spec)
+
+
+def _seeded_database(directory: Path) -> sqlite3.Connection:
+    connection = connect(directory / "sandbox.db")
+    create_schema(connection)
+    seed_database(connection)
+    return connection
+
+
 def _store_earlier_enquiry(
     connection: sqlite3.Connection, earlier: EarlierEnquiry, enquiry_id: str, llm: LLMClient, settings: Settings
-) -> None:
+) -> Enquiry:
     received_at = SANDBOX_TIME - timedelta(days=earlier.days_before)
     enquiry = Enquiry(
         id=enquiry_id,
@@ -107,15 +142,33 @@ def _store_earlier_enquiry(
         created_at=received_at,
     )
     enquiries.insert_enquiry(connection, enquiry, attachments=earlier.attachments)
-    _extract_earlier_enquiry(connection, enquiry, earlier.attachments, llm, settings)
+    if earlier.failed:
+        return _mark_failed(connection, enquiry)
+    return _extract_earlier_enquiry(connection, enquiry, earlier.attachments, llm, settings)
+
+
+def _mark_failed(connection: sqlite3.Connection, enquiry: Enquiry) -> Enquiry:
+    """As an outage leaves an enquiry: failed before extraction, so no spec and no LLM call to record."""
+    history = advance(enquiry.status_history, EnquiryStatus.FAILED, enquiry.created_at)
+    failed = enquiry.model_copy(update={"status_history": history, "failure_reason": "extraction_failed: outage"})
+    enquiries.update_pipeline_state(connection, enquiry.tenant_id, failed)
+    return failed
 
 
 def _extract_earlier_enquiry(
     connection: sqlite3.Connection, enquiry: Enquiry, attachments: list[Attachment], llm: LLMClient, settings: Settings
-) -> None:
+) -> Enquiry:
     """Extraction errors propagate: a missing recording must fail the case loudly, not hide the earlier order."""
     document = EnquiryDocument(subject=enquiry.subject, body=enquiry.body, attachments=attachments)
     result = extract_spec(document, llm, settings.extraction_model)
     history = advance(enquiry.status_history, EnquiryStatus.EXTRACTED, enquiry.created_at)
-    extracted = enquiry.model_copy(update={"status_history": history, "spec": result.spec, "language": result.language})
+    extracted = enquiry.model_copy(
+        update={
+            "status_history": history,
+            "spec": result.spec,
+            "language": result.language,
+            "is_correction": result.is_correction,
+        }
+    )
     enquiries.update_pipeline_state(connection, enquiry.tenant_id, extracted)
+    return extracted

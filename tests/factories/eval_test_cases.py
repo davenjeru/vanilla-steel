@@ -44,6 +44,15 @@ S355_PLATE_SPEC = {
 }
 
 
+def duplicate_test_case(expected_duplicate: bool, duplicate_of: str | None) -> LLMTestCase:
+    """expected_output as the golden writes it, actual_output as the duplicates run writes it."""
+    return LLMTestCase(
+        input="Fwd: Enquiry S355J2 plates",
+        expected_output=json.dumps({"expected_duplicate": expected_duplicate}),
+        actual_output=json.dumps({"duplicate_of": duplicate_of}),
+    )
+
+
 def expected_rfq(stock_item_id: str = "stk_058") -> AgentExpectations:
     """A golden expecting one RFQ for the given lot, by the standard path."""
     return AgentExpectations(decision="rfq", rfq_stock_item_id=stock_item_id, tool_path=RFQ_PATH)
