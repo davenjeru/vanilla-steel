@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from steel.domain.quote import PricedQuote
 from steel.llm.client import LLMClient, LLMError, LLMRequest, LLMResponse
-from steel.tracing import record_model_call, set_span_input, set_span_output
+from steel.tracing import record_model_call, record_prompt, set_span_input, set_span_output
 
 PROMPT_ID = "quote_letter"
 PROMPT_VERSION = "v2"  # v2: full description, trade word for the form, dimension order, no invented sender
@@ -61,6 +61,7 @@ def build_request(quote: PricedQuote, language: str, model: str) -> LLMRequest:
 def ask_model_to_write(request: LLMRequest, llm: LLMClient) -> LLMResponse:
     """One LLM span: the priced quote the writer saw, and the letter it wrote."""
     set_span_input(request.user)
+    record_prompt(request.prompt_id, request.prompt_version)
     response = llm.complete(request)
     set_span_output(response.output.get("text", response.output))
     record_model_call(response.model, response.input_tokens, response.output_tokens)

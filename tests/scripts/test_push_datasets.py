@@ -1,0 +1,84 @@
+"""Pushing golden datasets: verified cases finalized, the rest queued, nothing twice."""
+
+from pathlib import Path
+
+from deepeval.dataset import Golden
+
+from evals.harness.datasets import dataset_alias
+from evals.harness.golden_cases import load_dataset, load_manifest
+from scripts.push_datasets import sync_dataset
+from tests.factories.golden_cases import valid_case_labels, write_case
+
+
+class FakeStore:
+    def __init__(self, on_file: set[str] | None = None) -> None:
+        self.on_file = on_file or set()
+        self.pushed: dict[str, list[Golden]] = {}
+        self.queued: dict[str, list[Golden]] = {}
+
+    def names_on_file(self, alias: str) -> set[str]:
+        return set(self.on_file)
+
+    def finalized_names(self, alias: str) -> set[str]:
+        return set(self.on_file)
+
+    def push_finalized(self, alias: str, goldens: list[Golden]) -> None:
+        self.pushed.setdefault(alias, []).extend(goldens)
+
+    def queue(self, alias: str, goldens: list[Golden]) -> None:
+        self.queued.setdefault(alias, []).extend(goldens)
+
+
+def two_cases(dataset_dir: Path) -> None:
+    write_case(dataset_dir, name="de-001-reviewed", labels=valid_case_labels(verified=True, language="de"))
+    write_case(dataset_dir, name="de-002-drafted", labels=valid_case_labels(verified=False, language="de"))
+
+
+def test_alias_carries_the_dataset_and_its_manifest_version(extraction_dataset_dir: Path) -> None:
+    manifest = load_manifest(extraction_dataset_dir)
+
+    assert dataset_alias("extraction", manifest) == f"extraction-v{manifest.version}"
+
+
+def test_verified_cases_are_pushed_finalized_and_the_rest_queued(extraction_dataset_dir: Path) -> None:
+    two_cases(extraction_dataset_dir)
+    store = FakeStore()
+
+    report = sync_dataset("extraction-v3", load_dataset(extraction_dataset_dir), store)
+
+    assert (report.pushed, report.queued, report.already_there) == (["de-001-reviewed"], ["de-002-drafted"], [])
+    assert ([g.name for g in store.pushed["extraction-v3"]], [g.name for g in store.queued["extraction-v3"]]) == (
+        ["de-001-reviewed"],
+        ["de-002-drafted"],
+    )
+
+
+def test_a_golden_already_on_the_alias_is_not_sent_again(extraction_dataset_dir: Path) -> None:
+    """Pushing appends on Confident AI, so a second run must send only what is new."""
+    two_cases(extraction_dataset_dir)
+    store = FakeStore(on_file={"de-001-reviewed", "de-002-drafted"})
+
+    report = sync_dataset("extraction-v3", load_dataset(extraction_dataset_dir), store)
+
+    assert (report.pushed, report.queued, sorted(report.already_there), store.pushed, store.queued) == (
+        [],
+        [],
+        ["de-001-reviewed", "de-002-drafted"],
+        {},
+        {},
+    )
+
+
+def test_pushed_goldens_carry_the_case_name_and_its_labels(extraction_dataset_dir: Path) -> None:
+    """The name is how a review on Confident AI finds its way back to the case folder."""
+    two_cases(extraction_dataset_dir)
+    store = FakeStore()
+
+    sync_dataset("extraction-v3", load_dataset(extraction_dataset_dir), store)
+
+    [golden] = store.pushed["extraction-v3"]
+    assert (golden.name, golden.expected_output is not None, (golden.additional_metadata or {})["verified"]) == (
+        "de-001-reviewed",
+        True,
+        True,
+    )

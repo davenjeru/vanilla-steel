@@ -24,6 +24,7 @@ from deepeval.tracing import observe, update_current_trace
 from evals.harness.golden_cases import GoldenCase
 from evals.harness.judge import JUDGE_MODEL
 from evals.harness.modes import Mode, is_judged
+from evals.harness.prompts import PRODUCT_PROMPTS, PromptRegistry, prompt_hyperparameters
 from evals.metrics.agent.agent_test_case import decision
 from evals.metrics.agent.budget import ModelCall, enquiry_cost, input_tokens, model_seconds, output_tokens
 from evals.metrics.agent.cost import CostVerdict, judge_cost
@@ -162,6 +163,7 @@ def run_hyperparameters(mode: Mode) -> dict[str, Any]:
         "max_turns": MAX_TURNS,
         "mode": mode,
         "judge_model": JUDGE_MODEL if is_judged(mode) else "none",
+        **prompt_hyperparameters(PromptRegistry.load(), PRODUCT_PROMPTS),
     }
 
 

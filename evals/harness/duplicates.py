@@ -15,6 +15,7 @@ from deepeval.tracing import observe, update_current_trace
 
 from evals.harness.golden_cases import GoldenCase
 from evals.harness.modes import Mode
+from evals.harness.prompts import EXTRACTION_PROMPT, PromptRegistry, prompt_hyperparameters
 from evals.harness.trace_tags import trace_tags
 from evals.metrics.duplicates.detection_rates import DetectionRates, PairResult
 from steel.domain.duplicates import DUPLICATE_WINDOW
@@ -43,6 +44,7 @@ def run_hyperparameters(mode: Mode) -> dict[str, Any]:
         "extraction_prompt_version": PROMPT_VERSION,
         "duplicate_window_days": DUPLICATE_WINDOW.days,
         "mode": mode,
+        **prompt_hyperparameters(PromptRegistry.load(), [EXTRACTION_PROMPT]),
     }
 
 

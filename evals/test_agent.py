@@ -24,6 +24,7 @@ from evals.harness.agent import (
 )
 from evals.harness.golden_cases import DATASETS_DIR, GoldenCase, load_dataset
 from evals.harness.modes import Mode
+from evals.harness.prompts import PromptRegistry, link_prompt_commits
 from evals.harness.quote_letter import letter_metrics
 from evals.harness.run_labels import log_run_hyperparameters
 from evals.harness.spans import attach_metrics_to_spans
@@ -31,6 +32,7 @@ from evals.harness.trace_tags import trace_tags
 from steel.sandbox import SandboxResult
 
 CASES = load_dataset(DATASETS_DIR / DATASET)
+REGISTRY = PromptRegistry.load()
 LETTER_SPAN = "write_cover_letter"
 
 
@@ -57,5 +59,6 @@ def test_agent_handles_the_enquiry_as_labelled(
 
     run_results[case.name] = handle_case(golden, case, llm_for_case(case, mode), trace_tags(case, mode))
     attach_metrics_to_spans(LETTER_SPAN, lambda: letter_metrics(mode))
+    link_prompt_commits(REGISTRY)
 
     assert_test(golden=golden, metrics=agent_metrics(case, mode))

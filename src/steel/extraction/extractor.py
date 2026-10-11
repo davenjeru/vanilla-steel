@@ -13,7 +13,7 @@ from steel.extraction.evidence import drop_unstated_claims
 from steel.extraction.normalise import normalise_language, normalise_spec
 from steel.extraction.raw_spec import RawSpec
 from steel.llm.client import LLMClient, LLMError, LLMRequest, LLMResponse
-from steel.tracing import record_model_call, set_span_input, set_span_output
+from steel.tracing import record_model_call, record_prompt, set_span_input, set_span_output
 
 PROMPT_ID = "extract_spec"
 PROMPT_VERSION = (
@@ -79,6 +79,7 @@ def extract_spec(document: EnquiryDocument, llm: LLMClient, model: str) -> Extra
 def ask_model_to_read(request: LLMRequest, llm: LLMClient) -> LLMResponse:
     """One LLM span: the enquiry as the model read it, and its raw answer before code acted on it."""
     set_span_input(request.user)
+    record_prompt(request.prompt_id, request.prompt_version)
     response = llm.complete(request)
     set_span_output(response.output)
     record_model_call(response.model, response.input_tokens, response.output_tokens)

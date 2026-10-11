@@ -211,3 +211,18 @@ def test_model_without_an_agreed_price_gets_no_price(rfq_payload: tuple[dict[str
     payload, _ = rfq_payload
 
     assert [span.get("costPerInputToken") for span in payload["llmSpans"]] == [None] * len(payload["llmSpans"])
+
+
+def test_every_model_call_names_the_prompt_it_ran(rfq_payload: tuple[dict[str, Any], SandboxResult]) -> None:
+    """Alias and git version on each LLM span, on its prompt field and in its metadata (an eval run keeps
+    only the metadata, DeepEval 4.2.8); the Prompt Studio commit is the eval's to add (D42)."""
+    payload, _ = rfq_payload
+
+    on_field = {span["promptAlias"] for span in payload["llmSpans"]}
+    in_metadata = {
+        (span["metadata"]["prompt_alias"], span["metadata"]["prompt_version"]) for span in payload["llmSpans"]
+    }
+    assert (on_field, in_metadata) == (
+        {"extract_spec", "agent", "quote_letter"},
+        {("extract_spec", "v4"), ("agent", "v4"), ("quote_letter", "v2")},
+    )

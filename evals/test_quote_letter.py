@@ -9,6 +9,7 @@ from deepeval.dataset import Golden
 
 from evals.harness.golden_cases import DATASETS_DIR, GoldenCase, load_dataset
 from evals.harness.modes import Mode
+from evals.harness.prompts import PromptRegistry, link_prompt_commits
 from evals.harness.quote_letter import (
     DATASET,
     is_recorded,
@@ -21,6 +22,7 @@ from evals.harness.run_labels import log_run_hyperparameters
 from steel.llm.client import LLMClient
 
 CASES = load_dataset(DATASETS_DIR / DATASET)
+REGISTRY = PromptRegistry.load()
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -40,5 +42,6 @@ def test_letter_presents_the_quote_as_written(case: GoldenCase, mode: Mode, llm:
     golden = Golden(**case.as_golden_fields())
 
     write_and_trace(golden, case, llm, mode)
+    link_prompt_commits(REGISTRY)
 
     assert_test(golden=golden, metrics=letter_metrics(mode))

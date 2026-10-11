@@ -10,10 +10,12 @@ from deepeval.dataset import Golden
 from evals.harness.extraction import DATASET, extract_and_trace, extraction_metrics, make_llm, run_hyperparameters
 from evals.harness.golden_cases import DATASETS_DIR, GoldenCase, load_dataset
 from evals.harness.modes import Mode
+from evals.harness.prompts import PromptRegistry, link_prompt_commits
 from evals.harness.run_labels import log_run_hyperparameters
 from steel.llm.client import LLMClient
 
 CASES = load_dataset(DATASETS_DIR / DATASET)
+REGISTRY = PromptRegistry.load()
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -31,5 +33,6 @@ def test_extraction_reads_the_enquiry_as_labelled(case: GoldenCase, mode: Mode, 
     golden = Golden(**case.as_golden_fields())
 
     extract_and_trace(golden, case, llm, mode)
+    link_prompt_commits(REGISTRY)
 
     assert_test(golden=golden, metrics=extraction_metrics())

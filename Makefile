@@ -73,6 +73,19 @@ record-fixtures:
 prune-fixtures:
 	uv run python -m scripts.prune_fixtures
 
+## Prompt Studio and datasets on Confident AI (D42). Git stays the source of truth; nothing is pulled at run time.
+## Push each product prompt once per version and record its commit in evals/prompts.json (commit the file).
+push-prompts:
+	uv run --env-file .env python -m scripts.push_prompts
+
+## Push golden datasets, one alias per manifest version: verified cases finalized, the rest queued for review.
+push-datasets:
+	uv run --env-file .env python -m scripts.push_datasets
+
+## Mark cases verified in git when their golden was finalized on Confident AI. Commit the changed case.json files.
+pull-verified:
+	uv run --env-file .env python -m scripts.pull_verified
+
 ## Run one extraction golden case through the agent and print its trace: make run-agent CASE=en-001-st37-sheet-poznan
 run-agent:
 	uv run python -m scripts.run_agent --case $(CASE)

@@ -20,6 +20,7 @@ from deepeval.tracing import observe, update_current_trace
 from evals.harness.golden_cases import GoldenCase, QuoteLetterInput
 from evals.harness.judge import JUDGE_MODEL
 from evals.harness.modes import Mode, is_judged
+from evals.harness.prompts import LETTER_PROMPT, PromptRegistry, prompt_hyperparameters
 from evals.harness.trace_tags import trace_tags
 from evals.metrics.quote_letter.judged import judged_letter_metrics
 from evals.metrics.quote_letter.names_no_supplier import NamesNoSupplier
@@ -55,6 +56,7 @@ def run_hyperparameters(mode: Mode) -> dict[str, Any]:
         "prompt_version": PROMPT_VERSION,
         "mode": mode,
         "judge_model": JUDGE_MODEL if is_judged(mode) else "none",
+        **prompt_hyperparameters(PromptRegistry.load(), [LETTER_PROMPT]),
     }
 
 

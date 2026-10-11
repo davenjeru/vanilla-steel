@@ -19,12 +19,14 @@ from evals.harness.duplicates import (
 )
 from evals.harness.golden_cases import DATASETS_DIR, GoldenCase, load_dataset
 from evals.harness.modes import Mode
+from evals.harness.prompts import PromptRegistry, link_prompt_commits
 from evals.harness.run_labels import log_run_hyperparameters
 from evals.metrics.duplicates.detection_rates import PairResult, detection_rates
 from evals.metrics.duplicates.duplicate_decision_is_correct import DuplicateDecisionIsCorrect
 from steel.llm.client import LLMClient
 
 CASES = load_dataset(DATASETS_DIR / DATASET)
+REGISTRY = PromptRegistry.load()
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -52,6 +54,7 @@ def test_duplicate_check_decides_as_labelled(
     golden = Golden(**case.as_golden_fields())
 
     result = check_and_trace(golden, case, llm, mode)
+    link_prompt_commits(REGISTRY)
     pair_results.append(pair_result(golden, result))
 
     assert_test(golden=golden, metrics=[DuplicateDecisionIsCorrect()])

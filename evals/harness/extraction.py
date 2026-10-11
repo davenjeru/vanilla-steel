@@ -13,6 +13,7 @@ from deepeval.tracing import observe, update_current_trace
 
 from evals.harness.golden_cases import GoldenCase
 from evals.harness.modes import Mode
+from evals.harness.prompts import EXTRACTION_PROMPT, PromptRegistry, prompt_hyperparameters
 from evals.harness.trace_tags import trace_tags
 from evals.metrics.extraction.field_match import SCORED_FIELDS, FieldMatch
 from steel.extraction.extractor import PROMPT_VERSION, EnquiryDocument, extract_spec
@@ -38,7 +39,12 @@ def extraction_metrics() -> list[BaseMetric]:
 
 
 def run_hyperparameters(mode: Mode) -> dict[str, Any]:
-    return {"model": SETTINGS.extraction_model, "prompt_version": PROMPT_VERSION, "mode": mode}
+    return {
+        "model": SETTINGS.extraction_model,
+        "prompt_version": PROMPT_VERSION,
+        "mode": mode,
+        **prompt_hyperparameters(PromptRegistry.load(), [EXTRACTION_PROMPT]),
+    }
 
 
 @observe(name="extraction", description="read one enquiry: the model's reading, then code's normalisation")

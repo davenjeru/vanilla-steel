@@ -11,6 +11,7 @@ the feedback loop. These spans are for people and metrics reading the run on Con
 from typing import Any
 
 from deepeval.tracing import current_span_context, update_llm_span
+from deepeval.tracing.types import LlmSpan
 
 from steel.llm.pricing import price_for
 
@@ -44,6 +45,21 @@ def record_model_call(model: str, input_tokens: int, output_tokens: int) -> None
         cost_per_input_token=price.input_usd_per_token if price else None,
         cost_per_output_token=price.output_usd_per_token if price else None,
     )
+
+
+def record_prompt(prompt_id: str, prompt_version: str) -> None:
+    """Name the prompt the model call used: its alias and the version from git.
+
+    Only names, never a lookup: the commit hash Confident AI links the span to is added by the eval
+    from its registry (evals/harness/prompts.py), so the product never calls Confident AI.
+    The alias goes on the span's own prompt field and into its metadata: DeepEval 4.2.8 loses the
+    prompt fields of a span inside a test run (they are serialised under one name and read back
+    under another), while metadata survives, so the metadata is what an eval run shows.
+    """
+    span = current_span_context.get()
+    if isinstance(span, LlmSpan):
+        span.prompt_alias = prompt_id
+    add_span_metadata(prompt_alias=prompt_id, prompt_version=prompt_version)
 
 
 def set_span_output(value: Any) -> None:

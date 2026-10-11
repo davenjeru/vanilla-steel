@@ -24,7 +24,7 @@ from steel.domain.models import EnquiryStatus
 from steel.domain.status import advance
 from steel.llm.client import ConversationRequest, ConversationResponse, LLMError, ToolUse
 from steel.storage import enquiries
-from steel.tracing import add_span_metadata, record_model_call, set_span_input, set_span_output
+from steel.tracing import add_span_metadata, record_model_call, record_prompt, set_span_input, set_span_output
 
 PROMPT_ID = "agent"
 PROMPT_VERSION = "v4"  # v2: draft_quote (Slice 5); v3: obvious injections at once; v4: corrections (F-012)
@@ -98,6 +98,7 @@ def _model_turn(
     """One LLM span per turn: what the model was answering (the email, then the tool results it asked for)
     and what it replied. A failed call is an errored span; the loop marks the enquiry failed."""
     set_span_input(received)
+    record_prompt(PROMPT_ID, PROMPT_VERSION)
     response = context.llm.converse(_request(model, messages))
     set_span_output(response.text())
     add_span_metadata(stop_reason=response.stop_reason, tool_calls=[use.name for use in response.tool_uses()])
