@@ -1,0 +1,55 @@
+# Pre-release: every golden case of every eval, verified and unverified alike, live. Started by hand only:
+# Actions > Pre-release > Run workflow. It costs about three times a verified-only run and is the last look
+# before a release: an unverified case that fails is a question for the reviewer, not yet a verdict on the
+# product (D38), so read the failures by case, not by count.
+# Results go to Confident AI, linked to the dataset alias of each manifest version (D44).
+name: Pre-release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-evals  # never beside a pull request's live run: one bill at a time
+  cancel-in-progress: false
+
+env:
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  CONFIDENT_API_KEY: ${{ secrets.CONFIDENT_API_KEY }}
+  # Send every trace before the job ends, or DeepEval drops the ones still uploading.
+  CONFIDENT_TRACE_FLUSH: "1"
+  DEEPEVAL_TELEMETRY_OPT_OUT: "1"
+
+jobs:
+  all-cases:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45  # 44 agent cases take about ten minutes; the cap bounds a run that hangs or loops
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+
+      - name: Install
+        id: install
+        run: uv sync --locked
+
+      - name: Extraction eval (live, all cases)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: uv run python -m evals.run extraction
+
+      - name: Duplicates eval (live, all cases)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: uv run python -m evals.run duplicates
+
+      - name: Agent eval (live, all cases)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: uv run python -m evals.run agent
+
+      - name: Quote-letter eval (live, all cases)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: uv run python -m evals.run quote_letter
