@@ -1,10 +1,14 @@
 # Live evals on the verified cases only. Costs money (Claude for the system, OpenAI for the judge),
-# so it runs only when started by hand: Actions > Live evals > Run workflow.
+# so it runs on two occasions: a pull request against main (all four evals, so the change is seen to pass
+# before it merges) and by hand, Actions > Live evals > Run workflow, with a choice of eval.
 # Results go to Confident AI, linked to the dataset alias of each manifest version (D44); a failed deterministic
-# check fails the run, judged metrics only report (D35).
+# check fails the run, judged metrics only report (D35). Secrets reach a pull request only from this
+# repository's own branches, never from a fork.
 name: Live evals
 
 on:
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       eval:
@@ -21,6 +25,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # A pull request has no inputs: it runs every eval.
+  EVAL: ${{ inputs.eval || 'all' }}
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   CONFIDENT_API_KEY: ${{ secrets.CONFIDENT_API_KEY }}
@@ -44,17 +50,17 @@ jobs:
         run: uv sync --locked
 
       - name: Extraction eval (live, verified cases)
-        if: ${{ !cancelled() && steps.install.outcome == 'success' && contains(fromJSON('["all", "extraction"]'), inputs.eval) }}
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && contains(fromJSON('["all", "extraction"]'), env.EVAL) }}
         run: uv run python -m evals.run extraction --verified-only
 
       - name: Duplicates eval (live, verified cases)
-        if: ${{ !cancelled() && steps.install.outcome == 'success' && contains(fromJSON('["all", "duplicates"]'), inputs.eval) }}
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && contains(fromJSON('["all", "duplicates"]'), env.EVAL) }}
         run: uv run python -m evals.run duplicates --verified-only
 
       - name: Agent eval (live, verified cases)
-        if: ${{ !cancelled() && steps.install.outcome == 'success' && contains(fromJSON('["all", "agent"]'), inputs.eval) }}
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && contains(fromJSON('["all", "agent"]'), env.EVAL) }}
         run: uv run python -m evals.run agent --verified-only
 
       - name: Quote-letter eval (live, verified cases)
-        if: ${{ !cancelled() && steps.install.outcome == 'success' && contains(fromJSON('["all", "quote_letter"]'), inputs.eval) }}
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && contains(fromJSON('["all", "quote_letter"]'), env.EVAL) }}
         run: uv run python -m evals.run quote_letter --verified-only

@@ -317,3 +317,21 @@ outcome, the extracted spec, the duplicate verdict, the letter) with `set_span_i
 `test_the_whole_upload_carries_no_internal_match_data` in `tests/evals/harness/test_agent_harness.py`
 scans the complete upload of an agent case for `sup_`. The 18 traces of that live run remain on
 Confident AI as uploaded; the owner decides whether to delete them.
+
+## F-015: A refused tool call showed up after the agent turn that answered it
+
+| | |
+|---|---|
+| Found | 2026-10-11, by the owner, reading the trace of `agent-024-frei-haus-incoterm-not-guessed` in the live run on `e130bfb` (trace `55a9182f-9969-4c43-bea4-a750d3d9f026`) |
+| Behaviour | Confident AI listed two "agent turn" spans back to back, then the refused `search_stock` (errored, 0 ms), then the successful one. The product's order was turn, refused search, turn, search: the second turn's input reads "search_stock refused: …". |
+| Layer | Product tracing (`steel/agent/runner.py::_execute_tool`), with the cause on the platform side |
+| Business risk | None directly; readable traces are how a trader or reviewer follows what the agent did, and this one read as the agent calling a tool before deciding to |
+
+**Reproduced by** reading the span times back through the API: the refused `search_stock` started
+and ended at `15:36:10.867`, and the next agent turn started at `15:36:10.867` as well. DeepEval
+4.2.8 sends span times to the millisecond (`to_zod_compatible_iso`, no microsecond option on spans),
+and Confident AI orders siblings by start time, breaking the tie in favour of the LLM span.
+**Fixed:** every tool span lasts at least one millisecond (`_keep_the_span_a_millisecond_long`), so
+the next turn always starts in a later millisecond than the call it answers. A refusal takes
+microseconds, so the wait is real only on refusals; five calls an enquiry cost at most 5 ms. Test:
+`test_the_turn_that_answers_a_refusal_starts_after_it` in `tests/agent/test_tracing.py`.
