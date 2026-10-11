@@ -18,10 +18,9 @@ Revisit these against live runs in Confident AI (there is no release gate, D39).
 
 from pydantic import BaseModel
 
-from evals.metrics.agent.agent_outcome import ModelCall
 from steel.llm.pricing import cost_usd, price_for
 
-__all__ = ["cost_usd", "price_for"]  # re-exported for the metrics that import them from here
+__all__ = ["cost_usd", "price_for"]  # re-exported for the reports that import them from here
 
 # One extra agent turn (about 3.5k tokens) above a clean RFQ-and-quote path is allowed, e.g. a retry
 # after a refused search; a second extra turn fails, which is the loop signal.
@@ -30,6 +29,15 @@ MAX_OUTPUT_TOKENS_PER_ENQUIRY = 1_500  # about twice a clean path
 MAX_COST_USD_PER_ENQUIRY = 0.030  # follows from the token limits at Haiku 4.5 prices
 MAX_MODEL_SECONDS_ANY_ENQUIRY = 30.0  # the synchronous API call would time out
 MAX_MODEL_SECONDS_P95 = 15.0  # twice today's median, so normal API variation does not trip it
+
+
+class ModelCall(BaseModel):
+    """One model call during a run: an agent turn, or a call a tool made (extraction, the cover letter)."""
+
+    model: str
+    input_tokens: int
+    output_tokens: int
+    latency_ms: float
 
 
 class EnquiryCost(BaseModel):
@@ -43,3 +51,15 @@ def enquiry_cost(calls: list[ModelCall]) -> EnquiryCost:
         usd=sum(cost for _, cost in costs if cost is not None),
         unpriced_models=sorted({model for model, cost in costs if cost is None}),
     )
+
+
+def input_tokens(calls: list[ModelCall]) -> int:
+    return sum(call.input_tokens for call in calls)
+
+
+def output_tokens(calls: list[ModelCall]) -> int:
+    return sum(call.output_tokens for call in calls)
+
+
+def model_seconds(calls: list[ModelCall]) -> float:
+    return sum(call.latency_ms for call in calls) / 1000

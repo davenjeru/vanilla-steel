@@ -29,7 +29,7 @@ def test_judged_modes_add_the_judged_metrics_with_the_pinned_judge(mode: str, mo
 
     judged = letter_metrics(mode)[3:]  # type: ignore[arg-type]
 
-    assert [metric.evaluation_model for metric in judged] == [JUDGE_MODEL] * 4
+    assert [metric.evaluation_model for metric in judged] == [JUDGE_MODEL] * 2
 
 
 def test_cases_without_a_recorded_letter_are_left_out_not_scored(

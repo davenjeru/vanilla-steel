@@ -526,7 +526,7 @@ def test_quote_is_priced_stored_and_the_enquiry_marked_quoted(seeded_connection:
 
     quote = quotes.get_quote_for_enquiry(seeded_connection, "tnt_bauer", "enq_0001")
     assert (result, quote is not None, status_of(seeded_connection)) == (
-        {"quote_id": "quo_0001"},
+        {"quote_id": "quo_0001", "cover_letter": PLAIN_COVER_LETTER},
         True,
         EnquiryStatus.QUOTED,
     )

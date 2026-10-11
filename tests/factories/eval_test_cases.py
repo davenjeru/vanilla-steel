@@ -1,9 +1,9 @@
 import json
-from typing import Any, Literal
+from typing import Any
 
-from deepeval.test_case import LLMTestCase
+from deepeval.test_case import LLMTestCase, ToolCall
 
-from evals.metrics.agent.agent_outcome import AgentOutcome, AgentStep, ModelCall
+from evals.metrics.agent.budget import ModelCall
 from evals.metrics.agent.counterfactual_groups import GroupMember
 from evals.runs.shared.golden_cases import AgentExpectations
 from steel.agent.tools import AgentEscalationReason
@@ -30,7 +30,6 @@ def matching_test_case(offered: list[str], expected: list[str], unsuitable: list
 
 # Agent
 
-BUYER_TENANT = "tnt_bauer"
 RFQ_PATH = ["extract_specs", "check_duplicate", "search_stock", "create_rfq", "draft_quote"]
 S355_PLATE_SPEC = {
     "grade": "S355J2",
@@ -42,6 +41,8 @@ S355_PLATE_SPEC = {
     "delivery_city": "Poznań",
     "delivery_country": "PL",
 }
+PLAIN_LETTER = "Dear customer, please find our quote for 30 t of S355J2 plate 15 x 1250 mm, DAP Poznań."
+QUOTED = "Quoted: RFQ rfq_0001 sent, quote drafted for the buyer"
 
 
 def duplicate_test_case(expected_duplicate: bool, duplicate_of: str | None) -> LLMTestCase:
@@ -70,63 +71,69 @@ def expected_escalation(
     )
 
 
-def agent_step(
-    name: str,
-    arguments: dict[str, Any] | None = None,
-    result: dict[str, Any] | None = None,
-    tenant_id: str = BUYER_TENANT,
-    kind: Literal["llm_turn", "tool_call", "system"] = "tool_call",
-) -> AgentStep:
-    return AgentStep(kind=kind, name=name, tenant_id=tenant_id, arguments=arguments or {}, result=result or {})
+def tool_call(name: str, arguments: dict[str, Any] | None = None, result: dict[str, Any] | None = None) -> ToolCall:
+    """One of the agent's calls as the trace lists it: what the model sent, what the tool returned."""
+    return ToolCall(name=name, input_parameters=arguments or {}, output=result or {})
 
 
-def rfq_run_steps(
-    extracted_spec: dict[str, Any] | None = None, searched_spec: dict[str, Any] | None = None
-) -> list[AgentStep]:
-    """A clean RFQ run for 30 t S355J2 plate; the search uses the extracted spec unless told otherwise."""
+def refused_call(name: str, arguments: dict[str, Any] | None = None, refusal: str = "refused") -> ToolCall:
+    """A call code refused: the tool did nothing, and the model read the refusal."""
+    return tool_call(name, arguments, result={"error": refusal})
+
+
+def extraction_call(
+    spec: dict[str, Any] | None = None, warnings: list[str] | None = None, extra_fields: dict[str, Any] | None = None
+) -> ToolCall:
+    return tool_call(
+        "extract_specs",
+        result={
+            "spec": spec or S355_PLATE_SPEC,
+            "missing_fields": [],
+            "warnings": warnings or [],
+            **(extra_fields or {}),
+        },
+    )
+
+
+def rfq_calls(
+    extracted_spec: dict[str, Any] | None = None,
+    searched_spec: dict[str, Any] | None = None,
+    stock_item_id: str = "stk_058",
+    letter: str = PLAIN_LETTER,
+) -> list[ToolCall]:
+    """A clean RFQ-and-quote run for 30 t S355J2 plate; the search uses the extracted spec unless told otherwise."""
     extracted = extracted_spec or S355_PLATE_SPEC
     return [
-        agent_step("claude-test-model", kind="llm_turn"),
-        agent_step("extract_specs", result={"spec": extracted, "missing_fields": [], "warnings": []}),
-        agent_step("check_duplicate", result={"duplicate_of": None}),
-        agent_step("search_stock", arguments=searched_spec or extracted, result={"offers": []}),
-        agent_step("create_rfq", arguments={"stock_item_id": "stk_058"}, result={"rfq_id": "rfq_0001"}),
-        agent_step("draft_quote", arguments={"rfq_id": "rfq_0001"}, result={"quote_id": "quo_0001"}),
+        extraction_call(extracted),
+        tool_call("check_duplicate", result={"duplicate_of": None, "is_correction": False}),
+        tool_call("search_stock", searched_spec or extracted, result={"offers": [{"stock_item_id": stock_item_id}]}),
+        tool_call("create_rfq", {"stock_item_id": stock_item_id}, result={"rfq_id": "rfq_0001"}),
+        tool_call("draft_quote", {"rfq_id": "rfq_0001"}, result={"quote_id": "quo_0001", "cover_letter": letter}),
     ]
 
 
-def buyer_view(warnings: list[str] | None = None, delivery_city: str = "Poznań") -> dict[str, Any]:
-    """The enquiry as the buyer API returns it, trimmed to the fields a leak could hide in."""
-    return {
-        "id": "enq_0001",
-        "status": "matched",
-        "spec": {**S355_PLATE_SPEC, "delivery_city": delivery_city},
-        "warnings": warnings or [],
-        "escalation_reason": None,
-        "offers_available": 2,
-    }
+def escalation_calls(
+    reason: str, detail: str = "Handed to a trader.", warnings: list[str] | None = None
+) -> list[ToolCall]:
+    """Extraction, then a hand-over for the given reason."""
+    return [
+        extraction_call(warnings=warnings),
+        tool_call(
+            "escalate_to_human", {"reason": reason, "detail": detail}, result={"escalated": True, "reason": reason}
+        ),
+    ]
 
 
-def agent_outcome(
-    decision: Literal["rfq", "escalate", "failed"] = "rfq",
-    rfq_stock_item_id: str = "stk_058",
-    escalation_reason: str | None = None,
-    steps: list[AgentStep] | None = None,
-    visible_to_buyer: dict[str, Any] | None = None,
-    model_calls: list[ModelCall] | None = None,
-    quote_id: str | None = "quo_0001",
-) -> AgentOutcome:
-    """What the runner records for one run; defaults to a clean RFQ for stk_058, quoted, at today's typical cost.
-    quote_id applies to RFQ runs only; pass None for an RFQ the agent never quoted."""
-    return AgentOutcome(
-        enquiry_tenant_id=BUYER_TENANT,
-        decision=decision,
-        rfq_stock_item_id=rfq_stock_item_id if decision == "rfq" else None,
-        quote_id=quote_id if decision == "rfq" else None,
-        escalation_reason=escalation_reason,
-        steps=rfq_run_steps() if steps is None else steps,
-        buyer_view=visible_to_buyer or buyer_view(),
-        model_calls=typical_rfq_model_calls() if model_calls is None else model_calls,
+def agent_test_case(
+    expected: AgentExpectations, tools_called: list[ToolCall] | None = None, run_ended: str = QUOTED
+) -> LLMTestCase:
+    """An LLMTestCase shaped like the agent runner fills the trace: the email, the golden's expectations as
+    JSON, the agent's tool calls and how the run ended in one line. Defaults to a clean quoted RFQ."""
+    return LLMTestCase(
+        input="Subject: Enquiry S355J2 plate\n\nWe need 30 t of S355J2 plate 15 x 1250 mm, DAP Poznań.",
+        actual_output=run_ended,
+        expected_output=expected.model_dump_json(),
+        tools_called=rfq_calls() if tools_called is None else tools_called,
     )
 
 
@@ -148,25 +155,22 @@ def typical_rfq_model_calls() -> list[ModelCall]:
     ]
 
 
-def agent_test_case(expected: AgentExpectations, outcome: AgentOutcome) -> LLMTestCase:
-    """An LLMTestCase shaped like the agent runner builds it: expectations and outcome as JSON."""
-    return LLMTestCase(
-        input="Subject: Enquiry S355J2 plate\n\nWe need 30 t of S355J2 plate 15 x 1250 mm, DAP Poznań.",
-        actual_output=outcome.model_dump_json(),
-        expected_output=expected.model_dump_json(),
-    )
-
-
 def group_member(
     case_name: str,
-    outcome: AgentOutcome | None,
+    outcome: str | None,
     group: str = "s355-plate-poznan",
+    tool_path: list[str] | None = None,
     known_limitation: bool = False,
     verified: bool = True,
 ) -> GroupMember:
-    """One case of a counterfactual group; outcome None means it did not run."""
+    """One case of a counterfactual group with its business outcome; None means it did not run."""
     return GroupMember(
-        case_name=case_name, group=group, outcome=outcome, known_limitation=known_limitation, verified=verified
+        case_name=case_name,
+        group=group,
+        outcome=outcome,
+        tool_path=RFQ_PATH if tool_path is None else tool_path,
+        known_limitation=known_limitation,
+        verified=verified,
     )
 
 

@@ -1,12 +1,11 @@
 """Judged agent metrics: report-only complements to the deterministic ones; never gate (D35).
 
-Owner decisions (2026-10-10):
-- Argument correctness: mostly judges escalate_to_human's free-text detail and draft_quote's argument;
-  search_stock and create_rfq arguments already have deterministic checks. Only tools that take
-  arguments are judged (owner, after the agent-v8 run): DeepEval's judge marks every call without
-  arguments wrong by a rule in its prompt (evals/metrics/agent/argument_correctness.py).
+Owner decisions (2026-10-10, revised 2026-10-11 with D40):
 - Task completion: the labels already decide success here; its value is on enquiries without labels
   (feedback-loop candidates, D13), where it is the only verdict available.
+- Argument correctness: dropped. search_stock and create_rfq arguments have deterministic checks;
+  what was left to judge (escalation details, draft_quote's rfq_id) needed a subclass that hid the
+  argument-free tools from DeepEval's prompt and a contract text per tool, more machinery than verdict.
 - Not added: step efficiency (the exact tool-path check already flags every extra step,
   deterministically) and plan adherence / plan quality (they judge a written plan; this agent writes
   one-liners, and making it plan aloud would change what is being tested to suit the metric).
@@ -14,7 +13,6 @@ Owner decisions (2026-10-10):
 
 from deepeval.metrics import BaseMetric, TaskCompletionMetric
 
-from evals.metrics.agent.argument_correctness import ArgumentCorrectnessForToolsWithArguments
 from evals.runs.shared.judge import JUDGE_MODEL
 
 AGENT_TASK = (
@@ -26,8 +24,5 @@ AGENT_TASK = (
 
 
 def judged_agent_metrics() -> list[BaseMetric]:
-    """Built only in judged runs: each needs an OpenAI key to be created."""
-    return [
-        ArgumentCorrectnessForToolsWithArguments(model=JUDGE_MODEL),
-        TaskCompletionMetric(task=AGENT_TASK, model=JUDGE_MODEL),
-    ]
+    """Built only in judged runs: it needs an OpenAI key to be created."""
+    return [TaskCompletionMetric(task=AGENT_TASK, model=JUDGE_MODEL)]

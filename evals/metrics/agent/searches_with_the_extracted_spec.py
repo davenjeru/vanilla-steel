@@ -1,10 +1,10 @@
 from typing import Any
 
 from deepeval.metrics import BaseMetric
-from deepeval.test_case import LLMTestCase
+from deepeval.test_case import LLMTestCase, ToolCall
 from pydantic_core import PydanticUndefined
 
-from evals.metrics.agent.agent_outcome import AgentStep, read_agent_case
+from evals.metrics.agent.agent_test_case import arguments_of, result_of, tool_calls
 from steel.agent.tools import SearchStockArguments
 
 SEARCH_FIELDS = list(SearchStockArguments.model_fields)
@@ -31,12 +31,12 @@ class SearchesWithTheExtractedSpec(BaseMetric):
         return "Searches with the extracted spec"
 
     def measure(self, test_case: LLMTestCase, *args: Any, **kwargs: Any) -> float:
-        tool_calls = read_agent_case(test_case).actual.tool_calls()
-        searches = [step for step in tool_calls if step.name == "search_stock"]
+        calls = tool_calls(test_case)
+        searches = [call for call in calls if call.name == "search_stock"]
         drift = [
             difference
             for search in searches
-            for difference in _differences(_spec_extracted_before(search, tool_calls), search.arguments)
+            for difference in _differences(_spec_extracted_before(search, calls), arguments_of(search))
         ]
         self.success = not drift
         self.score = 1.0 if self.success else 0.0
@@ -50,14 +50,14 @@ class SearchesWithTheExtractedSpec(BaseMetric):
         return bool(self.success)
 
 
-def _spec_extracted_before(search: AgentStep, tool_calls: list[AgentStep]) -> dict[str, Any]:
+def _spec_extracted_before(search: ToolCall, calls: list[ToolCall]) -> dict[str, Any]:
     """The spec from the latest extract_specs call before this search; empty if there was none."""
     extracted: dict[str, Any] = {}
-    for step in tool_calls:
-        if step is search:
+    for call in calls:
+        if call is search:
             break
-        if step.name == "extract_specs" and "spec" in step.result:
-            extracted = step.result["spec"]
+        if call.name == "extract_specs" and "spec" in result_of(call):
+            extracted = result_of(call)["spec"]
     return extracted
 
 

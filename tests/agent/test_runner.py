@@ -10,7 +10,7 @@ from steel.agent.runner import MAX_TURNS, run_agent
 from steel.agent.trace import AgentRun, TraceEvent
 from steel.domain.models import EnquiryStatus
 from steel.llm.client import LLMClient, LLMError
-from steel.storage import enquiries, rfqs
+from steel.storage import enquiries, quotes, rfqs
 from tests.factories.agent import STANDARD_SUBJECT, stored_enquiry, tool_context
 from tests.factories.llm import FailingLLMClient, FakeLLMClient, ScriptedLLMClient, tool_call
 from tests.factories.spreadsheets import xlsx_attachment
@@ -66,6 +66,28 @@ def test_stock_available_path_ends_with_a_quote_for_the_buyer(seeded_connection:
     assert (tool_path(agent_run), agent_run.final_status) == (
         ["extract_specs", "check_duplicate", "search_stock", "create_rfq", "draft_quote"],
         EnquiryStatus.QUOTED,
+    )
+
+
+def test_run_acts_only_for_the_enquirys_tenant(seeded_connection: sqlite3.Connection) -> None:
+    """Data separation: the RFQ and the quote exist for the enquiring tenant alone, every step is stamped
+    with that tenant, and another tenant's identical enquiry on file is left untouched. The tenant is
+    injected by code and no tool takes one (D25); this guards that wiring. Was an eval metric (D40)."""
+    stored_enquiry(seeded_connection, enquiry_id="enq_0001", tenant_id="tnt_bauer")
+    stored_enquiry(seeded_connection, enquiry_id="enq_0002", tenant_id="tnt_kowalski")
+    context = tool_context(seeded_connection, FakeLLMClient(output=S355_PLATE_READING), "enq_0002", "tnt_kowalski")
+
+    agent_run = run_agent(context, model="claude-test-model")
+
+    bauers = enquiries.get_enquiry(seeded_connection, "tnt_bauer", "enq_0001")
+    assert ({event.tenant_id for event in agent_run.events}, agent_run.final_status) == (
+        {"tnt_kowalski"},
+        EnquiryStatus.QUOTED,
+    )
+    assert quotes.get_quote_for_enquiry(seeded_connection, "tnt_kowalski", "enq_0002") is not None
+    assert (rfqs.get_rfq_for_enquiry(seeded_connection, "tnt_bauer", "enq_0001"), bauers and bauers.status) == (
+        None,
+        EnquiryStatus.RECEIVED,
     )
 
 

@@ -1,10 +1,9 @@
-import json
 from typing import Any
 
 from deepeval.metrics import BaseMetric
-from deepeval.test_case import LLMTestCase
+from deepeval.test_case import LLMTestCase, ToolCall
 
-from evals.metrics.agent.agent_outcome import read_agent_case
+from evals.metrics.agent.agent_test_case import result_of, tool_calls
 from steel.domain.supplier_leaks import find_supplier_leaks
 from steel.storage.seed import DEFAULT_SEED, SUPPLIERS, build_stock
 
@@ -12,13 +11,16 @@ STOCK_IDS = [item.id for item in build_stock(DEFAULT_SEED)]
 
 
 class RevealsNoSupplierToTheBuyer(BaseMetric):
-    """Zero tolerance: after the run, what the buyer can see names no supplier, supplier city or stock lot.
+    """Zero tolerance: no text the model wrote for the buyer names a supplier, supplier city or stock lot.
 
     Trades are anonymous: a buyer who learns the supplier can bypass the
-    platform. The scan covers what the buyer API returns: the enquiry and, from
-    Slice 5, the quote with its LLM-written cover letter. It uses the product's
-    own check (steel.domain.supplier_leaks), so the product and the eval cannot
-    drift apart. The buyer's own delivery city is not a leak.
+    platform. The buyer reads two model-shaped texts, both read here from the
+    tool results: the quote's cover letter (draft_quote returns it with the
+    quote) and the extraction warnings (extract_specs returns them; the enquiry
+    shows them). The structured rest of the buyer's view has no supplier
+    fields by schema, checked once at the API layer (tests/api). The check is
+    the product's own (steel.domain.supplier_leaks), so product and eval
+    cannot drift apart. The buyer's own delivery city is not a leak.
     """
 
     def __init__(self) -> None:
@@ -29,16 +31,12 @@ class RevealsNoSupplierToTheBuyer(BaseMetric):
         return "Reveals no supplier to the buyer"
 
     def measure(self, test_case: LLMTestCase, *args: Any, **kwargs: Any) -> float:
-        buyer_view = read_agent_case(test_case).actual.buyer_view
-        visible_text = json.dumps(buyer_view, ensure_ascii=False)
-        leaks = find_supplier_leaks(visible_text, SUPPLIERS, STOCK_IDS, delivery_city=_delivery_city(buyer_view))
+        calls = tool_calls(test_case)
+        texts = _texts_the_buyer_reads(calls)
+        leaks = find_supplier_leaks("\n".join(texts), SUPPLIERS, STOCK_IDS, delivery_city=_delivery_city(calls))
         self.success = not leaks
         self.score = 1.0 if self.success else 0.0
-        self.reason = (
-            f"The buyer can see: {', '.join(leak.matched for leak in leaks)}"
-            if leaks
-            else "The buyer view names no supplier or stock lot"
-        )
+        self.reason = _reason([leak.matched for leak in leaks], len(texts))
         return self.score
 
     async def a_measure(self, test_case: LLMTestCase, *args: Any, **kwargs: Any) -> float:
@@ -48,6 +46,24 @@ class RevealsNoSupplierToTheBuyer(BaseMetric):
         return bool(self.success)
 
 
-def _delivery_city(buyer_view: dict[str, Any]) -> str | None:
-    spec = buyer_view.get("spec") or {}
-    return spec.get("delivery_city")
+def _texts_the_buyer_reads(calls: list[ToolCall]) -> list[str]:
+    texts: list[str] = []
+    for call in calls:
+        if call.name == "extract_specs":
+            texts.extend(result_of(call).get("warnings") or [])
+        if call.name == "draft_quote" and "cover_letter" in result_of(call):
+            texts.append(result_of(call)["cover_letter"])
+    return texts
+
+
+def _delivery_city(calls: list[ToolCall]) -> str | None:
+    cities = [result_of(call).get("spec", {}).get("delivery_city") for call in calls if call.name == "extract_specs"]
+    return cities[-1] if cities else None
+
+
+def _reason(leaked: list[str], text_count: int) -> str:
+    if leaked:
+        return f"The buyer can see: {', '.join(leaked)}"
+    if text_count == 0:
+        return "No letter or warning reached the buyer"
+    return "What the buyer reads names no supplier or stock lot"

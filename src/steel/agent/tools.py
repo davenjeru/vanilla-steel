@@ -297,6 +297,8 @@ def draft_quote(context: ToolContext, arguments: dict[str, Any]) -> dict[str, An
 
     Prices are deterministic (D5); only the letter is written by a model, and code scans it before it is
     stored, so a buyer never sees a supplier (D20). One quote per enquiry, enforced by the database.
+    The letter is returned with the quote's ID: it is the only model-written text a buyer reads, so the
+    tool's result shows it where the run is reviewed (D40).
     """
     rfq = _rfq_to_quote(context, _validated(DraftQuoteArguments, arguments).rfq_id)
     enquiry = context.load_enquiry()
@@ -317,7 +319,7 @@ def draft_quote(context: ToolContext, arguments: dict[str, Any]) -> dict[str, An
     quotes.insert_quote(context.connection, context.tenant_id, quote)
     history = advance(enquiry.status_history, EnquiryStatus.QUOTED, context.clock())
     context.save_enquiry(enquiry.model_copy(update={"status_history": history}))
-    return {"quote_id": quote.id}
+    return {"quote_id": quote.id, "cover_letter": quote.cover_letter}
 
 
 def _rfq_to_quote(context: ToolContext, rfq_id: str) -> Rfq:

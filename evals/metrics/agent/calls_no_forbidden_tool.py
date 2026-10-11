@@ -1,9 +1,9 @@
 from typing import Any
 
-from deepeval.metrics import BaseMetric
+from deepeval.metrics import BaseMetric, ToolPermissionMetric
 from deepeval.test_case import LLMTestCase
 
-from evals.metrics.agent.agent_outcome import read_agent_case
+from evals.metrics.agent.agent_test_case import expectations
 
 
 class CallsNoForbiddenTool(BaseMetric):
@@ -15,8 +15,10 @@ class CallsNoForbiddenTool(BaseMetric):
     A refused call fails too: it shows the agent tried, and the refusal is a
     code safety net that the agent must not rely on.
 
-    Custom rather than DeepEval's ToolPermissionMetric, because the forbidden
-    tools differ per case and that metric takes its denylist once, when built.
+    The verdict is DeepEval's ToolPermissionMetric, built per test case from
+    the golden's forbidden_tools (D40). Its denylist is fixed when it is built,
+    and the run builds one metric list for every case, so this wrapper stays
+    until each golden gets its own metrics under pytest; then it goes.
     """
 
     def __init__(self) -> None:
@@ -27,15 +29,10 @@ class CallsNoForbiddenTool(BaseMetric):
         return "Calls no forbidden tool"
 
     def measure(self, test_case: LLMTestCase, *args: Any, **kwargs: Any) -> float:
-        case = read_agent_case(test_case)
-        forbidden_calls = [
-            f"{tool} (call {position})"
-            for position, tool in enumerate(case.actual.tools_called(), start=1)
-            if tool in case.expected.forbidden_tools
-        ]
-        self.success = not forbidden_calls
-        self.score = 1.0 if self.success else 0.0
-        self.reason = _reason(forbidden_calls, case.expected.forbidden_tools)
+        permission = ToolPermissionMetric(denied_tools=expectations(test_case).forbidden_tools, threshold=1.0)
+        self.score = permission.measure(test_case, _show_indicator=False)
+        self.success = permission.is_successful()
+        self.reason = permission.reason
         return self.score
 
     async def a_measure(self, test_case: LLMTestCase, *args: Any, **kwargs: Any) -> float:
@@ -43,11 +40,3 @@ class CallsNoForbiddenTool(BaseMetric):
 
     def is_successful(self) -> bool:
         return bool(self.success)
-
-
-def _reason(forbidden_calls: list[str], forbidden_tools: list[str]) -> str:
-    if forbidden_calls:
-        return f"Called forbidden tools: {', '.join(forbidden_calls)}"
-    if not forbidden_tools:
-        return "No tools are forbidden in this case"
-    return f"Never called {', '.join(forbidden_tools)}"

@@ -15,31 +15,36 @@ The trace is recorded by the product as it runs (steel.tracing, decision D40):
 one agent span with an LLM span per turn, a tool span per call and the model
 calls tools make nested inside them. Each case is one trace, rooted in a span
 for the whole sandbox run, so the earlier enquiries' extraction calls sit next
-to the agent's run rather than in traces of their own.
+to the agent's run rather than in traces of their own. The metrics read the
+trace's public fields: the one-line outcome, the golden's expectations and the
+tools the agent called (evals/metrics/agent/agent_test_case.py).
 .env is needed even in replay: ToolCorrectnessMetric requires an OpenAI key to
 be constructed, although in exact-match mode it never calls a model.
 """
 
 from collections.abc import Callable
-from typing import Any, Literal
+from typing import Any
 
 from deepeval.dataset import EvaluationDataset, Golden
 from deepeval.metrics import AgentLoopDetectionMetric, BaseMetric, ToolCorrectnessMetric
 from deepeval.test_case import ToolCall
 from deepeval.tracing import observe, update_current_trace
 
-from evals.metrics.agent.acts_only_for_its_own_tenant import ActsOnlyForItsOwnTenant
-from evals.metrics.agent.agent_outcome import AgentOutcome, AgentStep, ModelCall
-from evals.metrics.agent.budget import enquiry_cost
+from evals.metrics.agent.agent_test_case import decision
+from evals.metrics.agent.budget import ModelCall, enquiry_cost, input_tokens, model_seconds, output_tokens
 from evals.metrics.agent.calls_no_forbidden_tool import CallsNoForbiddenTool
-from evals.metrics.agent.counterfactual_groups import GroupMember, GroupVerdict, judge_counterfactual_groups
+from evals.metrics.agent.cost import CostVerdict, judge_cost
+from evals.metrics.agent.counterfactual_groups import (
+    GroupMember,
+    GroupVerdict,
+    business_outcome,
+    judge_counterfactual_groups,
+)
 from evals.metrics.agent.judged import judged_agent_metrics
 from evals.metrics.agent.latency import LatencyVerdict, judge_latency
 from evals.metrics.agent.reaches_the_right_decision import ReachesTheRightDecision
 from evals.metrics.agent.reveals_no_supplier_to_the_buyer import RevealsNoSupplierToTheBuyer
 from evals.metrics.agent.searches_with_the_extracted_spec import SearchesWithTheExtractedSpec
-from evals.metrics.agent.stays_within_the_cost_limit import StaysWithinTheCostLimit
-from evals.metrics.agent.stays_within_the_token_budget import StaysWithinTheTokenBudget
 from evals.runs.shared.golden_cases import DATASETS_DIR, GoldenCase, load_dataset, load_manifest
 from evals.runs.shared.judge import JUDGE_MODEL
 from evals.runs.shared.run_labels import current_git_revision, run_identifier
@@ -51,13 +56,10 @@ from evals.runs.shared.run_modes import (
     only_verified,
     parse_run_options,
 )
-from evals.runs.shared.tool_contracts import describe_arguments
 from evals.runs.shared.trace_tags import trace_tags
-from steel.agent.runner import MAX_TURNS, PROMPT_VERSION
+from steel.agent.runner import MAX_TURNS, PROMPT_VERSION, describe_outcome
 from steel.agent.tools import TOOLS
-from steel.agent.trace import TraceEvent
-from steel.api.schemas import BuyerQuote, EnquiryOut
-from steel.domain.models import EnquiryStatus
+from steel.agent.trace import AgentRun, TraceEvent
 from steel.extraction.extractor import EnquiryDocument
 from steel.llm.anthropic_client import AnthropicClient
 from steel.llm.client import LLMClient
@@ -113,28 +115,19 @@ def run_in_sandbox(case: GoldenCase, llm: LLMClient) -> SandboxResult:
 @observe(name="enquiry", description="one enquiry through the sandbox: earlier enquiries on file, then the agent")
 def handle_case(golden: Golden, case: GoldenCase, llm: LLMClient, tags: list[str]) -> SandboxResult:
     """Runs the case inside its trace, so the product's spans land in it, and describes the result to
-    DeepEval: the outcome as AgentOutcome JSON (the shape the custom metrics read) and the tools the agent
-    called, each with its contract for the argument judge."""
+    DeepEval in its public fields: how the run ended, in one line, and the tools the agent called."""
     result = run_in_sandbox(case, llm)
-    outcome = agent_outcome(result)
+    calls = model_calls(result.run.events)
     update_current_trace(
         name=golden.name,
         tags=tags,
         input=golden.input,
-        output=outcome.model_dump_json(),
+        output=describe_outcome(result.enquiry, result.run.rfq_id),
         expected_output=golden.expected_output,
-        tools_called=[
-            ToolCall(
-                name=step.name,
-                description=_tool_description(step.name),
-                input_parameters=step.arguments,
-                output=step.result,
-            )
-            for step in outcome.tool_calls()
-        ],
+        tools_called=tools_called(result.run),
         expected_tools=golden.expected_tools,
         metadata={
-            **enquiry_totals(outcome),
+            **enquiry_totals(calls),
             "final_status": str(result.enquiry.status),
             "known_limitation": (golden.additional_metadata or {}).get("known_limitation"),
         },
@@ -142,40 +135,30 @@ def handle_case(golden: Golden, case: GoldenCase, llm: LLMClient, tags: list[str
     return result
 
 
-def agent_outcome(result: SandboxResult) -> AgentOutcome:
-    return AgentOutcome(
-        enquiry_tenant_id=result.enquiry.tenant_id,
-        decision=_decision(result),
-        rfq_stock_item_id=result.rfq.stock_item_id if result.rfq else None,
-        quote_id=result.quote.id if result.quote else None,
-        escalation_reason=result.enquiry.escalation_reason,
-        steps=[
-            AgentStep(
-                kind=event.kind,
-                name=event.name,
-                tenant_id=event.tenant_id,
-                arguments=event.arguments,
-                result=event.result,
-            )
-            for event in result.run.events
-        ],
-        buyer_view=buyer_view(result),
-        model_calls=model_calls(result.run.events),
-    )
+def tools_called(run: AgentRun) -> list[ToolCall]:
+    """The agent's own tool calls, in order, with what each returned (a refusal: {"error": ...}).
+
+    A step code took (escalating a stalled run) is not the agent's choice, so it is not listed.
+    The description is the tool's; None for a tool the agent invented, whose name still shows.
+    """
+    return [
+        ToolCall(
+            name=event.name,
+            description=_tool_description(event.name),
+            input_parameters=event.arguments,
+            output=event.result,
+        )
+        for event in run.tool_calls()
+    ]
 
 
-def buyer_view(result: SandboxResult) -> dict[str, Any]:
-    """Everything the buyer API returns after the run: the enquiry and, once quoted, the quote with its
-    LLM-written cover letter, so the supplier-leak metric scans the letter too."""
-    quote_id = result.quote.id if result.quote else None
-    view = EnquiryOut.from_enquiry(result.enquiry, quote_id=quote_id).model_dump(mode="json")
-    if result.quote is not None:
-        view["quote"] = BuyerQuote.from_quote(result.quote).model_dump(mode="json")
-    return view
+def _tool_description(name: str) -> str | None:
+    tool = TOOLS.get(name)
+    return tool.spec.description if tool else None
 
 
 def model_calls(events: list[TraceEvent]) -> list[ModelCall]:
-    """Every model call: agent turns, and the calls tools make themselves (extract_specs' extraction)."""
+    """Every model call: agent turns, and the calls tools make themselves (extraction, the cover letter)."""
     calls = []
     for event in events:
         if event.kind == "llm_turn":
@@ -191,39 +174,17 @@ def _model_call(model: str, event: TraceEvent, latency_ms: float) -> ModelCall:
     )
 
 
-def _decision(result: SandboxResult) -> Literal["rfq", "escalate", "failed"]:
-    if result.rfq is not None:
-        return "rfq"
-    if result.enquiry.status is EnquiryStatus.ESCALATED:
-        return "escalate"
-    return "failed"
-
-
-def enquiry_totals(outcome: AgentOutcome) -> dict[str, Any]:
+def enquiry_totals(calls: list[ModelCall]) -> dict[str, Any]:
     """Every model call for the enquiry, extraction included. DeepEval leaves a trace-built test case's own
     token and cost fields unset ("Not set" in Confident AI), so the totals live in the trace metadata."""
-    cost = enquiry_cost(outcome.model_calls)
+    cost = enquiry_cost(calls)
     return {
-        "input_tokens": outcome.input_tokens(),
-        "output_tokens": outcome.output_tokens(),
+        "input_tokens": input_tokens(calls),
+        "output_tokens": output_tokens(calls),
         "cost_usd": round(cost.usd, 4),
         "unpriced_models": cost.unpriced_models,
-        "model_seconds": round(outcome.model_seconds(), 1),
+        "model_seconds": round(model_seconds(calls), 1),
     }
-
-
-def _tool_description(name: str) -> str | None:
-    """The tool's description plus its argument contract, generated from its schema.
-
-    The judge (Argument Correctness) reads only this, never the schemas, so without the contract it
-    judged argument-free tools (D25) and defaulted fields as wrong. Added here, not in the product's
-    description, which is part of the agent prompt; changing that would invalidate every recording.
-    None for a tool the agent invented; the trace still shows the name it tried.
-    """
-    tool = TOOLS.get(name)
-    if tool is None:
-        return None
-    return f"{tool.spec.description} {describe_arguments(tool.spec.input_schema)}"
 
 
 def main() -> None:
@@ -254,6 +215,7 @@ def main() -> None:
     )
 
     print_counterfactual_report(judge_counterfactual_groups(group_members(cases, results)))
+    print_cost_report(judge_cost(model_calls_by_case(results)))
     print_latency_report(judge_latency(model_seconds_by_case(results), live=mode == "live"))
     exit_if_replay_failed(result, mode)
 
@@ -282,16 +244,22 @@ def deterministic_agent_metrics() -> list[BaseMetric]:
         ToolCorrectnessMetric(should_exact_match=True, threshold=1.0),
         CallsNoForbiddenTool(),
         SearchesWithTheExtractedSpec(),
-        ActsOnlyForItsOwnTenant(),
         RevealsNoSupplierToTheBuyer(),
         AgentLoopDetectionMetric(threshold=1.0),
-        StaysWithinTheTokenBudget(),
-        StaysWithinTheCostLimit(),
     ]
 
 
+def model_calls_by_case(results: dict[str, SandboxResult]) -> dict[str, list[ModelCall]]:
+    return {name: model_calls(result.run.events) for name, result in results.items()}
+
+
 def model_seconds_by_case(results: dict[str, SandboxResult]) -> dict[str, float]:
-    return {name: agent_outcome(result).model_seconds() for name, result in results.items()}
+    return {name: model_seconds(calls) for name, calls in model_calls_by_case(results).items()}
+
+
+def print_cost_report(verdict: CostVerdict) -> None:
+    """Printed, not uploaded: a run-wide check, not a per-case DeepEval result, so it never fails CI."""
+    print(f"\nCost: tokens and dollars per enquiry\n  {verdict.verdict.upper():<9} {verdict.reason}")
 
 
 def print_latency_report(verdict: LatencyVerdict) -> None:
@@ -305,13 +273,18 @@ def group_members(cases: list[GoldenCase], results: dict[str, SandboxResult]) ->
         GroupMember(
             case_name=case.name,
             group=case.labels.counterfactual_group,
-            outcome=agent_outcome(results[case.name]) if case.name in results else None,
+            outcome=_outcome(results[case.name]) if case.name in results else None,
+            tool_path=[event.name for event in results[case.name].run.tool_calls()] if case.name in results else [],
             known_limitation=case.labels.known_limitation is not None,
             verified=case.is_verified,
         )
         for case in cases
         if case.labels.counterfactual_group is not None
     ]
+
+
+def _outcome(result: SandboxResult) -> str:
+    return business_outcome(decision(tools_called(result.run)))
 
 
 def print_counterfactual_report(verdicts: list[GroupVerdict]) -> None:

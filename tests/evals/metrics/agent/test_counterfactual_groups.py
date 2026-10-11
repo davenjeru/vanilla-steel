@@ -1,14 +1,21 @@
 """Counterfactual groups: the same order must get the same outcome, whoever sends it and however it is written."""
 
-from evals.metrics.agent.counterfactual_groups import judge_counterfactual_groups, judge_group
-from tests.factories.eval_test_cases import agent_outcome, agent_step, group_member
+from evals.metrics.agent.agent_test_case import decision
+from evals.metrics.agent.counterfactual_groups import business_outcome, judge_counterfactual_groups, judge_group
+from tests.factories.eval_test_cases import RFQ_PATH, escalation_calls, group_member, rfq_calls, tool_call
 
-RFQ_FOR_STK_058 = agent_outcome("rfq", "stk_058")
-ESCALATED_MISSING_INFORMATION = agent_outcome(
-    "escalate",
-    escalation_reason="missing_information",
-    steps=[agent_step("extract_specs"), agent_step("escalate_to_human")],
-)
+RFQ_FOR_STK_058 = "rfq stk_058"
+ESCALATED_MISSING_INFORMATION = "escalate missing_information"
+
+
+def test_business_outcome_is_the_decision_with_its_lot_or_reason() -> None:
+    outcomes = [decision(rfq_calls()), decision(escalation_calls("missing_information")), decision([])]
+
+    assert [business_outcome(outcome) for outcome in outcomes] == [
+        RFQ_FOR_STK_058,
+        ESCALATED_MISSING_INFORMATION,
+        "no decision",
+    ]
 
 
 def test_group_where_everyone_gets_the_same_outcome_passes() -> None:
@@ -82,8 +89,8 @@ def test_group_with_a_single_member_is_uncertain() -> None:
 
 def test_different_tool_paths_to_the_same_outcome_pass_but_are_reported() -> None:
     """The customer is treated the same; the extra step is worth seeing, not failing."""
-    longer_path = agent_outcome("rfq", "stk_058", steps=[*RFQ_FOR_STK_058.steps, agent_step("search_stock")])
-    members = [group_member("english", RFQ_FOR_STK_058), group_member("polish", longer_path)]
+    longer_path = [*RFQ_PATH, tool_call("search_stock").name]
+    members = [group_member("english", RFQ_FOR_STK_058), group_member("polish", RFQ_FOR_STK_058, tool_path=longer_path)]
 
     verdict = judge_group("s355-plate-poznan", members)
 

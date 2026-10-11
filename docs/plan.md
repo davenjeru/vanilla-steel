@@ -176,18 +176,18 @@ judge-model metrics only where code cannot decide.
 | 2 | **Offers in the right order** (ranking) | Custom, deterministic | Expected offers appear in the expected order, by delivered cost | Business correctness |
 | 2 | **Finds every suitable offer** (completeness) | Custom, deterministic | Every expected offer appears and nothing else; catches lost sales | Business correctness |
 | 3 | Near-duplicate precision and recall | Custom, deterministic | **Done** (`evals/runs/duplicates.py`, `make eval-duplicates`). "Duplicate decision is correct" per labelled pair; precision and recall printed per run. Pairs: forwarded, reply quoting, reworded, translated, kilograms, correction (known limitation), new spreadsheet, other tenant, other tonnage, thickness, city, outside the window | Duplication |
-| 4 | `ToolPermissionMetric` | Built-in, deterministic | Only allowed tools called; prompt injection uses `denied_tools` | Data separation, business correctness |
+| 4 | `ToolPermissionMetric` | Built-in, deterministic | **Done** as "Calls no forbidden tool": built per case from the golden's `forbidden_tools` (its denylist is fixed when built), by a wrapper until the run is per-case pytest (D40) | Data separation, business correctness |
 | 4 | `ToolCorrectnessMetric` | Built-in | Right tools, order and arguments against `expected_tools`; escalation present when required | Business correctness |
 | 4 | `AgentLoopDetectionMetric` | Built-in, deterministic | No repeated or cyclic tool calls | Business correctness |
-| 4 | Tenant scope | Custom, deterministic, zero tolerance | Every trace event's tenant equals the enquiry's tenant | Data separation |
-| 4 | Cost and latency | Custom, deterministic | Tokens, cost and latency per enquiry within limits | Release criteria |
-| 4 | `ArgumentCorrectnessMetric` | Built-in, judge | Only where a deterministic argument check is impossible; only tools that take arguments are judged (D34) | Business correctness |
+| 4 | Tenant scope | Unit test | **Moved** (D40): `tests/agent/test_runner.py::test_run_acts_only_for_the_enquirys_tenant`; the eval metric only re-read a stamp code set, the test checks what the run created | Data separation |
+| 4 | Cost and latency | Custom, run-wide reports | **Done**, printed per run, never per case (D40): `evals/metrics/agent/cost.py` (tokens, dollars, unpriced models; same in replay) and `latency.py` (live only). Confident AI prices each LLM span itself | Release criteria |
+| 4 | `ArgumentCorrectnessMetric` | Built-in, judge | **Dropped** (D40): judging only tools with arguments (D34) needed a subclass and a contract text per tool; the arguments that matter have deterministic checks | Business correctness |
 | 4 | `StepEfficiencyMetric` | Built-in, judge | Prefer the deterministic alternative: tool calls <= expected path length | Business correctness |
 | 4 | `TaskCompletionMetric` | Built-in, judge | Overall verdict; a complement, not a gate | Business correctness |
 | 5 | Supplier leak check | Custom, deterministic, zero tolerance | Supplier names, IDs (sup_, stk_) or addresses in cover text. `PatternMatchMetric` passes on a match, so it cannot be used for this | Data separation |
 | 5 | `GEval` quote quality | Built-in, judge | Commercially sensible, professional, in the customer's language. **Pause here: owner chooses the judge model** | Business correctness |
 | 5 | `FaithfulnessMetric` / `HallucinationMetric` | Built-in, judge | Cover text matches the deterministic quote lines (no invented prices, dates, quantities) | Business correctness |
-| 5 | `PromptAlignmentMetric` | Built-in, judge | Cover text follows prompt instructions (validity period, no supplier names) | Business correctness |
+| 5 | `PromptAlignmentMetric` | Built-in, judge | **Dropped** with `NonAdviceMetric` (D40): both scored 1.0 on every letter; figures, supplier names and product words have deterministic checks | Business correctness |
 | 5 | `PIILeakageMetric` | Built-in, judge, secondary | Indirect leaks the deterministic check misses, e.g. "our partner mill in Linz" | Data separation |
 | 5 | `DAGMetric` | Built-in, judge, option | Decision-tree grading of the quote for more consistent scores than one G-Eval | Business correctness |
 | 6 | Judge calibration | Process | **Deferred (D35).** Judged metrics stay report-only, so the gate needs no calibration | All |

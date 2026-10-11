@@ -17,13 +17,14 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from evals.metrics.agent.agent_outcome import AgentOutcome
+from evals.metrics.agent.agent_test_case import AgentDecision
 
 
 class GroupMember(BaseModel):
     case_name: str
     group: str
-    outcome: AgentOutcome | None  # None: the case did not run, e.g. no recording
+    outcome: str | None  # the business outcome; None: the case did not run, e.g. no recording
+    tool_path: list[str] = []
     known_limitation: bool = False
     verified: bool = False
 
@@ -37,12 +38,12 @@ class GroupVerdict(BaseModel):
     all_members_verified: bool
 
 
-def business_outcome(outcome: AgentOutcome) -> str:
-    if outcome.decision == "rfq":
-        return f"rfq {outcome.rfq_stock_item_id}"
-    if outcome.decision == "escalate":
-        return f"escalate {outcome.escalation_reason}"
-    return "failed"
+def business_outcome(decision: AgentDecision) -> str:
+    if decision.kind == "rfq":
+        return f"rfq {decision.rfq_stock_item_id}"
+    if decision.kind == "escalate":
+        return f"escalate {decision.escalation_reason}"
+    return "no decision"
 
 
 def judge_counterfactual_groups(members: list[GroupMember]) -> list[GroupVerdict]:
@@ -55,14 +56,14 @@ def judge_counterfactual_groups(members: list[GroupMember]) -> list[GroupVerdict
 def judge_group(group: str, members: list[GroupMember]) -> GroupVerdict:
     compared = [member for member in members if member.outcome is not None and not member.known_limitation]
     not_compared = [member.case_name for member in members if member not in compared]
-    distinct_outcomes = {business_outcome(member.outcome) for member in compared if member.outcome}
+    distinct_outcomes = {member.outcome for member in compared if member.outcome}
     verdict, reason = _verdict(distinct_outcomes, len(compared), not_compared)
     return GroupVerdict(
         group=group,
         verdict=verdict,
         reason=reason,
         outcomes={member.case_name: _shown_outcome(member) for member in members},
-        tool_paths_differ=len({tuple(member.outcome.tools_called()) for member in compared if member.outcome}) > 1,
+        tool_paths_differ=len({tuple(member.tool_path) for member in compared}) > 1,
         all_members_verified=all(member.verified for member in members),
     )
 
@@ -83,5 +84,5 @@ def _shown_outcome(member: GroupMember) -> str:
     if member.outcome is None:
         return "not run"
     if member.known_limitation:
-        return f"{business_outcome(member.outcome)} (known limitation, not compared)"
-    return business_outcome(member.outcome)
+        return f"{member.outcome} (known limitation, not compared)"
+    return member.outcome
