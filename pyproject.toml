@@ -31,6 +31,8 @@ addopts = "--strict-markers"
 
 [tool.ruff]
 line-length = 120
+# Vendored DeepEval skill (pinned by hash in skills-lock.json): not our code, and reformatting it breaks the pin.
+extend-exclude = [".claude"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "ANN"]  # ANN: type hints on every signature (CLAUDE.md)
