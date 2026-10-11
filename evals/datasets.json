@@ -1,0 +1,28 @@
+{
+  "datasets": {
+    "agent": {
+      "10": {
+        "alias": "agent-v10",
+        "cases": 44
+      }
+    },
+    "duplicates": {
+      "2": {
+        "alias": "duplicates-v2",
+        "cases": 18
+      }
+    },
+    "extraction": {
+      "4": {
+        "alias": "extraction-v4",
+        "cases": 11
+      }
+    },
+    "quote_letter": {
+      "1": {
+        "alias": "quote_letter-v1",
+        "cases": 8
+      }
+    }
+  }
+}

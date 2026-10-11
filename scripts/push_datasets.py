@@ -9,12 +9,20 @@ the alias, finalized or queued, is left alone, so running this again sends only 
 """
 
 import argparse
+from pathlib import Path
 
 from deepeval.dataset import Golden
 from pydantic import BaseModel
 
-from evals.harness.datasets import ConfidentDatasets, DatasetStore, dataset_alias
-from evals.harness.golden_cases import DATASETS_DIR, GoldenCase, load_dataset, load_manifest
+from evals.harness.datasets import (
+    REGISTRY_PATH,
+    ConfidentDatasets,
+    DatasetRecord,
+    DatasetRegistry,
+    DatasetStore,
+    dataset_alias,
+)
+from evals.harness.golden_cases import DATASETS_DIR, REPO_ROOT, GoldenCase, load_dataset, load_manifest
 
 DATASETS = ["extraction", "duplicates", "agent", "quote_letter"]
 
@@ -30,6 +38,9 @@ class SyncReport(BaseModel):
             f"{self.alias}: {len(self.pushed)} pushed finalized, {len(self.queued)} queued for review, "
             f"{len(self.already_there)} already there"
         )
+
+    def cases_on_file(self) -> int:
+        return len(self.pushed) + len(self.queued) + len(self.already_there)
 
 
 def sync_dataset(alias: str, cases: list[GoldenCase], store: DatasetStore) -> SyncReport:
@@ -64,12 +75,22 @@ def chosen_datasets(description: str, arguments: list[str] | None = None) -> lis
     return parser.parse_args(arguments).datasets or list(DATASETS)
 
 
+def sync_and_record(dataset: str, dataset_dir: Path, store: DatasetStore, registry: DatasetRegistry) -> SyncReport:
+    """Push what the alias lacks, then record the version as pushed with every case on file (D47)."""
+    manifest = load_manifest(dataset_dir)
+    alias = dataset_alias(dataset, manifest)
+    report = sync_dataset(alias, load_dataset(dataset_dir), store)
+    registry.record(dataset, manifest.version, DatasetRecord(alias=alias, cases=report.cases_on_file()))
+    return report
+
+
 def main() -> None:
     store = ConfidentDatasets()
+    registry = DatasetRegistry.load()
     for dataset in chosen_datasets("Push golden datasets to Confident AI."):
-        dataset_dir = DATASETS_DIR / dataset
-        alias = dataset_alias(dataset, load_manifest(dataset_dir))
-        print(sync_dataset(alias, load_dataset(dataset_dir), store).describe())
+        print(sync_and_record(dataset, DATASETS_DIR / dataset, store, registry).describe())
+    registry.save()
+    print(f"Recorded in {REGISTRY_PATH.relative_to(REPO_ROOT)}; commit it with the datasets.")
 
 
 if __name__ == "__main__":

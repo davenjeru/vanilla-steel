@@ -45,9 +45,10 @@ tokens and agreed price, a tool span per call, a refusal as an errored span), th
   (a denylist per case), the stock search uses exactly the extracted spec, no supplier named to
   the buyer, no loop; for letters, only the quoted figures, no supplier, only products we sell.
   A failed case fails the run, in every mode.
-- **Judged metrics report.** Task completion and letter quality (G-Eval) are judged by
-  `gpt-6-sol` and are `flaky` in DeepEval's sense: scored and shown, never deciding a case. No
-  calibration is claimed for them.
+- **Judged metrics report.** Task completion, role violation and misuse on the agent; letter
+  quality (G-Eval), PII leakage, non-advice and toxicity on letters. All judged by `gpt-6-sol`
+  and `flaky` in DeepEval's sense: scored and shown, never deciding a case. No calibration is
+  claimed for them. The safety ones are read together with the trace tag `risk:security`.
 - **Run-wide reports print at the end.** Fairness across counterfactual groups (the same order in
   English, German and Polish must get the same outcome), cost per enquiry against the agreed
   limits, model latency (live only), and duplicate precision and recall.
@@ -65,9 +66,12 @@ Git is the source of truth. Confident AI holds copies for review and comparison:
 
 ```
 make push-prompts      # each prompt text once per version; evals/prompts.json records the commit
-make push-datasets     # one alias per manifest version (agent-v9); verified finalized, the rest queued
+make push-datasets     # one alias per manifest version (agent-v10); verified finalized, the rest queued
 make pull-verified     # a golden finalized on Confident AI marks its case verified in git
 ```
+
+`evals/prompts.json` and `evals/datasets.json` record what was pushed; `make check` fails when a
+prompt version, a manifest version or a new case was never pushed, and says which command to run.
 
 Nothing is pulled at run time. Every LLM span names the prompt it ran (alias, git version and,
 once pushed, the Prompt Studio commit), and the run's hyperparameters name the same.

@@ -28,11 +28,14 @@ F-numbers in `findings.md`.
 | Evals (`evals/test_*.py`) | `make eval-*` with keys from `.env`; the verified cases via the manual workflow | Each golden case through the real pipeline against Claude, deterministic metrics and judged metrics | Deterministic metrics yes: a failed case fails the run; judged metrics report only |
 | Run-wide reports | Printed at the end of an eval | Fairness across counterfactual groups, cost per enquiry, latency, duplicate precision and recall | No: printed, never per case |
 
-Model-based grading is used for exactly two things: whether the agent completed its task as a
-whole (`TaskCompletionMetric`) and whether a cover letter reads as a sensible commercial letter
-(G-Eval, with PII leakage as a second line). Both are DeepEval `flaky` metrics: scored and shown,
-never failing a case. Their judge (`gpt-6-sol`) accepts no temperature, so its verdicts vary; no
-calibration against human labels is claimed.
+Model-based grading is used for what code cannot read and never decides a case: whether the agent
+completed its task as a whole (`TaskCompletionMetric`), stayed in its role and inside steel
+procurement (`RoleViolationMetric`, `MisuseMetric`, the judged side of the prompt-injection cases,
+read with the trace tag `risk:security`); whether a cover letter reads as a sensible commercial
+letter (G-Eval), leaks no personal data, gives no legal, tax or customs advice and is not toxic.
+All are DeepEval `flaky` metrics: scored and shown, never failing a case. Their judge
+(`gpt-6-sol`) accepts no temperature, so its verdicts vary; no calibration against human labels
+is claimed.
 
 ## Datasets
 
