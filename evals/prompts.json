@@ -4,6 +4,10 @@
       "v4": {
         "commit_hash": "6fb714b",
         "text_sha256": "022d53b4bca48cf32efa6a618057fffe79fb531ace155d2e4be4d074c4f79e76"
+      },
+      "v5": {
+        "commit_hash": "2c75dc2",
+        "text_sha256": "39df2985a1d7bb8949bc07ef8f88655e59d710ab401905f287a228899ed7cafa"
       }
     },
     "extract_spec": {
