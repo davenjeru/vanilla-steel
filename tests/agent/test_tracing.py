@@ -226,3 +226,15 @@ def test_every_model_call_names_the_prompt_it_ran(rfq_payload: tuple[dict[str, A
         {"extract_spec", "agent", "quote_letter"},
         {("extract_spec", "v4"), ("agent", "v4"), ("quote_letter", "v2")},
     )
+
+
+def test_the_turn_that_answers_a_refusal_starts_after_it(
+    refused_search_payload: tuple[dict[str, Any], SandboxResult],
+) -> None:
+    """Regression (F-015): Confident AI keeps span times to the millisecond and orders siblings by start
+    time; a refusal took microseconds, so the next turn shared its millisecond and was listed before it."""
+    payload, _ = refused_search_payload
+
+    [search] = [span for span in payload["toolSpans"] if span["name"] == "search_stock"]
+    [answer] = [turn for turn in agent_turns(payload) if turn["input"].startswith("search_stock refused")]
+    assert search["startTime"] < answer["startTime"]

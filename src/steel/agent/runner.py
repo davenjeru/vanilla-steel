@@ -166,15 +166,28 @@ def _execute_tool(context: ToolContext, use: ToolUse) -> dict[str, Any]:
     """One tool span per call, named after the tool: exactly the arguments the model sent (often {}, by
     design: code supplies the tenant and the enquiry) and the result. A refusal raises, so the span is
     marked errored with the refusal as its message."""
-    set_span_input(use.input)
-    update_current_span(name=use.name, metadata={"tenant_id": context.tenant_id, "enquiry_id": context.enquiry_id})
-    tool = TOOLS.get(use.name)
-    if tool is None:
-        raise ToolError(f"unknown tool {use.name!r}")
-    update_tool_span(description=tool.spec.description)
-    result = tool.run(context, use.input)
-    set_span_output(result)
-    return result
+    started = time.perf_counter()
+    try:
+        set_span_input(use.input)
+        update_current_span(name=use.name, metadata={"tenant_id": context.tenant_id, "enquiry_id": context.enquiry_id})
+        tool = TOOLS.get(use.name)
+        if tool is None:
+            raise ToolError(f"unknown tool {use.name!r}")
+        update_tool_span(description=tool.spec.description)
+        result = tool.run(context, use.input)
+        set_span_output(result)
+        return result
+    finally:
+        _keep_the_span_a_millisecond_long(started)
+
+
+def _keep_the_span_a_millisecond_long(started: float) -> None:
+    """Confident AI keeps span times to the millisecond and orders siblings by start time. A refusal takes
+    microseconds, so its span and the agent turn that answered it started in the same millisecond and the
+    trace showed the turn before the call (F-015). A millisecond on every tool span keeps the order readable."""
+    remaining = 0.001 - (time.perf_counter() - started)
+    if remaining > 0:
+        time.sleep(remaining)
 
 
 def _readable_tool_results(tool_uses: list[ToolUse], tool_results: list[dict[str, Any]]) -> str:
