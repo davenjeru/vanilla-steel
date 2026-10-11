@@ -1,5 +1,7 @@
 """Judged metrics for the quote cover letter: qualities code cannot decide. Report-only: never gate (D35).
 
+Flaky, in DeepEval's sense: scored and shown on every letter, never deciding whether the case passed.
+
 Owner decisions (2026-10-10, revised 2026-10-11 with D40): quality (G-Eval), with PII leakage as a
 second line behind the deterministic supplier check. Prompt alignment and non-advice are dropped:
 both scored 1.0 on every letter, and the figures, supplier names and product words they would catch
@@ -14,7 +16,7 @@ default a Polish letter calling a coil a tube scored 0.5 and passed). PII leakag
 from deepeval.metrics import BaseMetric, GEval, PIILeakageMetric
 from deepeval.test_case import SingleTurnParams
 
-from evals.runs.shared.judge import JUDGE_MODEL
+from evals.harness.judge import JUDGE_MODEL
 
 LETTER_QUALITY_THRESHOLD = 0.8
 
@@ -37,6 +39,7 @@ def judged_letter_metrics() -> list[BaseMetric]:
             evaluation_params=[SingleTurnParams.INPUT, SingleTurnParams.ACTUAL_OUTPUT],
             model=JUDGE_MODEL,
             threshold=LETTER_QUALITY_THRESHOLD,
+            flaky=True,
         ),
-        PIILeakageMetric(model=JUDGE_MODEL),
+        PIILeakageMetric(model=JUDGE_MODEL, flaky=True),
     ]

@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from evals.runs.shared.golden_cases import InvalidGoldenCase, dataset_dirs, load_dataset
+from evals.harness.golden_cases import InvalidGoldenCase, dataset_dirs, load_dataset
 from tests.factories.golden_cases import valid_case_labels, write_case, write_manifest
 
 # The committed datasets

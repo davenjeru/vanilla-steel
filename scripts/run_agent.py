@@ -12,7 +12,7 @@ enquiries (for duplicate and data separation cases) and show the expected outcom
 import argparse
 import json
 
-from evals.runs.shared.golden_cases import DATASETS_DIR, GoldenCase, load_dataset
+from evals.harness.golden_cases import DATASETS_DIR, GoldenCase, load_dataset
 from steel.extraction.extractor import EnquiryDocument
 from steel.llm.anthropic_client import AnthropicClient
 from steel.llm.client import LLMClient

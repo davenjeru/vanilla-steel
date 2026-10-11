@@ -1,5 +1,8 @@
 """Judged agent metrics: report-only complements to the deterministic ones; never gate (D35).
 
+Flaky, in DeepEval's sense: scored and shown on every case, never deciding whether the case passed.
+The judge (gpt-6-sol) accepts no temperature, so its verdicts vary between runs.
+
 Owner decisions (2026-10-10, revised 2026-10-11 with D40):
 - Task completion: the labels already decide success here; its value is on enquiries without labels
   (feedback-loop candidates, D13), where it is the only verdict available.
@@ -13,7 +16,7 @@ Owner decisions (2026-10-10, revised 2026-10-11 with D40):
 
 from deepeval.metrics import BaseMetric, TaskCompletionMetric
 
-from evals.runs.shared.judge import JUDGE_MODEL
+from evals.harness.judge import JUDGE_MODEL
 
 AGENT_TASK = (
     "Handle a customer's steel enquiry for a trading platform: extract the specification, check it is not "
@@ -25,4 +28,4 @@ AGENT_TASK = (
 
 def judged_agent_metrics() -> list[BaseMetric]:
     """Built only in judged runs: it needs an OpenAI key to be created."""
-    return [TaskCompletionMetric(task=AGENT_TASK, model=JUDGE_MODEL)]
+    return [TaskCompletionMetric(task=AGENT_TASK, model=JUDGE_MODEL, flaky=True)]

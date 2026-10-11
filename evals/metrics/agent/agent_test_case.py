@@ -13,7 +13,7 @@ from typing import Any, Literal
 from deepeval.test_case import LLMTestCase, ToolCall
 from pydantic import BaseModel, ValidationError
 
-from evals.runs.shared.golden_cases import AgentExpectations
+from evals.harness.golden_cases import AgentExpectations
 
 
 def expectations(test_case: LLMTestCase) -> AgentExpectations:

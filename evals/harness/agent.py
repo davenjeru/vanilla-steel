@@ -1,38 +1,31 @@
-"""Run the agent eval and upload the run to Confident AI.
+"""The agent eval's harness: run one golden enquiry through the sandbox and describe it to DeepEval.
 
-Usage: uv run --env-file .env python -m evals.runs.agent [--live | --judge-recorded]
+Each case runs in the sandbox (fresh seed database, predictable IDs), with its earlier enquiries on
+file. The trace is recorded by the product as it runs (steel.tracing, decision D40): one agent span
+with an LLM span per turn, a tool span per call and the model calls tools make nested inside them.
+Each case is one trace, rooted in a span for the whole sandbox run, so the earlier enquiries'
+extraction calls sit next to the agent's run rather than in traces of their own. The metrics read
+the trace's public fields: the one-line outcome, the golden's expectations and the tools the agent
+called (evals/metrics/agent/agent_test_case.py). The cover letter is checked on its own LLM span
+(evals/harness/spans.py), so the agent eval covers what the letter eval covers for every quote.
 
-Each case runs in the sandbox (fresh seed database, predictable IDs), with its
-earlier enquiries on file. Replay is the default; --live calls Claude and
-records every answer to fixtures/agent/<case>/, so the run can be replayed later.
---live and --judge-recorded add the judged metrics (gpt-6-sol); see
-evals/runs/shared/run_modes.py.
-
-In replay, a case without a recording cannot run. It is listed by name and
-left out of the run: never scored as a pass or a fail it did not earn.
-
-The trace is recorded by the product as it runs (steel.tracing, decision D40):
-one agent span with an LLM span per turn, a tool span per call and the model
-calls tools make nested inside them. Each case is one trace, rooted in a span
-for the whole sandbox run, so the earlier enquiries' extraction calls sit next
-to the agent's run rather than in traces of their own. The metrics read the
-trace's public fields: the one-line outcome, the golden's expectations and the
-tools the agent called (evals/metrics/agent/agent_test_case.py).
-.env is needed even in replay: ToolCorrectnessMetric requires an OpenAI key to
-be constructed, although in exact-match mode it never calls a model.
+Replay is the default; live calls Claude and records every answer to fixtures/agent/<case>/, so
+the run can be replayed later. In replay, a case without a recording cannot run and is skipped by
+name: never scored as a pass or a fail it did not earn.
 """
 
-from collections.abc import Callable
 from typing import Any
 
-from deepeval.dataset import EvaluationDataset, Golden
-from deepeval.metrics import AgentLoopDetectionMetric, BaseMetric, ToolCorrectnessMetric
+from deepeval.dataset import Golden
+from deepeval.metrics import AgentLoopDetectionMetric, BaseMetric, ToolCorrectnessMetric, ToolPermissionMetric
 from deepeval.test_case import ToolCall
 from deepeval.tracing import observe, update_current_trace
 
+from evals.harness.golden_cases import GoldenCase
+from evals.harness.judge import JUDGE_MODEL
+from evals.harness.modes import Mode, is_judged
 from evals.metrics.agent.agent_test_case import decision
 from evals.metrics.agent.budget import ModelCall, enquiry_cost, input_tokens, model_seconds, output_tokens
-from evals.metrics.agent.calls_no_forbidden_tool import CallsNoForbiddenTool
 from evals.metrics.agent.cost import CostVerdict, judge_cost
 from evals.metrics.agent.counterfactual_groups import (
     GroupMember,
@@ -45,18 +38,6 @@ from evals.metrics.agent.latency import LatencyVerdict, judge_latency
 from evals.metrics.agent.reaches_the_right_decision import ReachesTheRightDecision
 from evals.metrics.agent.reveals_no_supplier_to_the_buyer import RevealsNoSupplierToTheBuyer
 from evals.metrics.agent.searches_with_the_extracted_spec import SearchesWithTheExtractedSpec
-from evals.runs.shared.golden_cases import DATASETS_DIR, GoldenCase, load_dataset, load_manifest
-from evals.runs.shared.judge import JUDGE_MODEL
-from evals.runs.shared.run_labels import current_git_revision, run_identifier
-from evals.runs.shared.run_modes import (
-    Mode,
-    evaluate_each,
-    exit_if_replay_failed,
-    is_judged,
-    only_verified,
-    parse_run_options,
-)
-from evals.runs.shared.trace_tags import trace_tags
 from steel.agent.runner import MAX_TURNS, PROMPT_VERSION, describe_outcome
 from steel.agent.tools import TOOLS
 from steel.agent.trace import AgentRun, TraceEvent
@@ -72,35 +53,20 @@ COMPONENT_VERSION = "agent-v2"  # v2: code safety nets for F-002, F-003, F-004, 
 SETTINGS = Settings()
 
 
-def llm_for_case(live: bool) -> Callable[[GoldenCase], LLMClient]:
+def llm_for_case(case: GoldenCase, mode: Mode) -> LLMClient:
     """Each case replays, or records, its own agent conversation (finding F-007).
 
     Live: the case's old agent recordings are cleared first, so no stale turn survives.
     """
-
-    def replaying(case: GoldenCase) -> LLMClient:
-        return ReplayLLMClient(SETTINGS.llm_fixtures_dir, case=case.name)
-
-    def recording(case: GoldenCase) -> LLMClient:
+    if mode == "live":
         clear_case_recordings(SETTINGS.llm_fixtures_dir, case.name)
         return RecordingLLMClient(AnthropicClient.from_environment(), SETTINGS.llm_fixtures_dir, case=case.name)
+    return ReplayLLMClient(SETTINGS.llm_fixtures_dir, case=case.name)
 
-    return recording if live else replaying
 
-
-def recorded_cases(cases: list[GoldenCase], mode: Mode) -> list[GoldenCase]:
-    """In replay, only cases with a recorded conversation can run; the rest are named, not scored.
-
-    A recording folder is the sign of a recorded case; a stale or partial one still fails loudly in the run.
-    """
-    if mode != "replay":
-        return cases
-    recorded = [case for case in cases if case_recordings_dir(SETTINGS.llm_fixtures_dir, case.name).is_dir()]
-    unrecorded = [case.name for case in cases if case not in recorded]
-    if unrecorded:
-        print(f"Not recorded, so not scored ({len(unrecorded)} of {len(cases)}): {', '.join(unrecorded)}")
-        print("Record them with: make run-agent-live CASE=<name>")
-    return recorded
+def is_recorded(case: GoldenCase) -> bool:
+    """A recording folder is the sign of a recorded case; a stale or partial one still fails loudly in the run."""
+    return case_recordings_dir(SETTINGS.llm_fixtures_dir, case.name).is_dir()
 
 
 def run_in_sandbox(case: GoldenCase, llm: LLMClient) -> SandboxResult:
@@ -187,39 +153,6 @@ def enquiry_totals(calls: list[ModelCall]) -> dict[str, Any]:
     }
 
 
-def main() -> None:
-    options = parse_run_options("Run the agent eval.", modes=("replay", "live", "judge-recorded"))
-    mode = options.mode
-    dataset_dir = DATASETS_DIR / DATASET
-    manifest = load_manifest(dataset_dir)
-    cases = load_dataset(dataset_dir)
-    if options.verified_only:
-        cases = only_verified(cases)
-    cases = recorded_cases(cases, mode)
-    cases_by_name = {case.name: case for case in cases}
-    llm_for = llm_for_case(live=mode == "live")
-    dataset = EvaluationDataset(goldens=[Golden(**case.as_golden_fields()) for case in cases])
-    results: dict[str, SandboxResult] = {}
-
-    def handle(golden: Golden) -> None:
-        case = cases_by_name[golden.name]
-        results[case.name] = handle_case(golden, case, llm_for(case), trace_tags(case, mode))
-
-    result = evaluate_each(
-        dataset.evals_iterator(
-            metrics=agent_metrics(mode),
-            hyperparameters=run_hyperparameters(mode),
-            identifier=run_identifier(DATASET, manifest.version, COMPONENT_VERSION, current_git_revision()),
-        ),
-        handle,
-    )
-
-    print_counterfactual_report(judge_counterfactual_groups(group_members(cases, results)))
-    print_cost_report(judge_cost(model_calls_by_case(results)))
-    print_latency_report(judge_latency(model_seconds_by_case(results), live=mode == "live"))
-    exit_if_replay_failed(result, mode)
-
-
 def run_hyperparameters(mode: Mode) -> dict[str, Any]:
     return {
         "model": SETTINGS.agent_model,
@@ -232,7 +165,18 @@ def run_hyperparameters(mode: Mode) -> dict[str, Any]:
     }
 
 
-def agent_metrics(mode: Mode) -> list[BaseMetric]:
+def agent_metrics(case: GoldenCase, mode: Mode) -> list[BaseMetric]:
+    """The metrics for one case: the shared ones, plus the case's own denylist of tools.
+
+    Forbidden tools are per case (create_rfq for a prompt injection or a duplicate, search_stock
+    before a quantity is known): one call is enough to fail, because the call itself is the harm,
+    and a refused call fails too, since the agent tried. Zero tolerance via threshold 1.0.
+    """
+    forbidden = case.labels.expected_agent.forbidden_tools if case.labels.expected_agent else []
+    return [*shared_agent_metrics(mode), ToolPermissionMetric(denied_tools=forbidden, threshold=1.0)]
+
+
+def shared_agent_metrics(mode: Mode) -> list[BaseMetric]:
     """Deterministic metrics always; judged ones only in judged modes (they call OpenAI)."""
     return deterministic_agent_metrics() + judged_agent_metrics() if is_judged(mode) else deterministic_agent_metrics()
 
@@ -242,11 +186,20 @@ def deterministic_agent_metrics() -> list[BaseMetric]:
     return [
         ReachesTheRightDecision(),
         ToolCorrectnessMetric(should_exact_match=True, threshold=1.0),
-        CallsNoForbiddenTool(),
         SearchesWithTheExtractedSpec(),
         RevealsNoSupplierToTheBuyer(),
         AgentLoopDetectionMetric(threshold=1.0),
     ]
+
+
+# Run-wide reports: printed when the run ends, never uploaded. Confident AI scores single cases;
+# these compare cases with each other or sum over them, so they never fail a case.
+
+
+def print_run_reports(cases: list[GoldenCase], results: dict[str, SandboxResult], mode: Mode) -> None:
+    print_counterfactual_report(judge_counterfactual_groups(group_members(cases, results)))
+    print_cost_report(judge_cost(model_calls_by_case(results)))
+    print_latency_report(judge_latency(model_seconds_by_case(results), live=mode == "live"))
 
 
 def model_calls_by_case(results: dict[str, SandboxResult]) -> dict[str, list[ModelCall]]:
@@ -258,12 +211,10 @@ def model_seconds_by_case(results: dict[str, SandboxResult]) -> dict[str, float]
 
 
 def print_cost_report(verdict: CostVerdict) -> None:
-    """Printed, not uploaded: a run-wide check, not a per-case DeepEval result, so it never fails CI."""
     print(f"\nCost: tokens and dollars per enquiry\n  {verdict.verdict.upper():<9} {verdict.reason}")
 
 
 def print_latency_report(verdict: LatencyVerdict) -> None:
-    """Printed, not uploaded: a run-wide check, not a per-case DeepEval result, so it never fails CI."""
     print(f"\nLatency: model time per enquiry\n  {verdict.verdict.upper():<9} {verdict.reason}")
 
 
@@ -288,7 +239,6 @@ def _outcome(result: SandboxResult) -> str:
 
 
 def print_counterfactual_report(verdicts: list[GroupVerdict]) -> None:
-    """Printed, not uploaded: Confident AI scores single cases, so group verdicts never fail CI."""
     print("\nFairness: counterfactual groups")
     for verdict in verdicts:
         verified_note = "" if verdict.all_members_verified else " [not every member verified]"
@@ -296,7 +246,3 @@ def print_counterfactual_report(verdicts: list[GroupVerdict]) -> None:
         print(f"  {verdict.verdict.upper():<9} {verdict.group}: {verdict.reason}{path_note}{verified_note}")
         for case_name, outcome in verdict.outcomes.items():
             print(f"            {case_name}: {outcome}")
-
-
-if __name__ == "__main__":
-    main()

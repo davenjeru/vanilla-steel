@@ -1,7 +1,7 @@
 """Run labels shared by every eval runner. The eval loops themselves are not tested here,
 because they upload to Confident AI; a real run proves them."""
 
-from evals.runs.shared.run_labels import revision_label, run_identifier
+from evals.harness.run_labels import revision_label, run_identifier
 
 
 def test_revision_label_is_the_short_sha_for_a_clean_checkout() -> None:

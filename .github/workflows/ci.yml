@@ -37,28 +37,20 @@ jobs:
         run: make check
 
       # Every eval runs even if an earlier step failed, so one push shows every failure at once.
+      # Matching is deterministic code and runs under make check (tests/unit/test_matching_golden_cases.py).
+      # Replay needs no keys: evals/run.py sets the placeholder DeepEval demands to build a metric.
       - name: Extraction eval (replay)
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: uv run python -m evals.runs.extraction
-
-      - name: Matching eval
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: uv run python -m evals.runs.matching
+        run: uv run python -m evals.run extraction
 
       - name: Duplicates eval (replay)
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: uv run python -m evals.runs.duplicates
+        run: uv run python -m evals.run duplicates
 
       - name: Agent eval (replay)
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        # DeepEval's ToolCorrectnessMetric demands an OpenAI key when built, though replay calls no
-        # model. A placeholder satisfies it; any real call with it would fail loudly, not pass.
-        env:
-          OPENAI_API_KEY: unused-in-replay
-        run: uv run python -m evals.runs.agent
+        run: uv run python -m evals.run agent
 
       - name: Quote-letter eval (replay)
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        env:
-          OPENAI_API_KEY: unused-in-replay
-        run: uv run python -m evals.runs.quote_letter
+        run: uv run python -m evals.run quote_letter

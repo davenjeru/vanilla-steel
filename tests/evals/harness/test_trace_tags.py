@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-from evals.runs.shared.golden_cases import load_dataset
-from evals.runs.shared.trace_tags import trace_tags
+from evals.harness.golden_cases import load_dataset
+from evals.harness.trace_tags import trace_tags
 from tests.factories.golden_cases import valid_agent_labels, write_case
 
 

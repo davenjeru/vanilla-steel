@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from evals.runs.shared.golden_cases import InvalidGoldenCase, load_dataset
+from evals.harness.golden_cases import InvalidGoldenCase, load_dataset
 from tests.factories.golden_cases import ORIGINAL_ENQUIRY, valid_agent_labels, valid_duplicate_labels, write_case
 
 CASE_NAME = "dup-001-forwarded-with-header"

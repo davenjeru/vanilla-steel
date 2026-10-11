@@ -1,26 +1,22 @@
-"""Run the duplicates eval and upload the run to Confident AI.
+"""The duplicates eval's harness: one labelled pair per golden, then precision and recall over the run.
 
-Usage: uv run python -m evals.runs.duplicates [--live] [--verified-only]
-
-Measures the duplicate check on its own (D36), like the matching eval measures the matcher: each golden
-case is a pair, a new email and the one enquiry already on file, labelled duplicate or not. Both emails
-are extracted (recorded answers by default; --live calls Claude and records), then the check runs
-exactly as the check_duplicate tool does. No agent: the agent eval covers what the model does with
-the answer. After the run, precision and recall over all pairs are printed; recall comes first
-because a missed resend can become a second RFQ, while a false flag only delays an order.
+Measures the duplicate check on its own (D36): each golden case is a pair, a new email and the one
+enquiry already on file, labelled duplicate or not. Both emails are extracted (recorded answers by
+default; live calls Claude and records), then the check runs exactly as the check_duplicate tool
+does. No agent: the agent eval covers what the model does with the answer. Recall is reported
+first because a missed resend can become a second RFQ, while a false flag only delays an order.
 """
 
 import json
+from typing import Any
 
-from deepeval.dataset import EvaluationDataset, Golden
+from deepeval.dataset import Golden
 from deepeval.tracing import observe, update_current_trace
 
-from evals.metrics.duplicates.detection_rates import DetectionRates, PairResult, detection_rates
-from evals.metrics.duplicates.duplicate_decision_is_correct import DuplicateDecisionIsCorrect
-from evals.runs.shared.golden_cases import DATASETS_DIR, GoldenCase, load_dataset, load_manifest
-from evals.runs.shared.run_labels import current_git_revision, run_identifier
-from evals.runs.shared.run_modes import Mode, evaluate_each, exit_if_replay_failed, only_verified, parse_run_options
-from evals.runs.shared.trace_tags import trace_tags
+from evals.harness.golden_cases import GoldenCase
+from evals.harness.modes import Mode
+from evals.harness.trace_tags import trace_tags
+from evals.metrics.duplicates.detection_rates import DetectionRates, PairResult
 from steel.domain.duplicates import DUPLICATE_WINDOW
 from steel.extraction.extractor import PROMPT_VERSION, EnquiryDocument
 from steel.llm.anthropic_client import AnthropicClient
@@ -34,11 +30,20 @@ COMPONENT_VERSION = "duplicate-check-v1"  # D36: fingerprint with attachments, o
 SETTINGS = Settings()
 
 
-def make_llm(live: bool) -> LLMClient:
+def make_llm(mode: Mode) -> LLMClient:
     """Replay by default: free and deterministic. Live calls Claude and records, so the pairs replay later."""
-    if live:
+    if mode == "live":
         return RecordingLLMClient(AnthropicClient.from_environment(), SETTINGS.llm_fixtures_dir)
     return ReplayLLMClient(SETTINGS.llm_fixtures_dir)
+
+
+def run_hyperparameters(mode: Mode) -> dict[str, Any]:
+    return {
+        "extraction_model": SETTINGS.extraction_model,
+        "extraction_prompt_version": PROMPT_VERSION,
+        "duplicate_window_days": DUPLICATE_WINDOW.days,
+        "mode": mode,
+    }
 
 
 @observe(name="duplicate-check", description="run the duplicates eval")
@@ -84,35 +89,3 @@ def describe_rates(rates: DetectionRates) -> str:
         flagged = rates.caught + rates.false_alarms
         precision = f"Precision: {rates.caught} of {flagged} flagged were real resends ({rates.precision:.0%})."
     return f"{recall} {precision}"
-
-
-def main() -> None:
-    options = parse_run_options("Run the duplicates eval.", modes=("replay", "live"))
-    dataset_dir = DATASETS_DIR / DATASET
-    manifest = load_manifest(dataset_dir)
-    loaded = load_dataset(dataset_dir)
-    cases = {case.name: case for case in (only_verified(loaded) if options.verified_only else loaded)}
-    dataset = EvaluationDataset(goldens=[Golden(**case.as_golden_fields()) for case in cases.values()])
-    llm = make_llm(options.mode == "live")
-    results = []
-    run = evaluate_each(
-        dataset.evals_iterator(
-            metrics=[DuplicateDecisionIsCorrect()],
-            hyperparameters={
-                "extraction_model": SETTINGS.extraction_model,
-                "extraction_prompt_version": PROMPT_VERSION,
-                "duplicate_window_days": DUPLICATE_WINDOW.days,
-                "mode": options.mode,
-            },
-            identifier=run_identifier(DATASET, manifest.version, COMPONENT_VERSION, current_git_revision()),
-        ),
-        lambda golden: results.append(
-            pair_result(golden, check_and_trace(golden, cases[golden.name], llm, options.mode))
-        ),
-    )
-    print(describe_rates(detection_rates(results)))
-    exit_if_replay_failed(run, options.mode)
-
-
-if __name__ == "__main__":
-    main()

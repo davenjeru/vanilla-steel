@@ -1,6 +1,6 @@
 # Live evals on the verified cases only. Costs money (Claude for the system, OpenAI for the judge),
 # so it runs only when started by hand: Actions > Live evals > Run workflow.
-# Results go to Confident AI and only report: live output varies between runs (D39). New recordings
+# Results go to Confident AI; a failed deterministic check fails the run, judged metrics only report (D35). New recordings
 # are kept as a downloadable artifact for a week, never committed; record locally to update fixtures.
 name: Live evals
 
@@ -45,19 +45,19 @@ jobs:
 
       - name: Extraction eval (live, verified cases)
         if: ${{ !cancelled() && steps.install.outcome == 'success' && contains(fromJSON('["all", "extraction"]'), inputs.eval) }}
-        run: uv run python -m evals.runs.extraction --live --verified-only
+        run: uv run python -m evals.run extraction --live --verified-only
 
       - name: Duplicates eval (live, verified cases)
         if: ${{ !cancelled() && steps.install.outcome == 'success' && contains(fromJSON('["all", "duplicates"]'), inputs.eval) }}
-        run: uv run python -m evals.runs.duplicates --live --verified-only
+        run: uv run python -m evals.run duplicates --live --verified-only
 
       - name: Agent eval (live, verified cases)
         if: ${{ !cancelled() && steps.install.outcome == 'success' && contains(fromJSON('["all", "agent"]'), inputs.eval) }}
-        run: uv run python -m evals.runs.agent --live --verified-only
+        run: uv run python -m evals.run agent --live --verified-only
 
       - name: Quote-letter eval (live, verified cases)
         if: ${{ !cancelled() && steps.install.outcome == 'success' && contains(fromJSON('["all", "quote_letter"]'), inputs.eval) }}
-        run: uv run python -m evals.runs.quote_letter --live --verified-only
+        run: uv run python -m evals.run quote_letter --live --verified-only
 
       - name: Keep the new recordings
         if: ${{ always() }}

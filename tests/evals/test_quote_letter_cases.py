@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from evals.runs.shared.golden_cases import InvalidGoldenCase, load_dataset
+from evals.harness.golden_cases import InvalidGoldenCase, load_dataset
 from tests.factories.golden_cases import PRICED_S355_PLATE, valid_quote_letter_labels, write_case
 
 NAME = "letter-001-polish-plate"

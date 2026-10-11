@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from evals.runs.shared.golden_cases import InvalidGoldenCase, load_dataset
+from evals.harness.golden_cases import InvalidGoldenCase, load_dataset
 from tests.factories.golden_cases import valid_case_labels, valid_matching_labels, write_case
 
 CASE_NAME = "match-001-s355-plate-poznan"

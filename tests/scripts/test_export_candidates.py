@@ -11,7 +11,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from evals.runs.shared.golden_cases import CaseLabels
+from evals.harness.golden_cases import CaseLabels
 from scripts.export_candidates import candidate_labels, export_candidates, is_review_candidate
 from steel.domain.models import EnquiryStatus
 from steel.extraction.extractor import EnquiryDocument

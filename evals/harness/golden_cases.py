@@ -49,7 +49,7 @@ from steel.extraction.attachments import Attachment
 from steel.sandbox import OTHER_TENANT, SANDBOX_TENANT, EarlierEnquiry
 from steel.storage.seed import build_stock
 
-REPO_ROOT = Path(__file__).resolve().parents[3]  # evals/runs/shared/golden_cases.py -> repo root
+REPO_ROOT = Path(__file__).resolve().parents[2]  # evals/harness/golden_cases.py -> repo root
 DATASETS_DIR = REPO_ROOT / "evals" / "datasets"
 
 MANIFEST_FILE = "manifest.json"

@@ -3,9 +3,9 @@ from typing import Any
 
 from deepeval.test_case import LLMTestCase, ToolCall
 
+from evals.harness.golden_cases import AgentExpectations
 from evals.metrics.agent.budget import ModelCall
 from evals.metrics.agent.counterfactual_groups import GroupMember
-from evals.runs.shared.golden_cases import AgentExpectations
 from steel.agent.tools import AgentEscalationReason
 from tests.factories.golden_cases import PRICED_S355_PLATE
 

@@ -6,8 +6,8 @@ CONFIDENT_TRACE_ENVIRONMENT says, and allows only four fixed values, so live and
 by a tag.
 """
 
-from evals.runs.shared.golden_cases import GoldenCase
-from evals.runs.shared.run_modes import Mode
+from evals.harness.golden_cases import GoldenCase
+from evals.harness.modes import Mode
 
 
 def trace_tags(case: GoldenCase, mode: Mode) -> list[str]:

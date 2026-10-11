@@ -3,8 +3,8 @@ from typing import Any
 from deepeval.metrics import BaseMetric
 from deepeval.test_case import LLMTestCase
 
+from evals.harness.golden_cases import AgentExpectations
 from evals.metrics.agent.agent_test_case import AgentDecision, decision, expectations, tool_calls
-from evals.runs.shared.golden_cases import AgentExpectations
 
 
 class ReachesTheRightDecision(BaseMetric):

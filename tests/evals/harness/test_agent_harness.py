@@ -1,6 +1,7 @@
-"""The agent eval runner: what it tells DeepEval about each case, and how it treats cases it cannot replay.
+"""The agent eval's harness: what it tells DeepEval about each case, which metrics each case gets, and how
+it treats cases it cannot replay.
 
-The spans themselves are the product's (tests/agent/test_tracing.py); the runner adds the case's name,
+The spans themselves are the product's (tests/agent/test_tracing.py); the harness adds the case's name,
 tags, expected outcome, the one-line outcome and the tools called.
 """
 
@@ -9,19 +10,20 @@ from typing import Any
 
 import pytest
 from deepeval.dataset import Golden
-from deepeval.metrics import TaskCompletionMetric
+from deepeval.metrics import TaskCompletionMetric, ToolPermissionMetric
 
-from evals.runs import agent as agent_run
-from evals.runs.agent import (
+from evals.harness import agent as agent_harness
+from evals.harness.agent import (
     agent_metrics,
     deterministic_agent_metrics,
     handle_case,
+    is_recorded,
     model_calls,
-    recorded_cases,
+    shared_agent_metrics,
     tools_called,
 )
-from evals.runs.shared.golden_cases import DATASETS_DIR, GoldenCase, load_dataset
-from evals.runs.shared.judge import JUDGE_MODEL
+from evals.harness.golden_cases import DATASETS_DIR, GoldenCase, load_dataset
+from evals.harness.judge import JUDGE_MODEL
 from steel.sandbox import SandboxResult, handle_in_sandbox
 from steel.settings import Settings
 from tests.factories.deepeval_traces import confident_ai_payload
@@ -39,6 +41,7 @@ S355_PLATE_READING = {
 SETTINGS = Settings(extraction_model="claude-test-model", agent_model="claude-test-model")
 TAGS = ["dataset:agent", "mode:replay", "verified"]
 EMAIL = ("Plates", "30 t S355J2 15 x 1250, DAP Poznań")
+PLACEHOLDER_KEY = "sk-placeholder-for-construction-only"  # DeepEval demands a key to build some metrics
 
 
 @pytest.fixture
@@ -93,36 +96,26 @@ def test_model_calls_count_every_call_including_extraction_and_the_letter(rfq_ru
 # Cases that cannot replay
 
 
-def test_cases_without_a_recording_are_left_out_not_scored(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """A case that could not run must not appear as a pass or a fail; it is named instead."""
+def test_a_case_without_a_recording_folder_is_not_recorded(tmp_path: Path) -> None:
+    """The eval skips it by name: never a pass or a fail it did not earn."""
     recordings_live_in(tmp_path)
-    case = first_agent_case()
 
-    runnable = recorded_cases([case], "replay")
-
-    assert (runnable, case.name in capsys.readouterr().out) == ([], True)
+    assert is_recorded(first_agent_case()) is False
 
 
-def test_a_case_with_a_recording_folder_is_run(tmp_path: Path) -> None:
+def test_a_case_with_a_recording_folder_is_recorded(tmp_path: Path) -> None:
     recordings_live_in(tmp_path)
     case = first_agent_case()
     (tmp_path / "agent" / case.name).mkdir(parents=True)
 
-    assert recorded_cases([case], "replay") == [case]
-
-
-def test_live_runs_need_no_recording(tmp_path: Path) -> None:
-    recordings_live_in(tmp_path)
-    case = first_agent_case()
-
-    assert recorded_cases([case], "live") == [case]
+    assert is_recorded(case) is True
 
 
 def recordings_live_in(fixtures_dir: Path) -> None:
-    agent_run.SETTINGS = Settings(llm_fixtures_dir=fixtures_dir)
+    agent_harness.SETTINGS = Settings(llm_fixtures_dir=fixtures_dir)
 
 
-# What the runner adds to the trace
+# What the harness adds to the trace
 
 
 def test_trace_is_named_after_the_golden_case_and_tagged(case_payload: dict[str, Any]) -> None:
@@ -171,27 +164,23 @@ def test_trace_metadata_carries_the_enquiry_totals(case_payload: dict[str, Any],
 
 
 def test_the_products_spans_land_in_the_cases_trace(case_payload: dict[str, Any]) -> None:
-    """The runner's root span holds the agent span, so one case is one trace on Confident AI."""
+    """The harness's root span holds the agent span, so one case is one trace on Confident AI."""
     [root] = [span for span in case_payload["baseSpans"] if span.get("parentUuid") is None]
     [agent] = case_payload["agentSpans"]
 
     assert (root["name"], agent["parentUuid"]) == ("enquiry", root["uuid"])
 
 
-# Which metrics each mode builds
+# Which metrics each case gets
 
 
-def test_agent_replay_scores_only_deterministic_metrics(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Replay must stay free (D4): no judged metric is built. A placeholder key is still needed because
-    DeepEval's ToolCorrectnessMetric demands one just to be constructed (it calls nothing in exact-match mode)."""
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-placeholder-for-construction-only")
+def test_replay_scores_only_deterministic_metrics(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Replay must stay free (D4): no judged metric is built."""
+    monkeypatch.setenv("OPENAI_API_KEY", PLACEHOLDER_KEY)
 
-    metrics = agent_metrics("replay")
-
-    assert [metric.__name__ for metric in metrics] == [
+    assert [metric.__name__ for metric in shared_agent_metrics("replay")] == [
         "Reaches the right decision",
         "Tool Correctness",
-        "Calls no forbidden tool",
         "Searches with the extracted spec",
         "Reveals no supplier to the buyer",
         "Agent Loop Detection",
@@ -199,13 +188,39 @@ def test_agent_replay_scores_only_deterministic_metrics(monkeypatch: pytest.Monk
 
 
 @pytest.mark.parametrize("mode", ["live", "judge-recorded"])
-def test_agent_judged_modes_add_task_completion(mode: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Building a judged metric needs an OpenAI key; a placeholder is enough, nothing is called."""
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-placeholder-for-construction-only")
+def test_judged_modes_add_task_completion_as_report_only(mode: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Judged metrics are scored and shown but never decide a case (D35): flaky, in DeepEval's sense."""
+    monkeypatch.setenv("OPENAI_API_KEY", PLACEHOLDER_KEY)
 
-    judged = agent_metrics(mode)[len(deterministic_agent_metrics()) :]  # type: ignore[arg-type]
+    judged = shared_agent_metrics(mode)[len(deterministic_agent_metrics()) :]  # type: ignore[arg-type]
 
-    assert [(type(metric), metric.evaluation_model) for metric in judged] == [(TaskCompletionMetric, JUDGE_MODEL)]
+    assert [(type(metric), metric.evaluation_model, metric.flaky) for metric in judged] == [
+        (TaskCompletionMetric, JUDGE_MODEL, True)
+    ]
+
+
+def test_each_case_gets_its_own_tools_denylist(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A prompt injection forbids create_rfq; the denylist is the golden's, built per case, zero tolerance."""
+    monkeypatch.setenv("OPENAI_API_KEY", PLACEHOLDER_KEY)
+    injection = next(case for case in load_dataset(DATASETS_DIR / "agent") if _forbidden_tools(case))
+
+    [permission] = [metric for metric in agent_metrics(injection, "replay") if isinstance(metric, ToolPermissionMetric)]
+
+    assert (permission.denied_tools, permission.threshold) == (set(_forbidden_tools(injection)), 1.0)
+
+
+def test_a_case_that_forbids_nothing_still_gets_the_permission_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", PLACEHOLDER_KEY)
+
+    [permission] = [
+        metric for metric in agent_metrics(first_agent_case(), "replay") if isinstance(metric, ToolPermissionMetric)
+    ]
+
+    assert permission.denied_tools == set()
+
+
+def _forbidden_tools(case: GoldenCase) -> list[str]:
+    return case.labels.expected_agent.forbidden_tools if case.labels.expected_agent else []
 
 
 def first_agent_case() -> GoldenCase:

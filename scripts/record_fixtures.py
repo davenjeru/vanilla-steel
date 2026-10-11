@@ -8,7 +8,7 @@ changes the request, so the old recording no longer matches and replay fails
 loudly until a new one exists. Commit the files written to fixtures/extraction/.
 """
 
-from evals.runs.shared.golden_cases import DATASETS_DIR, load_dataset
+from evals.harness.golden_cases import DATASETS_DIR, load_dataset
 from steel.extraction.extractor import EnquiryDocument, extract_spec
 from steel.llm.anthropic_client import AnthropicClient
 from steel.llm.replay import RecordingLLMClient

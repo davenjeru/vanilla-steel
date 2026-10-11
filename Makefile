@@ -22,50 +22,48 @@ test:
 seed:
 	uv run python scripts/seed.py
 
-## Eval runs: each uploads one run to Confident AI. Commit first so the run's SHA is clean.
+## Eval runs (evals/test_<eval>.py under `deepeval test run`, started by evals/run.py with the run's identifier).
+## Each uploads one run to Confident AI when CONFIDENT_API_KEY is set. Commit first so the run's SHA is clean.
+## Replay needs no keys. A failed case fails the run; judged metrics never decide a case (D35).
 eval-extraction:
-	uv run python -m evals.runs.extraction
+	uv run python -m evals.run extraction
 
 ## Calls Claude (costs money); measures the model and prompt, not just the code around them.
 eval-extraction-live:
-	uv run --env-file .env python -m evals.runs.extraction --live
-
-eval-matching:
-	uv run python -m evals.runs.matching
+	uv run --env-file .env python -m evals.run extraction --live
 
 ## Duplicate check (D36): labelled email pairs, precision and recall. Replays recorded extraction.
 eval-duplicates:
-	uv run python -m evals.runs.duplicates
+	uv run python -m evals.run duplicates
 
 ## Same, calling Claude for extraction and recording the answers (costs money). Commit fixtures/extraction/.
 eval-duplicates-live:
-	uv run --env-file .env python -m evals.runs.duplicates --live
+	uv run --env-file .env python -m evals.run duplicates --live
 
-## Replays recorded agent runs; cases without a recording are listed, not scored.
-## Reads .env because DeepEval's ToolCorrectnessMetric needs an OpenAI key to be built (it calls no model here).
+## Replays recorded agent runs; cases without a recording are skipped by name, not scored.
 eval-agent:
-	uv run --env-file .env python -m evals.runs.agent
+	uv run python -m evals.run agent
 
 ## Calls Claude for every agent case (costs money), records the answers to fixtures/agent/ (commit them),
 ## and adds the judged metrics (gpt-6-sol, report-only).
 eval-agent-live:
-	uv run --env-file .env python -m evals.runs.agent --live
+	uv run --env-file .env python -m evals.run agent --live
 
 ## Judges the recorded agent runs again without re-running the agent (costs judge calls only).
 eval-agent-judge-recorded:
-	uv run --env-file .env python -m evals.runs.agent --judge-recorded
+	uv run --env-file .env python -m evals.run agent --judge-recorded
 
 ## Quote letters (Slice 5). Replay: recorded letters, deterministic metrics only, free.
 eval-quote-letter:
-	uv run --env-file .env python -m evals.runs.quote_letter
+	uv run python -m evals.run quote_letter
 
 ## New letters from Claude (recorded, commit them) plus the judged metrics (gpt-6-sol, report-only).
 eval-quote-letter-live:
-	uv run --env-file .env python -m evals.runs.quote_letter --live
+	uv run --env-file .env python -m evals.run quote_letter --live
 
 ## Judges the recorded letters again without regenerating them, e.g. after changing judge criteria.
 eval-quote-letter-judge-recorded:
-	uv run --env-file .env python -m evals.runs.quote_letter --judge-recorded
+	uv run --env-file .env python -m evals.run quote_letter --judge-recorded
 
 ## Calls Claude for every extraction golden case and saves the answers to fixtures/extraction/. Commit them.
 record-fixtures:

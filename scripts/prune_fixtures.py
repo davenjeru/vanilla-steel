@@ -14,9 +14,9 @@ reaches that case's later recordings, which would then look unused.
 import sys
 from pathlib import Path
 
-from evals.runs.agent import run_in_sandbox
-from evals.runs.quote_letter import writer_input
-from evals.runs.shared.golden_cases import DATASETS_DIR, load_dataset
+from evals.harness.agent import run_in_sandbox
+from evals.harness.golden_cases import DATASETS_DIR, load_dataset
+from evals.harness.quote_letter import writer_input
 from steel.extraction.extractor import EnquiryDocument, extract_spec
 from steel.llm.client import ConversationRequest, ConversationResponse, LLMRequest, LLMResponse
 from steel.llm.replay import MissingFixture, ReplayLLMClient, fixture_path

@@ -4,8 +4,8 @@ import json
 
 from deepeval.dataset import Golden
 
+from evals.harness.duplicates import describe_rates, pair_result
 from evals.metrics.duplicates.detection_rates import DetectionRates
-from evals.runs.duplicates import describe_rates, pair_result
 
 
 def golden_expecting(expected_duplicate: bool) -> Golden:
