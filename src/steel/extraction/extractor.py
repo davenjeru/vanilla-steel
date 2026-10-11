@@ -16,9 +16,7 @@ from steel.llm.client import LLMClient, LLMError, LLMRequest, LLMResponse
 from steel.tracing import record_model_call, record_prompt, set_span_input, set_span_output
 
 PROMPT_ID = "extract_spec"
-PROMPT_VERSION = (
-    "v5"  # v2: conflicts (F-008); v3: language (Slice 5); v4: generic Blech (F-011), corrections (F-012); v5: see the demo PR
-)
+PROMPT_VERSION = "v5"  # v2: conflicts (F-008); v3: language (Slice 5); v4: generic Blech (F-011), corrections (F-012); v5: see the demo PR
 PROMPT_PATH = Path(__file__).parent / "prompts" / f"{PROMPT_ID}_{PROMPT_VERSION}.md"
 OUTPUT_NAME = "record_spec"
 
