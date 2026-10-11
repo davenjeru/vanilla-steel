@@ -1,7 +1,7 @@
 # Live evals on the verified cases only. Costs money (Claude for the system, OpenAI for the judge),
 # so it runs only when started by hand: Actions > Live evals > Run workflow.
-# Results go to Confident AI; a failed deterministic check fails the run, judged metrics only report (D35). New recordings
-# are kept as a downloadable artifact for a week, never committed; record locally to update fixtures.
+# Results go to Confident AI, linked to the dataset alias of each manifest version (D44); a failed deterministic
+# check fails the run, judged metrics only report (D35).
 name: Live evals
 
 on:

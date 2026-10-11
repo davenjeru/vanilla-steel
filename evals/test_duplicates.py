@@ -7,8 +7,8 @@ from collections.abc import Iterator
 
 import pytest
 from deepeval import assert_test
-from deepeval.dataset import Golden
 
+from evals.harness.datasets import goldens_for_run
 from evals.harness.duplicates import DATASET, check_and_trace, describe_rates, pair_result, run_hyperparameters
 from evals.harness.golden_cases import DATASETS_DIR, GoldenCase, load_dataset
 from evals.harness.prompts import PromptRegistry, link_prompt_commits
@@ -19,6 +19,7 @@ from steel.llm.anthropic_client import AnthropicClient
 from steel.llm.client import LLMClient
 
 CASES = load_dataset(DATASETS_DIR / DATASET)
+GOLDENS = goldens_for_run(DATASET, CASES)  # Confident AI's copies, checked against git, so the run links (D44)
 REGISTRY = PromptRegistry.load()
 
 
@@ -42,7 +43,7 @@ def pair_results() -> Iterator[list[PairResult]]:
 
 @pytest.mark.parametrize("case", CASES, ids=[case.name for case in CASES])
 def test_duplicate_check_decides_as_labelled(case: GoldenCase, llm: LLMClient, pair_results: list[PairResult]) -> None:
-    golden = Golden(**case.as_golden_fields())
+    golden = GOLDENS[case.name]
 
     result = check_and_trace(golden, case, llm)
     link_prompt_commits(REGISTRY)

@@ -5,8 +5,8 @@ uv run --env-file .env python -m evals.run quote_letter [--verified-only]       
 
 import pytest
 from deepeval import assert_test
-from deepeval.dataset import Golden
 
+from evals.harness.datasets import goldens_for_run
 from evals.harness.golden_cases import DATASETS_DIR, GoldenCase, load_dataset
 from evals.harness.prompts import PromptRegistry, link_prompt_commits
 from evals.harness.quote_letter import DATASET, letter_metrics, run_hyperparameters, write_and_trace
@@ -15,6 +15,7 @@ from steel.llm.anthropic_client import AnthropicClient
 from steel.llm.client import LLMClient
 
 CASES = load_dataset(DATASETS_DIR / DATASET)
+GOLDENS = goldens_for_run(DATASET, CASES)  # Confident AI's copies, checked against git, so the run links (D44)
 REGISTRY = PromptRegistry.load()
 
 
@@ -30,7 +31,7 @@ def llm() -> LLMClient:
 
 @pytest.mark.parametrize("case", CASES, ids=[case.name for case in CASES])
 def test_letter_presents_the_quote_as_written(case: GoldenCase, llm: LLMClient) -> None:
-    golden = Golden(**case.as_golden_fields())
+    golden = GOLDENS[case.name]
 
     write_and_trace(golden, case, llm)
     link_prompt_commits(REGISTRY)

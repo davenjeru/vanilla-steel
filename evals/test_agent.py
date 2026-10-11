@@ -11,9 +11,9 @@ from collections.abc import Iterator
 
 import pytest
 from deepeval import assert_test
-from deepeval.dataset import Golden
 
 from evals.harness.agent import DATASET, agent_metrics, handle_case, print_run_reports, run_hyperparameters
+from evals.harness.datasets import goldens_for_run
 from evals.harness.golden_cases import DATASETS_DIR, GoldenCase, load_dataset
 from evals.harness.prompts import PromptRegistry, link_prompt_commits
 from evals.harness.quote_letter import letter_metrics
@@ -25,6 +25,7 @@ from steel.llm.client import LLMClient
 from steel.sandbox import SandboxResult
 
 CASES = load_dataset(DATASETS_DIR / DATASET)
+GOLDENS = goldens_for_run(DATASET, CASES)  # Confident AI's copies, checked against git, so the run links (D44)
 REGISTRY = PromptRegistry.load()
 LETTER_SPAN = "write_cover_letter"
 
@@ -51,7 +52,7 @@ def run_results() -> Iterator[dict[str, SandboxResult]]:
 def test_agent_handles_the_enquiry_as_labelled(
     case: GoldenCase, llm: LLMClient, run_results: dict[str, SandboxResult]
 ) -> None:
-    golden = Golden(**case.as_golden_fields())
+    golden = GOLDENS[case.name]
 
     run_results[case.name] = handle_case(golden, case, llm, trace_tags(case))
     attach_metrics_to_spans(LETTER_SPAN, letter_metrics)
