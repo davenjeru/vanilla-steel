@@ -11,6 +11,9 @@ from typing import Any
 import pytest
 from deepeval.tracing import observe
 
+from steel.agent import runner
+from steel.extraction import extractor
+from steel.quotes import cover_letter
 from steel.sandbox import SandboxResult, handle_in_sandbox
 from steel.settings import Settings
 from steel.tracing import record_model_call
@@ -222,9 +225,14 @@ def test_every_model_call_names_the_prompt_it_ran(rfq_payload: tuple[dict[str, A
     in_metadata = {
         (span["metadata"]["prompt_alias"], span["metadata"]["prompt_version"]) for span in payload["llmSpans"]
     }
+    # The versions the product runs today, not literals: a prompt bump is not a tracing regression.
     assert (on_field, in_metadata) == (
         {"extract_spec", "agent", "quote_letter"},
-        {("extract_spec", "v4"), ("agent", "v4"), ("quote_letter", "v2")},
+        {
+            ("extract_spec", extractor.PROMPT_VERSION),
+            ("agent", runner.PROMPT_VERSION),
+            ("quote_letter", cover_letter.PROMPT_VERSION),
+        },
     )
 
 
