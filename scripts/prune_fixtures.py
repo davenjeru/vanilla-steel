@@ -15,11 +15,12 @@ import sys
 from pathlib import Path
 
 from evals.runs.agent import run_in_sandbox
-from evals.runs.quote_letter import write_every_letter
+from evals.runs.quote_letter import writer_input
 from evals.runs.shared.golden_cases import DATASETS_DIR, load_dataset
 from steel.extraction.extractor import EnquiryDocument, extract_spec
 from steel.llm.client import ConversationRequest, ConversationResponse, LLMRequest, LLMResponse
 from steel.llm.replay import MissingFixture, ReplayLLMClient, fixture_path
+from steel.quotes.cover_letter import write_cover_letter
 from steel.sandbox import check_duplicate_in_sandbox
 from steel.settings import Settings
 
@@ -49,8 +50,14 @@ def recordings_in_use(fixtures_dir: Path) -> set[Path]:
     _replay_duplicates(TrackingReplayClient(fixtures_dir, read=read))
     for case in load_dataset(DATASETS_DIR / "agent"):
         run_in_sandbox(case, TrackingReplayClient(fixtures_dir, case=case.name, read=read))
-    write_every_letter(load_dataset(DATASETS_DIR / "quote_letter"), TrackingReplayClient(fixtures_dir, read=read))
+    _replay_letters(TrackingReplayClient(fixtures_dir, read=read))
     return read
+
+
+def _replay_letters(replay: TrackingReplayClient) -> None:
+    for case in load_dataset(DATASETS_DIR / "quote_letter"):
+        given = writer_input(case)
+        write_cover_letter(given.quote, given.language, replay, SETTINGS.quote_model)
 
 
 def stale_recordings(fixtures_dir: Path, in_use: set[Path]) -> list[Path]:

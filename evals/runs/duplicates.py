@@ -19,7 +19,8 @@ from evals.metrics.duplicates.detection_rates import DetectionRates, PairResult,
 from evals.metrics.duplicates.duplicate_decision_is_correct import DuplicateDecisionIsCorrect
 from evals.runs.shared.golden_cases import DATASETS_DIR, GoldenCase, load_dataset, load_manifest
 from evals.runs.shared.run_labels import current_git_revision, run_identifier
-from evals.runs.shared.run_modes import evaluate_each, exit_if_replay_failed, only_verified, parse_run_options
+from evals.runs.shared.run_modes import Mode, evaluate_each, exit_if_replay_failed, only_verified, parse_run_options
+from evals.runs.shared.trace_tags import trace_tags
 from steel.domain.duplicates import DUPLICATE_WINDOW
 from steel.extraction.extractor import PROMPT_VERSION, EnquiryDocument
 from steel.llm.anthropic_client import AnthropicClient
@@ -41,7 +42,7 @@ def make_llm(live: bool) -> LLMClient:
 
 
 @observe(name="duplicate-check", description="run the duplicates eval")
-def check_and_trace(golden: Golden, case: GoldenCase, llm: LLMClient) -> str:
+def check_and_trace(golden: Golden, case: GoldenCase, llm: LLMClient, mode: Mode) -> str:
     """The result goes to the trace as {"duplicate_of": ...}, the shape the metric reads."""
     if case.email is None:
         raise ValueError(f"{case.name}: duplicate case has no email")  # the loader requires one
@@ -50,6 +51,8 @@ def check_and_trace(golden: Golden, case: GoldenCase, llm: LLMClient) -> str:
     outcome = check_duplicate_in_sandbox(document.subject, document.body, document.attachments, earlier, llm, SETTINGS)
     result = json.dumps({"duplicate_of": outcome.duplicate_of})
     update_current_trace(
+        name=golden.name,
+        tags=trace_tags(case, mode),
         input=golden.input,
         output=result,
         expected_output=golden.expected_output,
@@ -103,7 +106,9 @@ def main() -> None:
             },
             identifier=run_identifier(DATASET, manifest.version, COMPONENT_VERSION, current_git_revision()),
         ),
-        lambda golden: results.append(pair_result(golden, check_and_trace(golden, cases[golden.name], llm))),
+        lambda golden: results.append(
+            pair_result(golden, check_and_trace(golden, cases[golden.name], llm, options.mode))
+        ),
     )
     print(describe_rates(detection_rates(results)))
     exit_if_replay_failed(run, options.mode)

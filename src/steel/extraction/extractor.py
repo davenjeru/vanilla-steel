@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from deepeval.tracing import observe
 from pydantic import BaseModel, ValidationError
 
 from steel.domain.injection import remove_boundary_tags
@@ -12,6 +13,7 @@ from steel.extraction.evidence import drop_unstated_claims
 from steel.extraction.normalise import normalise_language, normalise_spec
 from steel.extraction.raw_spec import RawSpec
 from steel.llm.client import LLMClient, LLMError, LLMRequest, LLMResponse
+from steel.tracing import record_model_call, set_span_input, set_span_output
 
 PROMPT_ID = "extract_spec"
 PROMPT_VERSION = (
@@ -56,7 +58,7 @@ def extract_spec(document: EnquiryDocument, llm: LLMClient, model: str) -> Extra
     """
     warnings: list[str] = []
     request = build_request(document, model, warnings)
-    response = llm.complete(request)
+    response = ask_model_to_read(request, llm)
     raw = _parse_raw_spec(response)
     supported = drop_unstated_claims(raw, enquiry_text=request.user, warnings=warnings)
     unambiguous = drop_conflicting_fields(supported, warnings)
@@ -71,6 +73,16 @@ def extract_spec(document: EnquiryDocument, llm: LLMClient, model: str) -> Extra
         llm=response,
         model_input=request.user,
     )
+
+
+@observe(type="llm", name="extract_spec")
+def ask_model_to_read(request: LLMRequest, llm: LLMClient) -> LLMResponse:
+    """One LLM span: the enquiry as the model read it, and its raw answer before code acted on it."""
+    set_span_input(request.user)
+    response = llm.complete(request)
+    set_span_output(response.output)
+    record_model_call(response.model, response.input_tokens, response.output_tokens)
+    return response
 
 
 def build_request(document: EnquiryDocument, model: str, warnings: list[str]) -> LLMRequest:

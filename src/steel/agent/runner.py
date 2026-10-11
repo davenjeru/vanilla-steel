@@ -3,6 +3,10 @@
 Two safety nets are code, not prompt: the loop stops after MAX_TURNS, and a
 run that ends without a decision is escalated, so an enquiry never silently
 stalls.
+
+Every run is one agent span on Confident AI, with an LLM span per turn, a tool
+span per call (a refusal is an errored span) and a plain span for an action
+code took (steel.tracing, decision D40).
 """
 
 import json
@@ -10,14 +14,17 @@ import time
 from pathlib import Path
 from typing import Any
 
+from deepeval.tracing import observe, update_current_span, update_tool_span
+
 from steel.agent.tools import TOOLS, ToolContext, ToolError, escalate_enquiry
 from steel.agent.trace import AgentRun, ModelUsage, TraceRecorder
 from steel.domain.enquiry import Enquiry, EscalationReason
 from steel.domain.injection import remove_boundary_tags
 from steel.domain.models import EnquiryStatus
 from steel.domain.status import advance
-from steel.llm.client import ConversationRequest, LLMError, ToolUse
+from steel.llm.client import ConversationRequest, ConversationResponse, LLMError, ToolUse
 from steel.storage import enquiries
+from steel.tracing import add_span_metadata, record_model_call, set_span_input, set_span_output
 
 PROMPT_ID = "agent"
 PROMPT_VERSION = "v4"  # v2: draft_quote (Slice 5); v3: obvious injections at once; v4: corrections (F-012)
@@ -25,17 +32,19 @@ PROMPT_PATH = Path(__file__).parent / "prompts" / f"{PROMPT_ID}_{PROMPT_VERSION}
 MAX_TURNS = 8
 
 
+@observe(type="agent", name="agent", available_tools=list(TOOLS))
 def run_agent(context: ToolContext, model: str) -> AgentRun:
     recorder = TraceRecorder(context.tenant_id)
     enquiry = context.load_enquiry()
     opening = opening_message(context, enquiry)
+    set_span_input(opening)
     messages: list[dict[str, Any]] = [{"role": "user", "content": opening}]
     received = opening  # what the next turn is answering, kept in the trace for reviewers
     turns_used = 0
     while turns_used < MAX_TURNS and not context.decision_made():
         turns_used += 1
         try:
-            response = context.llm.converse(_request(model, messages))
+            response = _model_turn(context, model, messages, received)
         except LLMError as error:
             _fail(context, f"agent_failed: {error}", recorder)
             break
@@ -57,20 +66,52 @@ def run_agent(context: ToolContext, model: str) -> AgentRun:
         received = _readable_tool_results(tool_uses, tool_results)
 
     if not context.decision_made():
-        reason = (
-            EscalationReason.AGENT_STEP_LIMIT if turns_used >= MAX_TURNS else EscalationReason.AGENT_GAVE_NO_DECISION
-        )
-        escalate_enquiry(context, reason, f"agent ended after {turns_used} turns without create_rfq or escalation")
-        recorder.record("system", "escalate_to_human", arguments={"reason": reason})
+        _escalate_by_code(context, turns_used, recorder)
+    ended = context.load_enquiry()
+    set_span_output(describe_outcome(ended, context.rfq_id))
     return AgentRun(
         enquiry_id=context.enquiry_id,
         tenant_id=context.tenant_id,
         model=model,
         prompt_version=PROMPT_VERSION,
         events=recorder.events,
-        final_status=context.load_enquiry().status,
+        final_status=ended.status,
         rfq_id=context.rfq_id,
     )
+
+
+def describe_outcome(enquiry: Enquiry, rfq_id: str | None) -> str:
+    """The run's result in one line, as the agent span's output: what a trader would say happened."""
+    if enquiry.status is EnquiryStatus.QUOTED:
+        return f"Quoted: RFQ {rfq_id} sent, quote drafted for the buyer"
+    if enquiry.status is EnquiryStatus.ESCALATED:
+        return f"Escalated to a human trader: {enquiry.escalation_reason} ({enquiry.escalation_detail})"
+    if enquiry.status is EnquiryStatus.FAILED:
+        return f"Failed: {enquiry.failure_reason}"
+    return f"Ended with status {enquiry.status}" + (f" after RFQ {rfq_id}" if rfq_id else "")
+
+
+@observe(type="llm", name="agent turn")
+def _model_turn(
+    context: ToolContext, model: str, messages: list[dict[str, Any]], received: str
+) -> ConversationResponse:
+    """One LLM span per turn: what the model was answering (the email, then the tool results it asked for)
+    and what it replied. A failed call is an errored span; the loop marks the enquiry failed."""
+    set_span_input(received)
+    response = context.llm.converse(_request(model, messages))
+    set_span_output(response.text())
+    add_span_metadata(stop_reason=response.stop_reason, tool_calls=[use.name for use in response.tool_uses()])
+    record_model_call(response.model, response.input_tokens, response.output_tokens)
+    return response
+
+
+@observe(name="code: escalate_to_human")
+def _escalate_by_code(context: ToolContext, turns_used: int, recorder: TraceRecorder) -> None:
+    """The safety net, as a plain span: not the agent's choice, so never one of its tool calls."""
+    reason = EscalationReason.AGENT_STEP_LIMIT if turns_used >= MAX_TURNS else EscalationReason.AGENT_GAVE_NO_DECISION
+    set_span_input({"reason": reason, "turns_used": turns_used})
+    escalate_enquiry(context, reason, f"agent ended after {turns_used} turns without create_rfq or escalation")
+    recorder.record("system", "escalate_to_human", arguments={"reason": reason})
 
 
 def opening_message(context: ToolContext, enquiry: Enquiry) -> str:
@@ -101,10 +142,7 @@ def _run_tool(context: ToolContext, use: ToolUse, recorder: TraceRecorder) -> di
     started = time.perf_counter()
     context.model_usage = None
     try:
-        tool = TOOLS.get(use.name)
-        if tool is None:
-            raise ToolError(f"unknown tool {use.name!r}")
-        result, is_error = tool.run(context, use.input), False
+        result, is_error = _execute_tool(context, use), False
     except ToolError as refusal:
         result, is_error = {"error": str(refusal)}, True
     latency_ms = round((time.perf_counter() - started) * 1000, 1)
@@ -120,6 +158,22 @@ def _run_tool(context: ToolContext, use: ToolUse, recorder: TraceRecorder) -> di
     # ensure_ascii=False: the model must read "Poznań", not "Poznań", or it copies the escape (F-010).
     content = json.dumps(result, ensure_ascii=False)
     return {"type": "tool_result", "tool_use_id": use.id, "content": content, "is_error": is_error}
+
+
+@observe(type="tool")
+def _execute_tool(context: ToolContext, use: ToolUse) -> dict[str, Any]:
+    """One tool span per call, named after the tool: exactly the arguments the model sent (often {}, by
+    design: code supplies the tenant and the enquiry) and the result. A refusal raises, so the span is
+    marked errored with the refusal as its message."""
+    set_span_input(use.input)
+    update_current_span(name=use.name, metadata={"tenant_id": context.tenant_id, "enquiry_id": context.enquiry_id})
+    tool = TOOLS.get(use.name)
+    if tool is None:
+        raise ToolError(f"unknown tool {use.name!r}")
+    update_tool_span(description=tool.spec.description)
+    result = tool.run(context, use.input)
+    set_span_output(result)
+    return result
 
 
 def _readable_tool_results(tool_uses: list[ToolUse], tool_results: list[dict[str, Any]]) -> str:

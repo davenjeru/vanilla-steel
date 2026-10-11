@@ -19,6 +19,9 @@ Revisit these against live runs in Confident AI (there is no release gate, D39).
 from pydantic import BaseModel
 
 from evals.metrics.agent.agent_outcome import ModelCall
+from steel.llm.pricing import cost_usd, price_for
+
+__all__ = ["cost_usd", "price_for"]  # re-exported for the metrics that import them from here
 
 # One extra agent turn (about 3.5k tokens) above a clean RFQ-and-quote path is allowed, e.g. a retry
 # after a refused search; a second extra turn fails, which is the loop signal.
@@ -27,35 +30,6 @@ MAX_OUTPUT_TOKENS_PER_ENQUIRY = 1_500  # about twice a clean path
 MAX_COST_USD_PER_ENQUIRY = 0.030  # follows from the token limits at Haiku 4.5 prices
 MAX_MODEL_SECONDS_ANY_ENQUIRY = 30.0  # the synchronous API call would time out
 MAX_MODEL_SECONDS_P95 = 15.0  # twice today's median, so normal API variation does not trip it
-
-
-class ModelPrice(BaseModel):
-    input_usd_per_million_tokens: float
-    output_usd_per_million_tokens: float
-
-
-# Keyed by model family; a dated model ID such as claude-haiku-4-5-20251001 matches its family.
-# A model without an agreed price fails the cost check, so a model switch is never priced by guesswork.
-MODEL_PRICES = {
-    "claude-haiku-4-5": ModelPrice(input_usd_per_million_tokens=1.0, output_usd_per_million_tokens=5.0),
-}
-
-
-def price_for(model: str) -> ModelPrice | None:
-    for family, price in MODEL_PRICES.items():
-        if model == family or model.startswith(f"{family}-"):
-            return price
-    return None
-
-
-def cost_usd(model: str, input_tokens: int, output_tokens: int) -> float | None:
-    """None when the model has no agreed price; callers decide what an unpriced call means."""
-    price = price_for(model)
-    if price is None:
-        return None
-    return (
-        input_tokens * price.input_usd_per_million_tokens + output_tokens * price.output_usd_per_million_tokens
-    ) / 1_000_000
 
 
 class EnquiryCost(BaseModel):

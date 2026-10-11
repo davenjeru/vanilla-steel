@@ -11,37 +11,26 @@ evals/runs/shared/run_modes.py.
 In replay, a case without a recording cannot run. It is listed by name and
 left out of the run: never scored as a pass or a fail it did not earn.
 
-The agent's own stored trace (decision D27) is the source of truth. It is
-re-emitted as typed DeepEval spans (agent, llm with model and tokens, tool,
-and a plain span for actions taken by code), so the built-in trace metrics
-(AgentLoopDetectionMetric) and Confident AI see every step. Span durations are
-not real, because the spans are emitted after the run; the recorded latency is
-in each span's metadata.
+The trace is recorded by the product as it runs (steel.tracing, decision D40):
+one agent span with an LLM span per turn, a tool span per call and the model
+calls tools make nested inside them. Each case is one trace, rooted in a span
+for the whole sandbox run, so the earlier enquiries' extraction calls sit next
+to the agent's run rather than in traces of their own.
 .env is needed even in replay: ToolCorrectnessMetric requires an OpenAI key to
 be constructed, although in exact-match mode it never calls a model.
 """
 
 from collections.abc import Callable
-from time import perf_counter
 from typing import Any, Literal
 
 from deepeval.dataset import EvaluationDataset, Golden
 from deepeval.metrics import AgentLoopDetectionMetric, BaseMetric, ToolCorrectnessMetric
 from deepeval.test_case import ToolCall
-from deepeval.tracing import (
-    current_span_context,
-    current_trace_context,
-    observe,
-    update_current_span,
-    update_current_trace,
-    update_llm_span,
-    update_tool_span,
-)
-from deepeval.tracing.types import BaseSpan, TraceSpanStatus
+from deepeval.tracing import observe, update_current_trace
 
 from evals.metrics.agent.acts_only_for_its_own_tenant import ActsOnlyForItsOwnTenant
 from evals.metrics.agent.agent_outcome import AgentOutcome, AgentStep, ModelCall
-from evals.metrics.agent.budget import enquiry_cost, price_for
+from evals.metrics.agent.budget import enquiry_cost
 from evals.metrics.agent.calls_no_forbidden_tool import CallsNoForbiddenTool
 from evals.metrics.agent.counterfactual_groups import GroupMember, GroupVerdict, judge_counterfactual_groups
 from evals.metrics.agent.judged import judged_agent_metrics
@@ -63,17 +52,16 @@ from evals.runs.shared.run_modes import (
     parse_run_options,
 )
 from evals.runs.shared.tool_contracts import describe_arguments
+from evals.runs.shared.trace_tags import trace_tags
 from steel.agent.runner import MAX_TURNS, PROMPT_VERSION
 from steel.agent.tools import TOOLS
 from steel.agent.trace import TraceEvent
 from steel.api.schemas import BuyerQuote, EnquiryOut
-from steel.domain.duplicates import DUPLICATE_WINDOW
-from steel.domain.enquiry import Enquiry
 from steel.domain.models import EnquiryStatus
 from steel.extraction.extractor import EnquiryDocument
 from steel.llm.anthropic_client import AnthropicClient
 from steel.llm.client import LLMClient
-from steel.llm.replay import MissingFixture, RecordingLLMClient, ReplayLLMClient, clear_case_recordings
+from steel.llm.replay import RecordingLLMClient, ReplayLLMClient, case_recordings_dir, clear_case_recordings
 from steel.sandbox import SandboxResult, handle_in_sandbox
 from steel.settings import Settings
 
@@ -98,6 +86,21 @@ def llm_for_case(live: bool) -> Callable[[GoldenCase], LLMClient]:
     return recording if live else replaying
 
 
+def recorded_cases(cases: list[GoldenCase], mode: Mode) -> list[GoldenCase]:
+    """In replay, only cases with a recorded conversation can run; the rest are named, not scored.
+
+    A recording folder is the sign of a recorded case; a stale or partial one still fails loudly in the run.
+    """
+    if mode != "replay":
+        return cases
+    recorded = [case for case in cases if case_recordings_dir(SETTINGS.llm_fixtures_dir, case.name).is_dir()]
+    unrecorded = [case.name for case in cases if case not in recorded]
+    if unrecorded:
+        print(f"Not recorded, so not scored ({len(unrecorded)} of {len(cases)}): {', '.join(unrecorded)}")
+        print("Record them with: make run-agent-live CASE=<name>")
+    return recorded
+
+
 def run_in_sandbox(case: GoldenCase, llm: LLMClient) -> SandboxResult:
     if case.email is None:
         raise ValueError(f"{case.name}: agent case has no email")  # the loader requires one
@@ -107,30 +110,36 @@ def run_in_sandbox(case: GoldenCase, llm: LLMClient) -> SandboxResult:
     )
 
 
-def run_every_case(cases: list[GoldenCase], llm_for: Callable[[GoldenCase], LLMClient]) -> dict[str, SandboxResult]:
-    """Results by case name. Cases without a recording are reported, not scored."""
-    results: dict[str, SandboxResult] = {}
-    unrecorded: list[str] = []
-    for number, case in enumerate(cases, start=1):
-        try:
-            results[case.name] = run_in_sandbox(case, llm_for(case))
-        except MissingFixture:
-            unrecorded.append(case.name)
-        # Live runs take minutes before DeepEval's own progress bar starts, so report each case as it finishes.
-        print(f"[{number}/{len(cases)}] {case.name}: {_progress_note(results.get(case.name))}", flush=True)
-    if unrecorded:
-        print(f"Not recorded, so not scored ({len(unrecorded)} of {len(cases)}): {', '.join(unrecorded)}")
-        print("Record them with: make run-agent-live CASE=<name>")
-    return results
-
-
-def _progress_note(result: SandboxResult | None) -> str:
-    if result is None:
-        return "not recorded"
-    outcome = f"RFQ for {result.rfq.stock_item_id}" if result.rfq else str(result.enquiry.status)
-    if result.enquiry.escalation_reason:
-        outcome += f" ({result.enquiry.escalation_reason})"
-    return f"{outcome}, {len(result.run.tool_calls())} tool calls"
+@observe(name="enquiry", description="one enquiry through the sandbox: earlier enquiries on file, then the agent")
+def handle_case(golden: Golden, case: GoldenCase, llm: LLMClient, tags: list[str]) -> SandboxResult:
+    """Runs the case inside its trace, so the product's spans land in it, and describes the result to
+    DeepEval: the outcome as AgentOutcome JSON (the shape the custom metrics read) and the tools the agent
+    called, each with its contract for the argument judge."""
+    result = run_in_sandbox(case, llm)
+    outcome = agent_outcome(result)
+    update_current_trace(
+        name=golden.name,
+        tags=tags,
+        input=golden.input,
+        output=outcome.model_dump_json(),
+        expected_output=golden.expected_output,
+        tools_called=[
+            ToolCall(
+                name=step.name,
+                description=_tool_description(step.name),
+                input_parameters=step.arguments,
+                output=step.result,
+            )
+            for step in outcome.tool_calls()
+        ],
+        expected_tools=golden.expected_tools,
+        metadata={
+            **enquiry_totals(outcome),
+            "final_status": str(result.enquiry.status),
+            "known_limitation": (golden.additional_metadata or {}).get("known_limitation"),
+        },
+    )
+    return result
 
 
 def agent_outcome(result: SandboxResult) -> AgentOutcome:
@@ -190,208 +199,6 @@ def _decision(result: SandboxResult) -> Literal["rfq", "escalate", "failed"]:
     return "failed"
 
 
-# Confident AI shows times to the millisecond; a step shorter than that would tie with the next one.
-SHORTEST_STEP_SECONDS = 0.001
-
-
-class Timeline:
-    """Puts the replayed steps on the clock one after another, each as long as it took when it ran.
-
-    Spans are created after the run, all within a millisecond, so Confident AI showed them shuffled
-    and 0 ms long. Times and refusals are applied once every span has closed, because DeepEval sets
-    a span's end time and status itself when it closes.
-    """
-
-    def __init__(self, start: float) -> None:
-        self.cursor = start
-        self.times: list[tuple[BaseSpan, float, float]] = []
-        self.refusals: list[tuple[BaseSpan, str]] = []
-
-    def place_next(self, span: BaseSpan, seconds: float) -> float:
-        start = self.cursor
-        self.times.append((span, start, start + seconds))
-        self.cursor += max(seconds, SHORTEST_STEP_SECONDS)
-        return start
-
-    def place_within(self, span: BaseSpan, start: float, seconds: float) -> None:
-        """A model call a tool made: it starts with the tool and does not move the clock on."""
-        self.times.append((span, start, start + seconds))
-
-    def mark_refused(self, span: BaseSpan, message: str) -> None:
-        self.refusals.append((span, message))
-
-    def apply(self) -> None:
-        for span, start, end in self.times:
-            span.start_time, span.end_time = start, end
-        for span, message in self.refusals:
-            span.status, span.error = TraceSpanStatus.ERRORED, message
-
-
-def step_seconds(event: TraceEvent) -> float:
-    return event.latency_ms / 1000
-
-
-def open_span() -> BaseSpan:
-    span = current_span_context.get()
-    if span is None:
-        raise RuntimeError("called outside an @observe span")
-    return span
-
-
-def set_span_input(value: Any) -> None:
-    """Set the current span's input directly, even when it is empty.
-
-    DeepEval's update_current_span ignores a falsy input such as {}, and the
-    span then records the decorated function's arguments instead: the whole
-    trace event, enquiry or sandbox result, which carry internal matches
-    (supplier IDs, cost prices) that must not be uploaded as tool input.
-    """
-    span = current_span_context.get()
-    if span is not None:
-        span.input = value
-
-
-@observe(type="llm")
-def trace_llm_turn(event: TraceEvent, timeline: Timeline) -> str:
-    """Input: what this turn answered (the email, then the tool results it asked for); output: its reply."""
-    text = str(event.result.get("text", ""))
-    set_span_input(event.received)
-    update_current_span(name=event.name, output=text, metadata={"recorded_latency_ms": event.latency_ms})
-    record_model_use(event.name, event.input_tokens, event.output_tokens)
-    timeline.place_next(open_span(), step_seconds(event))
-    return text
-
-
-@observe(type="llm")
-def trace_model_call_inside_tool(event: TraceEvent, model: str, timeline: Timeline, tool_start: float) -> str:
-    """A model call a tool makes itself (extract_specs' extraction, draft_quote's cover letter), as an LLM
-    span nested under the tool's span: what that model was sent and what it answered, before code acted."""
-    set_span_input(event.model_input)
-    update_current_span(
-        name=f"{event.name}: {model}",
-        output=event.model_output,
-        metadata={"recorded_latency_ms": event.model_latency_ms},
-    )
-    record_model_use(model, event.input_tokens, event.output_tokens)
-    timeline.place_within(open_span(), tool_start, event.model_latency_ms / 1000)
-    return event.model_output
-
-
-def record_model_use(model: str, input_tokens: int, output_tokens: int) -> None:
-    """Model, tokens and agreed price per token through update_llm_span, so Confident AI shows them natively.
-    A model without an agreed price gets no price rather than a guess (prices: evals/metrics/agent/budget.py)."""
-    price = price_for(model)
-    update_llm_span(
-        model=model,
-        input_token_count=input_tokens,
-        output_token_count=output_tokens,
-        cost_per_input_token=price.input_usd_per_million_tokens / 1_000_000 if price else None,
-        cost_per_output_token=price.output_usd_per_million_tokens / 1_000_000 if price else None,
-    )
-
-
-@observe(type="tool")
-def trace_tool_call(event: TraceEvent, enquiry: Enquiry, timeline: Timeline) -> dict[str, Any]:
-    """A tool the agent chose. DeepEval lists tool spans as the agent span's tools_called.
-
-    The input stays exactly what the model sent, often {}; the context code
-    supplied goes to metadata, so a reviewer sees what the tool acted on.
-    """
-    set_span_input(event.arguments)
-    update_current_span(
-        name=event.name,
-        output=event.result,
-        metadata={
-            "is_error": event.is_error,
-            "recorded_latency_ms": event.latency_ms,
-            "supplied_by_code": _context_supplied_by_code(event, enquiry),
-        },
-    )
-    update_tool_span(description=_tool_description(event.name))
-    span = open_span()
-    start = timeline.place_next(span, step_seconds(event))
-    if event.is_error:
-        timeline.mark_refused(span, str(event.result.get("error", "")))
-    if event.model is not None:
-        trace_model_call_inside_tool(event, event.model, timeline, start)
-    return event.result
-
-
-def _context_supplied_by_code(event: TraceEvent, enquiry: Enquiry) -> dict[str, str]:
-    context = {"tenant_id": event.tenant_id, "enquiry_id": enquiry.id}
-    if event.name == "check_duplicate":
-        # What the duplicate check compared against the tenant's earlier enquiries (D26, D36).
-        context["fingerprint"] = enquiry.fingerprint
-        context["compared_with"] = (
-            f"earlier enquiries of {event.tenant_id} with the same fingerprint,"
-            f" or the same extracted order received within {DUPLICATE_WINDOW.days} days"
-        )
-    return context
-
-
-@observe(name="code")
-def trace_code_action(event: TraceEvent, timeline: Timeline) -> dict[str, Any]:
-    """An action code took, e.g. escalating a run that hit the step limit.
-    Not a tool span: it was not the agent's choice and must not appear among its tool calls."""
-    set_span_input(event.arguments)
-    update_current_span(
-        name=f"code: {event.name}",
-        output=event.result,
-        metadata={"is_error": event.is_error, "tenant_id": event.tenant_id},
-    )
-    timeline.place_next(open_span(), step_seconds(event))
-    return event.result
-
-
-@observe(name="agent", type="agent", available_tools=list(TOOLS), description="run the agent eval")
-def trace_agent_run(golden: Golden, result: SandboxResult) -> str:
-    """The outcome goes to the trace as AgentOutcome JSON, the shape the custom metrics read."""
-    set_span_input(golden.input)
-    timeline = _timeline_ending_now(result.run.events)
-    for event in result.run.events:
-        if event.kind == "llm_turn":
-            trace_llm_turn(event, timeline)
-        elif event.kind == "tool_call":
-            trace_tool_call(event, result.enquiry, timeline)
-        else:
-            trace_code_action(event, timeline)
-    timeline.apply()
-    outcome = agent_outcome(result)
-    update_current_trace(
-        name=golden.name,
-        input=golden.input,
-        output=outcome.model_dump_json(),
-        expected_output=golden.expected_output,
-        tools_called=[
-            ToolCall(
-                name=step.name,
-                description=_tool_description(step.name),
-                input_parameters=step.arguments,
-                output=step.result,
-            )
-            for step in outcome.tool_calls()
-        ],
-        expected_tools=golden.expected_tools,
-        metadata={
-            **enquiry_totals(outcome),
-            "final_status": str(result.enquiry.status),
-            "known_limitation": (golden.additional_metadata or {}).get("known_limitation"),
-        },
-    )
-    return outcome.model_dump_json()
-
-
-def _timeline_ending_now(events: list[TraceEvent]) -> Timeline:
-    """Starts the agent span and its trace as long ago as the run took, so the replayed steps end now."""
-    run_seconds = sum(max(step_seconds(event), SHORTEST_STEP_SECONDS) for event in events)
-    start = perf_counter() - run_seconds
-    open_span().start_time = start
-    trace = current_trace_context.get()
-    if trace is not None:
-        trace.start_time = start
-    return Timeline(start)
-
-
 def enquiry_totals(outcome: AgentOutcome) -> dict[str, Any]:
     """Every model call for the enquiry, extraction included. DeepEval leaves a trace-built test case's own
     token and cost fields unset ("Not set" in Confident AI), so the totals live in the trace metadata."""
@@ -427,8 +234,15 @@ def main() -> None:
     cases = load_dataset(dataset_dir)
     if options.verified_only:
         cases = only_verified(cases)
-    results = run_every_case(cases, llm_for_case(live=mode == "live"))
-    dataset = EvaluationDataset(goldens=[Golden(**case.as_golden_fields()) for case in cases if case.name in results])
+    cases = recorded_cases(cases, mode)
+    cases_by_name = {case.name: case for case in cases}
+    llm_for = llm_for_case(live=mode == "live")
+    dataset = EvaluationDataset(goldens=[Golden(**case.as_golden_fields()) for case in cases])
+    results: dict[str, SandboxResult] = {}
+
+    def handle(golden: Golden) -> None:
+        case = cases_by_name[golden.name]
+        results[case.name] = handle_case(golden, case, llm_for(case), trace_tags(case, mode))
 
     result = evaluate_each(
         dataset.evals_iterator(
@@ -436,7 +250,7 @@ def main() -> None:
             hyperparameters=run_hyperparameters(mode),
             identifier=run_identifier(DATASET, manifest.version, COMPONENT_VERSION, current_git_revision()),
         ),
-        lambda golden: trace_agent_run(golden, results[golden.name]),
+        handle,
     )
 
     print_counterfactual_report(judge_counterfactual_groups(group_members(cases, results)))

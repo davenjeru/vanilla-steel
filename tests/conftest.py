@@ -1,4 +1,5 @@
 import itertools
+import os
 import sqlite3
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
@@ -15,6 +16,10 @@ from steel.storage.seed import seed_database
 from tests.factories.llm import FakeLLMClient
 
 FIXED_NOW = datetime(2026, 10, 9, 9, 0, tzinfo=UTC)
+
+# The product records spans as it runs (steel.tracing). Without a Confident AI key DeepEval drops them,
+# but would log "No Confident AI API key found" once per trace unless told to be quiet.
+os.environ.setdefault("CONFIDENT_TRACE_VERBOSE", "0")
 
 # What the LLM reads from the standard test enquiry: 25 t of St37-2 sheet to Poznań.
 ST37_SHEET_READING = {

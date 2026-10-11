@@ -34,10 +34,11 @@ from evals.runs.shared.run_modes import (
     only_verified,
     parse_run_options,
 )
+from evals.runs.shared.trace_tags import trace_tags
 from steel.llm.anthropic_client import AnthropicClient
 from steel.llm.client import LLMClient
-from steel.llm.replay import MissingFixture, RecordingLLMClient, ReplayLLMClient
-from steel.quotes.cover_letter import PROMPT_VERSION, CoverLetter, write_cover_letter
+from steel.llm.replay import RecordingLLMClient, ReplayLLMClient, fixture_path
+from steel.quotes.cover_letter import FALLBACK_LANGUAGE, PROMPT_VERSION, build_request, write_cover_letter
 from steel.settings import Settings
 
 DATASET = "quote_letter"
@@ -57,36 +58,40 @@ def letter_metrics(mode: Mode) -> list[BaseMetric]:
     return deterministic + judged_letter_metrics() if is_judged(mode) else deterministic
 
 
-def write_every_letter(cases: list[GoldenCase], llm: LLMClient) -> dict[str, CoverLetter]:
-    """Letters by case name. Cases without a recording are reported, not scored."""
-    letters: dict[str, CoverLetter] = {}
-    unrecorded: list[str] = []
-    for case in cases:
-        writer_input = QuoteLetterInput.model_validate(case.labels.input_quote)
-        try:
-            letters[case.name] = write_cover_letter(
-                writer_input.quote, writer_input.language, llm, SETTINGS.quote_model
-            )
-        except MissingFixture:
-            unrecorded.append(case.name)
+def writer_input(case: GoldenCase) -> QuoteLetterInput:
+    return QuoteLetterInput.model_validate(case.labels.input_quote)
+
+
+def recorded_cases(cases: list[GoldenCase], mode: Mode) -> list[GoldenCase]:
+    """In replay, only cases with a recorded letter can run; the rest are named, not scored."""
+    if mode != "replay":
+        return cases
+    recorded = [case for case in cases if _is_recorded(case)]
+    unrecorded = [case.name for case in cases if case not in recorded]
     if unrecorded:
         print(f"Not recorded, so not scored ({len(unrecorded)} of {len(cases)}): {', '.join(unrecorded)}")
         print("Record them with: make eval-quote-letter-live")
-    return letters
+    return recorded
 
 
-@observe(name="quote_letter", type="llm", description="run the quote-letter eval")
-def trace_letter(golden: Golden, letter: CoverLetter) -> str:
+def _is_recorded(case: GoldenCase) -> bool:
+    given = writer_input(case)
+    request = build_request(given.quote, given.language or FALLBACK_LANGUAGE, SETTINGS.quote_model)
+    return fixture_path(SETTINGS.llm_fixtures_dir, request).is_file()
+
+
+@observe(name="quote_letter", description="write one quote's cover letter")
+def write_and_trace(golden: Golden, case: GoldenCase, llm: LLMClient, tags: list[str]) -> str:
+    """The writer runs inside the trace, so its LLM span (model, tokens, cost) lands in it."""
+    given = writer_input(case)
+    letter = write_cover_letter(given.quote, given.language, llm, SETTINGS.quote_model)
     update_current_trace(
+        name=golden.name,
+        tags=tags,
         input=golden.input,
         output=letter.text,
         expected_output=golden.expected_output,
-        metadata={
-            "letter_language": letter.language,
-            "model": letter.llm.model,
-            "input_tokens": letter.llm.input_tokens,
-            "output_tokens": letter.llm.output_tokens,
-        },
+        metadata={"letter_language": letter.language},
     )
     return letter.text
 
@@ -108,15 +113,19 @@ def main() -> None:
     cases = load_dataset(dataset_dir)
     if options.verified_only:
         cases = only_verified(cases)
-    letters = write_every_letter(cases, make_llm(mode))
-    dataset = EvaluationDataset(goldens=[Golden(**case.as_golden_fields()) for case in cases if case.name in letters])
+    cases = recorded_cases(cases, mode)
+    cases_by_name = {case.name: case for case in cases}
+    llm = make_llm(mode)
+    dataset = EvaluationDataset(goldens=[Golden(**case.as_golden_fields()) for case in cases])
     result = evaluate_each(
         dataset.evals_iterator(
             metrics=letter_metrics(mode),
             hyperparameters=run_hyperparameters(mode),
             identifier=run_identifier(DATASET, manifest.version, COMPONENT_VERSION, current_git_revision()),
         ),
-        lambda golden: trace_letter(golden, letters[golden.name]),
+        lambda golden: write_and_trace(
+            golden, cases_by_name[golden.name], llm, trace_tags(cases_by_name[golden.name], mode)
+        ),
     )
     exit_if_replay_failed(result, mode)
 

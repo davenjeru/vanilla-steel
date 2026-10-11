@@ -5,10 +5,11 @@ from pathlib import Path
 import pytest
 
 from evals.metrics.quote_letter.judged import QUALITY_CRITERIA
-from evals.runs.quote_letter import letter_metrics, write_every_letter
+from evals.runs import quote_letter as letter_run
+from evals.runs.quote_letter import letter_metrics, recorded_cases
 from evals.runs.shared.golden_cases import load_dataset
 from evals.runs.shared.judge import JUDGE_MODEL
-from steel.llm.replay import ReplayLLMClient
+from steel.settings import Settings
 from tests.factories.golden_cases import valid_quote_letter_labels, write_case
 
 
@@ -34,11 +35,13 @@ def test_judged_modes_add_the_judged_metrics_with_the_pinned_judge(mode: str, mo
 def test_cases_without_a_recorded_letter_are_left_out_not_scored(
     quote_letter_dataset_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """A case that could not run must not appear as a pass or a fail; it is named instead."""
+    letter_run.SETTINGS = Settings(llm_fixtures_dir=tmp_path / "empty")
     write_case(quote_letter_dataset_dir, name="letter-001-polish-plate", labels=valid_quote_letter_labels(), email=None)
 
-    letters = write_every_letter(load_dataset(quote_letter_dataset_dir), ReplayLLMClient(tmp_path / "empty"))
+    runnable = recorded_cases(load_dataset(quote_letter_dataset_dir), "replay")
 
-    assert (letters, "letter-001-polish-plate" in capsys.readouterr().out) == ({}, True)
+    assert (runnable, "letter-001-polish-plate" in capsys.readouterr().out) == ([], True)
 
 
 def test_letter_quality_judge_explains_in_english() -> None:

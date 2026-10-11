@@ -15,6 +15,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from steel.agent.trace import ModelUsage
+from steel.domain.duplicates import DUPLICATE_WINDOW
 from steel.domain.enquiry import Enquiry, EscalationReason, Rfq
 from steel.domain.geography import locate_delivery
 from steel.domain.injection import InjectionSignal, find_injection_signals, suspicious_content_warning
@@ -28,6 +29,7 @@ from steel.extraction.extractor import EnquiryDocument, extract_spec, readable_t
 from steel.llm.client import LLMClient, LLMError, ToolSpec
 from steel.quotes.cover_letter import CoverLetter, write_cover_letter
 from steel.storage import enquiries, quotes, repositories, rfqs
+from steel.tracing import add_span_metadata
 
 TERMINAL_STATUSES = {EnquiryStatus.ESCALATED, EnquiryStatus.FAILED, EnquiryStatus.QUOTED}
 
@@ -137,6 +139,11 @@ def _spec_summary(enquiry: Enquiry) -> dict[str, Any]:
 def check_duplicate(context: ToolContext, arguments: dict[str, Any]) -> dict[str, Any]:
     enquiry = context.load_enquiry()
     duplicate_of = enquiries.find_earlier_duplicate(context.connection, context.tenant_id, enquiry)
+    add_span_metadata(
+        fingerprint=enquiry.fingerprint,
+        compared_with=f"earlier enquiries of {context.tenant_id} with the same fingerprint,"
+        f" or the same extracted order received within {DUPLICATE_WINDOW.days} days",
+    )
     # Kept on the enquiry so the buyer learns which earlier enquiry is already handling the order.
     context.save_enquiry(enquiry.model_copy(update={"duplicate_of": duplicate_of}))
     # A correction (F-012) changes the earlier order; the trader needs to know that, not just "duplicate".
