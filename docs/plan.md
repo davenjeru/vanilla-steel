@@ -31,7 +31,7 @@ This plan describes the product side in detail and records evaluation decisions 
 | D20 | Matches are internal: they name suppliers and cost prices, which would reveal supplier identity and the platform's margin. They are stored with the enquiry for the agent and RFQs; the buyer API shows only status `matched` and `offers_available`. Zero-tolerance API tests scan responses for supplier names, IDs, cities, stock IDs and cost fields. |
 | D21 | Slice order changed to 2 -> 4 -> 5 -> 3 -> 6 to reach the agent and LLM-judge metrics sooner. Judge model for G-Eval and other judge metrics: OpenAI (a different model family from the Claude extractor, avoiding self-preference bias). A judge experiment on extraction compares judge verdicts with FieldMatch ground truth; learning only, never a gate. |
 | D22 | Matching evals run against the deterministic seed stock (`build_stock(DEFAULT_SEED)`), not the database, so a result changes only when the matcher does; the runner logs `stock_seed` as a hyperparameter. **For the test strategy:** in production, each matching dataset version would be labelled against a dated stock snapshot (for example "stock as of 2026-10-01") recorded in its manifest; the replica's fixed seed plays the role of that snapshot. Database loading and pipeline matching are covered by the storage round-trip and API matching tests instead. |
-| D23 | Everyday commands live in the `Makefile`: `make check`, `make seed`, `make eval-extraction`, `make eval-extraction-live`, `make eval-matching`, `make record-fixtures`. Module paths: `evals.runs.extraction`, `evals.runs.matching`, `scripts.record_fixtures`, `scripts.annotate_trace`. |
+| D23 | Everyday commands live in the `Makefile`: `make check`, `make seed`, `make eval-extraction`, `make eval-extraction-live`, `make eval-matching`, `make record-fixtures`. Module paths: `evals.runs.extraction`, `evals.runs.matching`, `scripts.record_fixtures`, `scripts.annotate_trace`. *Since D41: evals start with `python -m evals.run <eval>`; matching is a unit test and has no eval target.* |
 | D24 | The agent is Claude Haiku (`Settings.agent_model`) in a tool loop (`steel/agent/runner.py`, prompt `agent_v1.md`) over five tools: extract_specs, check_duplicate, search_stock, create_rfq, escalate_to_human. draft_quote arrives in Slice 5. Every run must end with exactly one decision: an RFQ or an escalation. |
 | D25 | Rules enforced by code, not trusted to the prompt: the tenant comes from `ToolContext` and no tool takes a tenant argument; search_stock needs an extracted spec; create_rfq accepts only lots the last search offered; the database allows one RFQ per enquiry; escalation reasons agent_step_limit and agent_gave_no_decision are reserved for code; the loop stops after 8 turns and a run without a decision is escalated. |
 | D26 | check_duplicate uses an exact fingerprint (case, spacing and Re:/Fwd:/AW:/WG: prefixes ignored), scoped to the tenant. Near-duplicates are Slice 3. A duplicate is escalated, never turned into an RFQ. |
@@ -51,6 +51,7 @@ This plan describes the product side in detail and records evaluation decisions 
 | D40 | Owner, 2026-10-11: **the product records its own trace.** The agent loop, every model call and every tool call are `@observe`d where they happen (`steel/tracing.py`; `deepeval` is a runtime dependency), so an eval run and a production run produce the same spans: real order and durations, a refused tool call as an errored span, the model calls tools make nested inside the tool's span, model and tokens with the agreed price per token (`steel/llm/pricing.py`) on every LLM span. The eval no longer rebuilds spans from the stored `AgentRun` (the `Timeline` and span re-emission in `evals/runs/agent.py` are gone); each case runs inside one eval-side root span so the earlier enquiries' extraction calls and the agent's run form one trace, named after the case and tagged (`dataset:`, `mode:`, `verified`/`unverified`, `language:`, `risk:`, `known-limitation`; `evals/runs/shared/trace_tags.py`). `CONFIDENT_TRACE_ENVIRONMENT` cannot tell live from replay: DeepEval files every eval trace under `testing`, so the mode is a tag. The stored `AgentRun` (D27) stays the product's record for the API and the feedback loop. Agreed target for the eval side (design review, 2026-10-11): metrics read the public `LLMTestCase` fields (`tools_called`, `actual_output`, `expected_output`) rather than an `AgentOutcome` blob; eval runs move to pytest with `assert_test(golden=...)`, which adds per-case metrics (`ToolPermissionMetric(denied_tools=...)`) to the shared list where `evals_iterator(metrics=...)` would replace them; the quote-letter eval folds into the agent eval and matching moves to pytest; prompts are pushed to Prompt Studio once per version and linked on spans, datasets pushed once per manifest version with verified cases finalized, both never pulled at run time (git stays the source of truth, D11); replay is removed in its own step once the live spans are verified against the recordings. |
 | D41 | 2026-10-11, D40 step 3: **evals are pytest files under `deepeval test run`.** `evals/test_<eval>.py` runs one golden per test and calls `assert_test(golden=..., metrics=...)`, so each case gets its own metrics (the golden's forbidden tools as `ToolPermissionMetric(denied_tools=...)`) on top of the shared list, and the cover letter the agent writes gets the letter checks on its `write_cover_letter` span (`evals/harness/spans.py`), the same three checks as the stand-alone letter eval. `uv run python -m evals.run <eval> [--live \| --judge-recorded] [--verified-only]` adds the run identifier and the replay placeholder key; the mode flags are pytest options (`evals/conftest.py`), `--verified-only` deselects unreviewed cases. Matching is deterministic code and moved to `tests/unit/test_matching_golden_cases.py`. Run-wide reports (fairness, cost, latency, duplicate rates) print when the module's cases finish. **Change to D39:** a failed deterministic check fails the run in every mode, live included, because `assert_test` raises; judged metrics are `flaky` in DeepEval's sense, scored and shown but never deciding a case (D35). The letter dataset is kept: its 8 cases cover coils, coatings, DDP and an unknown language, which no agent case reaches (owner to confirm). |
 | D42 | 2026-10-11, D40 step 4: **prompts and datasets on Confident AI, pushed from git, never pulled at run time** (D11 stands). `make push-prompts` (`scripts/push_prompts.py`) pushes each product prompt's text once per `PROMPT_VERSION` and records the Prompt Studio commit hash and a text digest in `evals/prompts.json`; a changed text under the same version is refused, a pushed version is skipped. `make push-datasets` pushes each golden dataset to the alias `<dataset>-v<manifest version>`: verified cases finalized, unverified queued for review, and only names not already on the alias (pushing appends). `make pull-verified` marks a case `verified: true` when its golden was finalized on Confident AI, never the other way, and leaves `back-translated` alone. At run time the product names the prompt on every LLM span (`steel.tracing.record_prompt`: alias and git version), the eval adds the registered commit hash (`evals/harness/prompts.py`), and the run's hyperparameters name alias and commit. **Two DeepEval 4.2.8 limits:** a span's prompt fields are lost inside a test run (serialised under `promptAlias`, read back under `prompt_alias`, between the reloads `deepeval test run` does), so the link is also written to span metadata, which survives; and a `Prompt` given as a hyperparameter is pushed again on every keyed run unless DeepEval's private prompt id is set, so hyperparameters carry plain text. Dataset versions on Confident AI need the Team plan, hence the version in the alias. Not verified against Confident AI yet: the scripts need keys, the owner runs them. |
+| D43 | Owner, 2026-10-11, D40 step 5: **no replay.** The first live run under the pytest harness (`cmv3vouyt001dl60t4xal6qrc`, 18 verified cases) gave the same verdict as the recordings on every case, which was the condition for removing replay (D40, option A). Gone: `steel/llm/replay.py`, `fixtures/` (214 recordings), the record and prune scripts, the run modes, the placeholder key. Every eval calls Claude; judged metrics always run and never decide (D35). `ci.yml` runs `make check` only; evals run on request through `live-evals.yml` (`--verified-only`), no schedule yet. Supersedes D4 and D16, and the replay part of D39. Also found on that run: F-014. |
 | D13 | Slice 4 adds a feedback-loop script: escalated or wrongly handled enquiries become candidate case folders (`verified: false`, `source: production`) with the system's extraction pre-filled for correction. Full production sampling (stratified, PII-scrubbed, tenant-consented) is described in the test strategy as a planned layer; a tenant's enquiry never enters a shared dataset unless anonymised and permitted. |
 
 ## Repo layout
@@ -65,14 +66,21 @@ src/steel/
   extraction/      extractor and attachment parsing                          (Slice 1)
   agent/           tools, trace recorder, tool loop                          (Slice 4)
   api/             FastAPI app factory, auth, routes, schemas
+  quotes/          pricing and the cover-letter writer                        (Slice 5)
+  tracing.py       the spans the product records as it runs                   (D40)
   settings.py      runtime configuration only (database path, service limits)
-scripts/           seed.py, record_fixtures.py
-tests/             unit/, api/, factories/, conftest.py
+evals/
+  test_<eval>.py   one pytest file per eval, run by `deepeval test run` via evals/run.py (D41)
+  harness/         golden case loader, modes, run labels, trace tags, per-eval helpers, prompt registry
+  metrics/         custom DeepEval metrics, one business rule each
+  datasets/        golden cases, one folder per case, a versioned manifest per dataset (D11)
+  prompts.json     which Prompt Studio commit each prompt version became (D42)
+scripts/           seed, record and prune fixtures, run one case, push prompts and datasets, pull reviews,
+                   export feedback-loop candidates, annotate a trace
+tests/             unit/, api/, agent/, storage/, evals/ (the harness itself), scripts/, factories/
 fixtures/          recorded LLM answers: extraction/, quote_letter/, agent/<case>/ (D16)
-docs/              plan.md
+docs/              plan.md, findings.md, test-strategy.md
 ```
-
-Evaluation folders (harness, datasets, run history, release gate) are added by the owner.
 
 ## Interfaces by slice
 
@@ -158,8 +166,9 @@ GET /v1/quotes/{id} -> BuyerQuote                   # no supplier fields in the 
 ```
 
 ### Slice 6: Release
-Product side: `.github/workflows/ci.yml` running `make check` and the replay evals (D39), README design decisions.
-Owner: test strategy, regression demo. The release gate was dropped (D39); a manual live workflow runs the verified cases.
+**Done.** `.github/workflows/ci.yml` runs `make check` and the replay evals on every push (D39); `live-evals.yml`
+runs the verified cases live on request. `README.md` and `docs/test-strategy.md` describe the harness and its
+decisions. The regression demo is F-013 (`agent-024`, red in CI until fixed). The release gate was dropped (D39).
 
 ## Planned eval metrics by slice
 
@@ -177,21 +186,21 @@ judge-model metrics only where code cannot decide.
 | 2 | **Best offer in the top 3** (top-k, k=3) | Unit test | **Dropped** (D41): implied by best offer first | Business correctness |
 | 2 | **Offers in the right order** (ranking) | Unit test | **Moved** (D41): expected offers appear in the expected order, by delivered cost | Business correctness |
 | 2 | **Finds every suitable offer** (completeness) | Unit test | **Moved** (D41): every expected offer appears and nothing else; catches lost sales | Business correctness |
-| 3 | Near-duplicate precision and recall | Custom, deterministic | **Done** (`evals/runs/duplicates.py`, `make eval-duplicates`). "Duplicate decision is correct" per labelled pair; precision and recall printed per run. Pairs: forwarded, reply quoting, reworded, translated, kilograms, correction (known limitation), new spreadsheet, other tenant, other tonnage, thickness, city, outside the window | Duplication |
+| 3 | Near-duplicate precision and recall | Custom, deterministic | **Done** (`evals/test_duplicates.py`, `make eval-duplicates`). "Duplicate decision is correct" per labelled pair; precision and recall printed per run. Pairs: forwarded, reply quoting, reworded, translated, kilograms, correction (known limitation), new spreadsheet, other tenant, other tonnage, thickness, city, outside the window | Duplication |
 | 4 | `ToolPermissionMetric` | Built-in, deterministic | **Done** (D41): built per case from the golden's `forbidden_tools` (`evals/harness/agent.py::agent_metrics`), zero tolerance | Data separation, business correctness |
-| 4 | `ToolCorrectnessMetric` | Built-in | Right tools, order and arguments against `expected_tools`; escalation present when required | Business correctness |
-| 4 | `AgentLoopDetectionMetric` | Built-in, deterministic | No repeated or cyclic tool calls | Business correctness |
+| 4 | `ToolCorrectnessMetric` | Built-in, deterministic | **Done**, exact match on the golden's `tool_path` (names and order); arguments have their own check | Business correctness |
+| 4 | `AgentLoopDetectionMetric` | Built-in, deterministic | **Done.** No repeated or cyclic tool calls | Business correctness |
 | 4 | Tenant scope | Unit test | **Moved** (D40): `tests/agent/test_runner.py::test_run_acts_only_for_the_enquirys_tenant`; the eval metric only re-read a stamp code set, the test checks what the run created | Data separation |
 | 4 | Cost and latency | Custom, run-wide reports | **Done**, printed per run, never per case (D40): `evals/metrics/agent/cost.py` (tokens, dollars, unpriced models; same in replay) and `latency.py` (live only). Confident AI prices each LLM span itself | Release criteria |
 | 4 | `ArgumentCorrectnessMetric` | Built-in, judge | **Dropped** (D40): judging only tools with arguments (D34) needed a subclass and a contract text per tool; the arguments that matter have deterministic checks | Business correctness |
-| 4 | `StepEfficiencyMetric` | Built-in, judge | Prefer the deterministic alternative: tool calls <= expected path length | Business correctness |
-| 4 | `TaskCompletionMetric` | Built-in, judge | Overall verdict; a complement, not a gate | Business correctness |
+| 4 | `StepEfficiencyMetric` | Built-in, judge | **Not built:** the exact tool-path check already flags every extra step, deterministically | Business correctness |
+| 4 | `TaskCompletionMetric` | Built-in, judge | **Done**, live and judge-recorded modes, `flaky` (report-only, D35, D41); its value is on enquiries without labels | Business correctness |
 | 5 | Supplier leak check | Custom, deterministic, zero tolerance | Supplier names, IDs (sup_, stk_) or addresses in cover text. `PatternMatchMetric` passes on a match, so it cannot be used for this. Since D41 the three letter checks also run on every letter the agent writes, on its `write_cover_letter` span | Data separation |
-| 5 | `GEval` quote quality | Built-in, judge | Commercially sensible, professional, in the customer's language. **Pause here: owner chooses the judge model** | Business correctness |
-| 5 | `FaithfulnessMetric` / `HallucinationMetric` | Built-in, judge | Cover text matches the deterministic quote lines (no invented prices, dates, quantities) | Business correctness |
+| 5 | `GEval` quote quality | Built-in, judge | **Done**, judge `gpt-6-sol` (D32), threshold 0.8 (D34), `flaky` (report-only): commercially sensible, professional, in the customer's language | Business correctness |
+| 5 | `FaithfulnessMetric` / `HallucinationMetric` | Built-in, judge | **Not built:** "Uses only the quoted figures" checks every number and date in the letter against the quote deterministically | Business correctness |
 | 5 | `PromptAlignmentMetric` | Built-in, judge | **Dropped** with `NonAdviceMetric` (D40): both scored 1.0 on every letter; figures, supplier names and product words have deterministic checks | Business correctness |
-| 5 | `PIILeakageMetric` | Built-in, judge, secondary | Indirect leaks the deterministic check misses, e.g. "our partner mill in Linz" | Data separation |
-| 5 | `DAGMetric` | Built-in, judge, option | Decision-tree grading of the quote for more consistent scores than one G-Eval | Business correctness |
+| 5 | `PIILeakageMetric` | Built-in, judge, secondary | **Done**, `flaky` (report-only): indirect leaks the deterministic check misses, e.g. "our partner mill in Linz" | Data separation |
+| 5 | `DAGMetric` | Built-in, judge, option | **Not built:** one G-Eval at 0.8 plus the deterministic letter checks have been enough; revisit if G-Eval scores prove inconsistent | Business correctness |
 | 6 | Judge calibration | Process | **Deferred (D35).** Judged metrics stay report-only, so the gate needs no calibration | All |
 
 Not relevant here: RAG contextual metrics, conversational and turn metrics, image, audio, voice, MCP, bias, toxicity, summarisation, non-advice.

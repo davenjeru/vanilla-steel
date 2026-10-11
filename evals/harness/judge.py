@@ -6,8 +6,7 @@ model family from the Claude agent and extractor, to avoid self-preference bias)
 price, not by benchmark; whether it judges well is unmeasured, since calibration is deferred (D35).
 
 gpt-6-sol accepts no temperature, so its verdicts vary between runs. Judged metrics are therefore
-report-only and never gate a release (D35), and run only in the live and judge-recorded modes, never on replay
-(decision D4): replay stays free, repeatable and runnable in CI without keys.
+report-only and never decide a case (D35).
 """
 
 JUDGE_MODEL = "gpt-6-sol"

@@ -1,17 +1,14 @@
 """The agent eval's harness: run one golden enquiry through the sandbox and describe it to DeepEval.
 
 Each case runs in the sandbox (fresh seed database, predictable IDs), with its earlier enquiries on
-file. The trace is recorded by the product as it runs (steel.tracing, decision D40): one agent span
-with an LLM span per turn, a tool span per call and the model calls tools make nested inside them.
-Each case is one trace, rooted in a span for the whole sandbox run, so the earlier enquiries'
-extraction calls sit next to the agent's run rather than in traces of their own. The metrics read
-the trace's public fields: the one-line outcome, the golden's expectations and the tools the agent
-called (evals/metrics/agent/agent_test_case.py). The cover letter is checked on its own LLM span
-(evals/harness/spans.py), so the agent eval covers what the letter eval covers for every quote.
-
-Replay is the default; live calls Claude and records every answer to fixtures/agent/<case>/, so
-the run can be replayed later. In replay, a case without a recording cannot run and is skipped by
-name: never scored as a pass or a fail it did not earn.
+file, against Claude. The trace is recorded by the product as it runs (steel.tracing, decision D40):
+one agent span with an LLM span per turn, a tool span per call and the model calls tools make nested
+inside them. Each case is one trace, rooted in a span for the whole sandbox run, so the earlier
+enquiries' extraction calls sit next to the agent's run rather than in traces of their own. The
+metrics read the trace's public fields: the one-line outcome, the golden's expectations and the
+tools the agent called (evals/metrics/agent/agent_test_case.py). The cover letter is checked on
+its own LLM span (evals/harness/spans.py), so the agent eval covers what the letter eval covers for
+every quote.
 """
 
 from typing import Any
@@ -23,7 +20,6 @@ from deepeval.tracing import observe, update_current_trace
 
 from evals.harness.golden_cases import GoldenCase
 from evals.harness.judge import JUDGE_MODEL
-from evals.harness.modes import Mode, is_judged
 from evals.harness.prompts import PRODUCT_PROMPTS, PromptRegistry, prompt_hyperparameters
 from evals.metrics.agent.agent_test_case import decision
 from evals.metrics.agent.budget import ModelCall, enquiry_cost, input_tokens, model_seconds, output_tokens
@@ -43,31 +39,14 @@ from steel.agent.runner import MAX_TURNS, PROMPT_VERSION, describe_outcome
 from steel.agent.tools import TOOLS
 from steel.agent.trace import AgentRun, TraceEvent
 from steel.extraction.extractor import EnquiryDocument
-from steel.llm.anthropic_client import AnthropicClient
 from steel.llm.client import LLMClient
-from steel.llm.replay import RecordingLLMClient, ReplayLLMClient, case_recordings_dir, clear_case_recordings
 from steel.sandbox import SandboxResult, handle_in_sandbox
 from steel.settings import Settings
+from steel.tracing import set_span_input, set_span_output
 
 DATASET = "agent"
 COMPONENT_VERSION = "agent-v2"  # v2: code safety nets for F-002, F-003, F-004, F-009; extraction v3
 SETTINGS = Settings()
-
-
-def llm_for_case(case: GoldenCase, mode: Mode) -> LLMClient:
-    """Each case replays, or records, its own agent conversation (finding F-007).
-
-    Live: the case's old agent recordings are cleared first, so no stale turn survives.
-    """
-    if mode == "live":
-        clear_case_recordings(SETTINGS.llm_fixtures_dir, case.name)
-        return RecordingLLMClient(AnthropicClient.from_environment(), SETTINGS.llm_fixtures_dir, case=case.name)
-    return ReplayLLMClient(SETTINGS.llm_fixtures_dir, case=case.name)
-
-
-def is_recorded(case: GoldenCase) -> bool:
-    """A recording folder is the sign of a recorded case; a stale or partial one still fails loudly in the run."""
-    return case_recordings_dir(SETTINGS.llm_fixtures_dir, case.name).is_dir()
 
 
 def run_in_sandbox(case: GoldenCase, llm: LLMClient) -> SandboxResult:
@@ -82,14 +61,22 @@ def run_in_sandbox(case: GoldenCase, llm: LLMClient) -> SandboxResult:
 @observe(name="enquiry", description="one enquiry through the sandbox: earlier enquiries on file, then the agent")
 def handle_case(golden: Golden, case: GoldenCase, llm: LLMClient, tags: list[str]) -> SandboxResult:
     """Runs the case inside its trace, so the product's spans land in it, and describes the result to
-    DeepEval in its public fields: how the run ended, in one line, and the tools the agent called."""
+    DeepEval in its public fields: how the run ended, in one line, and the tools the agent called.
+
+    The root span's input and output are set by hand: left alone, DeepEval would upload this function's
+    arguments and its return value, the whole sandbox result with the internal matches and their
+    suppliers (finding F-014, the F-006 leak through another door).
+    """
+    set_span_input(golden.input)
     result = run_in_sandbox(case, llm)
+    outcome = describe_outcome(result.enquiry, result.run.rfq_id)
+    set_span_output(outcome)
     calls = model_calls(result.run.events)
     update_current_trace(
         name=golden.name,
         tags=tags,
         input=golden.input,
-        output=describe_outcome(result.enquiry, result.run.rfq_id),
+        output=outcome,
         expected_output=golden.expected_output,
         tools_called=tools_called(result.run),
         expected_tools=golden.expected_tools,
@@ -154,20 +141,19 @@ def enquiry_totals(calls: list[ModelCall]) -> dict[str, Any]:
     }
 
 
-def run_hyperparameters(mode: Mode) -> dict[str, Any]:
+def run_hyperparameters() -> dict[str, Any]:
     return {
         "model": SETTINGS.agent_model,
         "extraction_model": SETTINGS.extraction_model,
         "quote_model": SETTINGS.quote_model,
         "prompt_version": PROMPT_VERSION,
         "max_turns": MAX_TURNS,
-        "mode": mode,
-        "judge_model": JUDGE_MODEL if is_judged(mode) else "none",
+        "judge_model": JUDGE_MODEL,
         **prompt_hyperparameters(PromptRegistry.load(), PRODUCT_PROMPTS),
     }
 
 
-def agent_metrics(case: GoldenCase, mode: Mode) -> list[BaseMetric]:
+def agent_metrics(case: GoldenCase) -> list[BaseMetric]:
     """The metrics for one case: the shared ones, plus the case's own denylist of tools.
 
     Forbidden tools are per case (create_rfq for a prompt injection or a duplicate, search_stock
@@ -175,12 +161,12 @@ def agent_metrics(case: GoldenCase, mode: Mode) -> list[BaseMetric]:
     and a refused call fails too, since the agent tried. Zero tolerance via threshold 1.0.
     """
     forbidden = case.labels.expected_agent.forbidden_tools if case.labels.expected_agent else []
-    return [*shared_agent_metrics(mode), ToolPermissionMetric(denied_tools=forbidden, threshold=1.0)]
+    return [*shared_agent_metrics(), ToolPermissionMetric(denied_tools=forbidden, threshold=1.0)]
 
 
-def shared_agent_metrics(mode: Mode) -> list[BaseMetric]:
-    """Deterministic metrics always; judged ones only in judged modes (they call OpenAI)."""
-    return deterministic_agent_metrics() + judged_agent_metrics() if is_judged(mode) else deterministic_agent_metrics()
+def shared_agent_metrics() -> list[BaseMetric]:
+    """The deterministic metrics decide; the judged ones report (D35)."""
+    return deterministic_agent_metrics() + judged_agent_metrics()
 
 
 def deterministic_agent_metrics() -> list[BaseMetric]:
@@ -198,10 +184,10 @@ def deterministic_agent_metrics() -> list[BaseMetric]:
 # these compare cases with each other or sum over them, so they never fail a case.
 
 
-def print_run_reports(cases: list[GoldenCase], results: dict[str, SandboxResult], mode: Mode) -> None:
+def print_run_reports(cases: list[GoldenCase], results: dict[str, SandboxResult]) -> None:
     print_counterfactual_report(judge_counterfactual_groups(group_members(cases, results)))
     print_cost_report(judge_cost(model_calls_by_case(results)))
-    print_latency_report(judge_latency(model_seconds_by_case(results), live=mode == "live"))
+    print_latency_report(judge_latency(model_seconds_by_case(results)))
 
 
 def model_calls_by_case(results: dict[str, SandboxResult]) -> dict[str, list[ModelCall]]:

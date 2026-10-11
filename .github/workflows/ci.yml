@@ -1,6 +1,5 @@
-# Free checks on every push and pull request: lint, unit and API tests, and every eval on recorded
-# answers. No API keys, no model calls, no upload to Confident AI. A failed replay case fails the
-# build: replay is deterministic, so the failure is real (D39).
+# Free checks on every push and pull request: lint, unit and API tests, and the matcher's golden cases.
+# No API keys, no model calls, no upload. The evals call live models and run on request (live-evals.yml, D43).
 name: CI
 
 on:
@@ -35,22 +34,3 @@ jobs:
 
       - name: Lint, unit and API tests
         run: make check
-
-      # Every eval runs even if an earlier step failed, so one push shows every failure at once.
-      # Matching is deterministic code and runs under make check (tests/unit/test_matching_golden_cases.py).
-      # Replay needs no keys: evals/run.py sets the placeholder DeepEval demands to build a metric.
-      - name: Extraction eval (replay)
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: uv run python -m evals.run extraction
-
-      - name: Duplicates eval (replay)
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: uv run python -m evals.run duplicates
-
-      - name: Agent eval (replay)
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: uv run python -m evals.run agent
-
-      - name: Quote-letter eval (replay)
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: uv run python -m evals.run quote_letter

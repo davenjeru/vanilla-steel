@@ -1,9 +1,9 @@
-.PHONY: install check lint format test seed eval-extraction eval-extraction-live eval-matching eval-duplicates eval-duplicates-live eval-agent eval-agent-live eval-agent-judge-recorded eval-quote-letter eval-quote-letter-live eval-quote-letter-judge-recorded record-fixtures prune-fixtures run-agent run-agent-live export-candidates
+.PHONY: install check lint format test seed eval-extraction eval-duplicates eval-agent eval-quote-letter push-prompts push-datasets pull-verified run-agent export-candidates
 
 install:
 	uv sync
 
-## Lint and tests. CI runs this plus every eval on recorded answers (.github/workflows/ci.yml).
+## Lint and tests, no keys. CI runs exactly this (.github/workflows/ci.yml); the evals run on request.
 ## Add --verified-only to any eval module to run only reviewed cases.
 check: lint test
 
@@ -22,77 +22,32 @@ test:
 seed:
 	uv run python scripts/seed.py
 
-## Eval runs (evals/test_<eval>.py under `deepeval test run`, started by evals/run.py with the run's identifier).
-## Each uploads one run to Confident AI when CONFIDENT_API_KEY is set. Commit first so the run's SHA is clean.
-## Replay needs no keys. A failed case fails the run; judged metrics never decide a case (D35).
+## Eval runs: evals/test_<eval>.py under `deepeval test run`, started by evals/run.py with the run's identifier.
+## Every eval calls Claude, its judged metrics call OpenAI, and with CONFIDENT_API_KEY set the run uploads
+## (keys from .env). A failed deterministic check fails the run; judged metrics never decide a case (D35).
+## Commit first so the run's SHA is clean. Add --verified-only through VERIFIED=1 to run reviewed cases only.
+VERIFIED_FLAG = $(if $(VERIFIED),--verified-only,)
+
 eval-extraction:
-	uv run python -m evals.run extraction
+	uv run --env-file .env python -m evals.run extraction $(VERIFIED_FLAG)
 
-## Calls Claude (costs money); measures the model and prompt, not just the code around them.
-eval-extraction-live:
-	uv run --env-file .env python -m evals.run extraction --live
-
-## Duplicate check (D36): labelled email pairs, precision and recall. Replays recorded extraction.
+## Duplicate check (D36): labelled email pairs, precision and recall printed over the run.
 eval-duplicates:
-	uv run python -m evals.run duplicates
+	uv run --env-file .env python -m evals.run duplicates $(VERIFIED_FLAG)
 
-## Same, calling Claude for extraction and recording the answers (costs money). Commit fixtures/extraction/.
-eval-duplicates-live:
-	uv run --env-file .env python -m evals.run duplicates --live
-
-## Replays recorded agent runs; cases without a recording are skipped by name, not scored.
+## The agent on every case: decision, tool path, denylist, spec passed on, letters checked; fairness,
+## cost and latency reported over the run.
 eval-agent:
-	uv run python -m evals.run agent
+	uv run --env-file .env python -m evals.run agent $(VERIFIED_FLAG)
 
-## Calls Claude for every agent case (costs money), records the answers to fixtures/agent/ (commit them),
-## and adds the judged metrics (gpt-6-sol, report-only).
-eval-agent-live:
-	uv run --env-file .env python -m evals.run agent --live
-
-## Judges the recorded agent runs again without re-running the agent (costs judge calls only).
-eval-agent-judge-recorded:
-	uv run --env-file .env python -m evals.run agent --judge-recorded
-
-## Quote letters (Slice 5). Replay: recorded letters, deterministic metrics only, free.
+## Quote letters (Slice 5) on their own, for products and terms the agent cases never reach.
 eval-quote-letter:
-	uv run python -m evals.run quote_letter
+	uv run --env-file .env python -m evals.run quote_letter $(VERIFIED_FLAG)
 
-## New letters from Claude (recorded, commit them) plus the judged metrics (gpt-6-sol, report-only).
-eval-quote-letter-live:
-	uv run --env-file .env python -m evals.run quote_letter --live
-
-## Judges the recorded letters again without regenerating them, e.g. after changing judge criteria.
-eval-quote-letter-judge-recorded:
-	uv run --env-file .env python -m evals.run quote_letter --judge-recorded
-
-## Calls Claude for every extraction golden case and saves the answers to fixtures/extraction/. Commit them.
-record-fixtures:
-	uv run --env-file .env python -m scripts.record_fixtures
-
-## Delete recordings no eval reads any more (old prompt versions). Run after a live re-record; commit the deletions.
-prune-fixtures:
-	uv run python -m scripts.prune_fixtures
-
-## Prompt Studio and datasets on Confident AI (D42). Git stays the source of truth; nothing is pulled at run time.
-## Push each product prompt once per version and record its commit in evals/prompts.json (commit the file).
-push-prompts:
-	uv run --env-file .env python -m scripts.push_prompts
-
-## Push golden datasets, one alias per manifest version: verified cases finalized, the rest queued for review.
-push-datasets:
-	uv run --env-file .env python -m scripts.push_datasets
-
-## Mark cases verified in git when their golden was finalized on Confident AI. Commit the changed case.json files.
-pull-verified:
-	uv run --env-file .env python -m scripts.pull_verified
-
-## Run one extraction golden case through the agent and print its trace: make run-agent CASE=en-001-st37-sheet-poznan
+## Run one golden case through the agent with Claude and print its trace: make run-agent CASE=agent-001-s355-plate-rfq
+## Not an eval run, so its trace is not posted even with a Confident AI key in .env.
 run-agent:
-	uv run python -m scripts.run_agent --case $(CASE)
-
-## Same, calling Claude (costs money) and recording every turn to fixtures/agent/<case>/. Commit them.
-run-agent-live:
-	uv run --env-file .env python -m scripts.run_agent --case $(CASE) --live
+	CONFIDENT_TRACE_SAMPLE_RATE=0 uv run --env-file .env python -m scripts.run_agent --case $(CASE)
 
 ## Feedback loop (D13): escalated, failed or flagged enquiries become candidate cases in evals/candidates/ (git-ignored).
 ## make export-candidates TENANT=tnt_bauer [ENQUIRIES="enq_0042 enq_0057"]

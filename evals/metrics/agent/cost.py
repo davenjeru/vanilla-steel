@@ -9,7 +9,6 @@ limits in view and names the enquiry that spent most.
     pass       every enquiry within the limits
     uncertain  no cases ran
 
-Tokens replay exactly from recordings, so the verdict is the same in replay and live.
 Limits and their reasons: evals/metrics/agent/budget.py.
 """
 

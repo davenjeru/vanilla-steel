@@ -1,23 +1,20 @@
-"""The agent eval's harness: what it tells DeepEval about each case, which metrics each case gets, and how
-it treats cases it cannot replay.
+"""The agent eval's harness: what it tells DeepEval about each case, and which metrics each case gets.
 
 The spans themselves are the product's (tests/agent/test_tracing.py); the harness adds the case's name,
 tags, expected outcome, the one-line outcome and the tools called.
 """
 
-from pathlib import Path
+import json
 from typing import Any
 
 import pytest
 from deepeval.dataset import Golden
 from deepeval.metrics import TaskCompletionMetric, ToolPermissionMetric
 
-from evals.harness import agent as agent_harness
 from evals.harness.agent import (
     agent_metrics,
     deterministic_agent_metrics,
     handle_case,
-    is_recorded,
     model_calls,
     shared_agent_metrics,
     tools_called,
@@ -39,7 +36,7 @@ S355_PLATE_READING = {
     "delivery_country": "PL",
 }
 SETTINGS = Settings(extraction_model="claude-test-model", agent_model="claude-test-model")
-TAGS = ["dataset:agent", "mode:replay", "verified"]
+TAGS = ["dataset:agent", "verified"]
 EMAIL = ("Plates", "30 t S355J2 15 x 1250, DAP Poznań")
 PLACEHOLDER_KEY = "sk-placeholder-for-construction-only"  # DeepEval demands a key to build some metrics
 
@@ -91,28 +88,6 @@ def test_model_calls_count_every_call_including_extraction_and_the_letter(rfq_ru
         len(agent_turns) + 2,
         rfq_run.run.total_tokens()[0],
     )
-
-
-# Cases that cannot replay
-
-
-def test_a_case_without_a_recording_folder_is_not_recorded(tmp_path: Path) -> None:
-    """The eval skips it by name: never a pass or a fail it did not earn."""
-    recordings_live_in(tmp_path)
-
-    assert is_recorded(first_agent_case()) is False
-
-
-def test_a_case_with_a_recording_folder_is_recorded(tmp_path: Path) -> None:
-    recordings_live_in(tmp_path)
-    case = first_agent_case()
-    (tmp_path / "agent" / case.name).mkdir(parents=True)
-
-    assert is_recorded(case) is True
-
-
-def recordings_live_in(fixtures_dir: Path) -> None:
-    agent_harness.SETTINGS = Settings(llm_fixtures_dir=fixtures_dir)
 
 
 # What the harness adds to the trace
@@ -171,14 +146,28 @@ def test_the_products_spans_land_in_the_cases_trace(case_payload: dict[str, Any]
     assert (root["name"], agent["parentUuid"]) == ("enquiry", root["uuid"])
 
 
+def test_the_whole_upload_carries_no_internal_match_data(case_payload: dict[str, Any]) -> None:
+    """Regression (F-014): the root span showed the sandbox result, suppliers included, on Confident AI.
+    DeepEval records a decorated function's arguments and return value unless the span is told otherwise;
+    the root span says the email in and the one-line outcome out, nothing else."""
+    [root] = [span for span in case_payload["baseSpans"] if span.get("parentUuid") is None]
+
+    assert "sup_" not in json.dumps(case_payload)
+    assert (root["input"], root["output"]) == (
+        first_agent_golden().input,
+        "Quoted: RFQ rfq_0001 sent, quote drafted for the buyer",
+    )
+
+
 # Which metrics each case gets
 
 
-def test_replay_scores_only_deterministic_metrics(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Replay must stay free (D4): no judged metric is built."""
+def test_the_deterministic_metrics_decide(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", PLACEHOLDER_KEY)
 
-    assert [metric.__name__ for metric in shared_agent_metrics("replay")] == [
+    deciding = [metric for metric in shared_agent_metrics() if not metric.flaky]
+
+    assert [metric.__name__ for metric in deciding] == [
         "Reaches the right decision",
         "Tool Correctness",
         "Searches with the extracted spec",
@@ -187,12 +176,11 @@ def test_replay_scores_only_deterministic_metrics(monkeypatch: pytest.MonkeyPatc
     ]
 
 
-@pytest.mark.parametrize("mode", ["live", "judge-recorded"])
-def test_judged_modes_add_task_completion_as_report_only(mode: str, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_task_completion_is_judged_and_reports_only(monkeypatch: pytest.MonkeyPatch) -> None:
     """Judged metrics are scored and shown but never decide a case (D35): flaky, in DeepEval's sense."""
     monkeypatch.setenv("OPENAI_API_KEY", PLACEHOLDER_KEY)
 
-    judged = shared_agent_metrics(mode)[len(deterministic_agent_metrics()) :]  # type: ignore[arg-type]
+    judged = shared_agent_metrics()[len(deterministic_agent_metrics()) :]
 
     assert [(type(metric), metric.evaluation_model, metric.flaky) for metric in judged] == [
         (TaskCompletionMetric, JUDGE_MODEL, True)
@@ -204,7 +192,7 @@ def test_each_case_gets_its_own_tools_denylist(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setenv("OPENAI_API_KEY", PLACEHOLDER_KEY)
     injection = next(case for case in load_dataset(DATASETS_DIR / "agent") if _forbidden_tools(case))
 
-    [permission] = [metric for metric in agent_metrics(injection, "replay") if isinstance(metric, ToolPermissionMetric)]
+    [permission] = [metric for metric in agent_metrics(injection) if isinstance(metric, ToolPermissionMetric)]
 
     assert (permission.denied_tools, permission.threshold) == (set(_forbidden_tools(injection)), 1.0)
 
@@ -212,9 +200,7 @@ def test_each_case_gets_its_own_tools_denylist(monkeypatch: pytest.MonkeyPatch) 
 def test_a_case_that_forbids_nothing_still_gets_the_permission_check(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", PLACEHOLDER_KEY)
 
-    [permission] = [
-        metric for metric in agent_metrics(first_agent_case(), "replay") if isinstance(metric, ToolPermissionMetric)
-    ]
+    [permission] = [metric for metric in agent_metrics(first_agent_case()) if isinstance(metric, ToolPermissionMetric)]
 
     assert permission.denied_tools == set()
 

@@ -1,8 +1,8 @@
 """Handle one enquiry in a throwaway database, with predictable IDs.
 
 For trying the agent and for agent evals: every run starts from the same seed
-stock with IDs enq_0001 and rfq_0001, so every tool result is identical, and a
-recorded run replays exactly.
+stock with IDs enq_0001 and rfq_0001, so two runs of one case differ only in what
+the model answered.
 """
 
 import itertools

@@ -45,24 +45,16 @@ jobs:
 
       - name: Extraction eval (live, verified cases)
         if: ${{ !cancelled() && steps.install.outcome == 'success' && contains(fromJSON('["all", "extraction"]'), inputs.eval) }}
-        run: uv run python -m evals.run extraction --live --verified-only
+        run: uv run python -m evals.run extraction --verified-only
 
       - name: Duplicates eval (live, verified cases)
         if: ${{ !cancelled() && steps.install.outcome == 'success' && contains(fromJSON('["all", "duplicates"]'), inputs.eval) }}
-        run: uv run python -m evals.run duplicates --live --verified-only
+        run: uv run python -m evals.run duplicates --verified-only
 
       - name: Agent eval (live, verified cases)
         if: ${{ !cancelled() && steps.install.outcome == 'success' && contains(fromJSON('["all", "agent"]'), inputs.eval) }}
-        run: uv run python -m evals.run agent --live --verified-only
+        run: uv run python -m evals.run agent --verified-only
 
       - name: Quote-letter eval (live, verified cases)
         if: ${{ !cancelled() && steps.install.outcome == 'success' && contains(fromJSON('["all", "quote_letter"]'), inputs.eval) }}
-        run: uv run python -m evals.run quote_letter --live --verified-only
-
-      - name: Keep the new recordings
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: live-recordings
-          path: fixtures/
-          retention-days: 7
+        run: uv run python -m evals.run quote_letter --verified-only

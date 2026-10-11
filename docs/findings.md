@@ -280,3 +280,40 @@ from 3 mm. Extraction case `pl-001` ("blacha", 4 mm) is relabelled from sheet to
 **Reproduced by** `dup-008-correction-to-the-tonnage` (labelled duplicate, missed today).
 **Owner decision:** close it: recognise corrections.
 **Fixed:** reading whether an email corrects an earlier enquiry is the extractor's job (D15): extraction prompt v4 adds `is_correction`, true only when the customer says the email changes an enquiry they sent before ("correction", "instead of", "Korrektur", "statt", "korekta", "zamiast"); a reminder or resend is not one. Code then points a correction to the tenant's latest enquiry on file within 14 days (`steel/domain/duplicates.py`), so `check_duplicate` returns it with `is_correction: true` and `create_rfq` refuses it. With nothing on file, the correction is the customer's latest wish and is handled as new. Tests: `tests/agent/test_tools.py` (corrections section); pairs dup-008, dup-017 (German), dup-018 (Polish); agent case agent-042.
+
+## F-013: After a refused search, the agent keeps the Incoterm it guessed
+
+| | |
+|---|---|
+| Found | 2026-10-10, live agent run (agent-v8), case `agent-024-frei-haus-incoterm-not-guessed`, prompt agent v4 |
+| Behaviour | "frei Haus" is not an Incoterm, so extraction leaves `incoterm` empty (F-001). The agent searched with `incoterm: DAP` anyway; `search_stock` refused it (F-003 fix) and named the drift. The agent then searched correctly, found no stock and escalated, but its hand-over note still says "delivery DAP Poznań": the trader reads the guess as fact |
+| Layer | Model (the agent prompt): it corrects its arguments after a refusal but not what it believes |
+| Business risk | Business correctness: a human trader acting on the note would offer delivered terms the customer never asked for; the same habit on a grade or a size would mis-order steel |
+
+**Reproduced by** `agent-024` on every replay: "Tool Correctness" fails on the extra refused call
+(`extract_specs, check_duplicate, search_stock, search_stock, escalate_to_human` against the
+expected path without the repeat) and "Searches with the extracted spec" fails with
+`incoterm: extracted None, searched 'DAP'`. Decision and reason (`no_stock`) pass. This is the one
+red case in CI (D39: replay failures fail the build) and serves as the regression demo for Slice 6.
+
+**Open.** Proposed fix, agent prompt v5: after a refused tool call, the agent restates the facts
+from the tool's answer before acting, and a hand-over note may only contain values the extracted
+spec holds. Needs a re-record of agent-024 and the counterfactual German cases.
+
+## F-014: The eval's root span uploaded the sandbox result, suppliers included
+
+| | |
+|---|---|
+| Found | 2026-10-11, reading the first live run under D41 back from Confident AI (trace `agent-001-s355-plate-rfq`, run `cmv3vouyt001dl60t4xal6qrc`) |
+| Behaviour | The root span `enquiry` had the whole `SandboxResult` as its output, with `matches` naming `supplier_id: sup_07` and `sup_03` and their prices, and the function's arguments as its input (case labels, fixture paths). DeepEval records a decorated function's arguments and return value as the span's input and output unless the span is told otherwise; D40 step 1 made `handle_case` such a function and set only the trace's fields |
+| Layer | Eval harness (`evals/harness/agent.py`), the same door F-006 closed for the product's spans |
+| Business risk | Data separation: supplier identities and cost prices in a tool a reviewer shares; the product never shows them to a buyer, but the upload did |
+
+**Reproduced by** reading the trace. The F-006 test (`test_upload_carries_no_internal_match_data`)
+covers the product's spans, not the harness's root span, so it stayed green.
+**Fixed:** every eval root span sets its own input (the golden's email) and output (the one-line
+outcome, the extracted spec, the duplicate verdict, the letter) with `set_span_input` and
+`set_span_output`; the sandbox result never reaches a span. Test:
+`test_the_whole_upload_carries_no_internal_match_data` in `tests/evals/harness/test_agent_harness.py`
+scans the complete upload of an agent case for `sup_`. The 18 traces of that live run remain on
+Confident AI as uploaded; the owner decides whether to delete them.

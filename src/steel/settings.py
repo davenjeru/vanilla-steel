@@ -7,8 +7,6 @@ Business rules do not belong here. Grade equivalences live in
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-
 
 @dataclass(frozen=True)
 class Settings:
@@ -17,6 +15,5 @@ class Settings:
     extraction_model: str = "claude-haiku-4-5"
     agent_model: str = "claude-haiku-4-5"
     quote_model: str = "claude-haiku-4-5"  # writes the quote cover letter (Slice 5)
-    llm_fixtures_dir: Path = REPO_ROOT / "fixtures"
     max_attachments: int = 5
     max_attachment_bytes: int = 2_000_000

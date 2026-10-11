@@ -1,12 +1,10 @@
-"""Run one golden case's email through the agent and print what it did.
+"""Run one golden case's email through the agent with Claude and print what it did.
 
 Usage:
-    uv run python -m scripts.run_agent --case agent-001-s355-plate-rfq           # replay recordings
-    uv run --env-file .env python -m scripts.run_agent --case ... --live          # call Claude, record
+    uv run --env-file .env python -m scripts.run_agent --case agent-001-s355-plate-rfq
 
 Works for extraction cases and agent cases. Agent cases also get their earlier
 enquiries (for duplicate and data separation cases) and show the expected outcome.
---live calls Claude and saves every answer to fixtures/agent/<case>/, so the case replays later without a key.
 """
 
 import argparse
@@ -15,8 +13,6 @@ import json
 from evals.harness.golden_cases import DATASETS_DIR, GoldenCase, load_dataset
 from steel.extraction.extractor import EnquiryDocument
 from steel.llm.anthropic_client import AnthropicClient
-from steel.llm.client import LLMClient
-from steel.llm.replay import RecordingLLMClient, ReplayLLMClient, clear_case_recordings
 from steel.sandbox import SandboxResult, handle_in_sandbox
 from steel.settings import Settings
 
@@ -26,7 +22,6 @@ DATASETS_WITH_EMAILS = ["agent", "extraction"]
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--case", required=True, help="agent or extraction golden case name")
-    parser.add_argument("--live", action="store_true", help="call Claude and record the answers")
     arguments = parser.parse_args()
 
     settings = Settings()
@@ -38,7 +33,7 @@ def main() -> None:
         document.subject,
         document.body,
         document.attachments,
-        _llm(arguments.live, settings, case.name),
+        AnthropicClient.from_environment(),
         settings,
         case.earlier_enquiries_for_sandbox(),
     )
@@ -53,14 +48,6 @@ def find_case(name: str) -> GoldenCase:
             if case.name == name:
                 return case
     raise SystemExit(f"no case named {name} in {DATASETS_WITH_EMAILS}")
-
-
-def _llm(live: bool, settings: Settings, case_name: str) -> LLMClient:
-    """The agent conversation is recorded per case (finding F-007); a live run first clears the case's old one."""
-    if live:
-        clear_case_recordings(settings.llm_fixtures_dir, case_name)
-        return RecordingLLMClient(AnthropicClient.from_environment(), settings.llm_fixtures_dir, case=case_name)
-    return ReplayLLMClient(settings.llm_fixtures_dir, case=case_name)
 
 
 def print_result(result: SandboxResult) -> None:

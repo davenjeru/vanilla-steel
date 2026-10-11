@@ -5,13 +5,11 @@ Runs on a fake LLM: no LLM key, no network. Each tenant calls with its own X-API
 
 import sqlite3
 from collections.abc import Callable
-from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from steel.extraction.attachments import XLSX_CONTENT_TYPE
 from steel.llm.client import LLMClient, LLMError
-from steel.llm.replay import RecordingLLMClient, ReplayLLMClient
 from tests.factories.enquiries import BAUER, KOWALSKI, attachment_payload, enquiry_payload
 from tests.factories.llm import FailingLLMClient, FakeLLMClient
 from tests.factories.spreadsheets import xlsx_bytes
@@ -66,7 +64,7 @@ def test_extraction_uses_the_configured_model(api_client: TestClient, fake_llm: 
 def test_enquiry_text_reaches_the_extractor_in_golden_case_format(
     api_client: TestClient, fake_llm: FakeLLMClient
 ) -> None:
-    """Same rendering as email.txt in golden cases, so API and evals share LLM recordings."""
+    """Same rendering as email.txt in golden cases, so the API and the evals show the model one format."""
     api_client.post("/v1/enquiries", json=enquiry_payload(subject="Order", body="25 t S235JR"), headers=BAUER)
 
     assert fake_llm.requests[0].user == "<enquiry>\nSubject: Order\n\n25 t S235JR\n</enquiry>"
@@ -308,23 +306,3 @@ def test_rejected_payload_triggers_no_llm_call(api_client: TestClient, fake_llm:
     api_client.post("/v1/enquiries", json=enquiry_payload(body=""), headers=BAUER)
 
     assert fake_llm.requests == []
-
-
-# Recorded answers
-
-
-def test_api_runs_on_recorded_answers_without_a_live_model(
-    make_isolated_api_client: Callable[[LLMClient], TestClient], fake_llm: FakeLLMClient, tmp_path: Path
-) -> None:
-    """How CI runs: answers recorded once, replayed with no API key and no network.
-
-    Every agent turn is replayed, so the second run needs identical state: its own fresh database.
-    """
-    recordings = tmp_path / "recordings"
-    recorded = make_isolated_api_client(RecordingLLMClient(fake_llm, recordings))
-    recorded.post("/v1/enquiries", json=enquiry_payload(), headers=BAUER)
-
-    replayed = make_isolated_api_client(ReplayLLMClient(recordings))
-    body = replayed.post("/v1/enquiries", json=enquiry_payload(), headers=BAUER).json()
-
-    assert (body["spec"]["grade"], body["status"], body["escalation_reason"]) == ("S235JR", "escalated", "no_stock")

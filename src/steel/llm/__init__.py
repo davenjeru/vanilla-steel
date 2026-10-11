@@ -1,1 +1,1 @@
-"""LLM access: one interface, a live Anthropic client, and record/replay for tests and evals."""
+"""LLM access: one interface and the Anthropic client; tests use the fakes in tests/factories/llm.py."""

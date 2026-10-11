@@ -1,4 +1,4 @@
-"""The one interface every LLM call goes through, so tests and evals can replay recorded answers.
+"""The one interface every LLM call goes through, so tests can stand in a fake for the model.
 
 Two kinds of call:
 - complete: one structured answer (extraction).
@@ -6,20 +6,13 @@ Two kinds of call:
   asks to use tools or gives a final text answer.
 """
 
-import hashlib
-import json
 from typing import Any, Protocol
 
 from pydantic import BaseModel
 
 
-def _hash(request: BaseModel) -> str:
-    canonical = json.dumps(request.model_dump(), sort_keys=True, ensure_ascii=False)
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
 class LLMRequest(BaseModel):
-    """Everything that determines the answer. Its hash identifies a recorded fixture."""
+    """Everything that determines the answer."""
 
     prompt_id: str
     prompt_version: str
@@ -28,9 +21,6 @@ class LLMRequest(BaseModel):
     user: str
     output_name: str
     output_schema: dict[str, Any]
-
-    def fixture_key(self) -> str:
-        return _hash(self)
 
 
 class LLMResponse(BaseModel):
@@ -58,8 +48,7 @@ class ToolUse(BaseModel):
 
 
 class ConversationRequest(BaseModel):
-    """One agent turn: the whole conversation so far. Its hash identifies a recorded fixture,
-    so a replay only works while every earlier tool result is identical too."""
+    """One agent turn: the whole conversation so far."""
 
     prompt_id: str
     prompt_version: str
@@ -67,9 +56,6 @@ class ConversationRequest(BaseModel):
     system: str
     messages: list[dict[str, Any]]
     tools: list[ToolSpec]
-
-    def fixture_key(self) -> str:
-        return _hash(self)
 
 
 class ConversationResponse(BaseModel):
