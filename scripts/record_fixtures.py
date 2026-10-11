@@ -5,7 +5,7 @@ Usage (reads ANTHROPIC_API_KEY from .env; the key is never printed):
 
 Re-run after changing the prompt, the model or a case's email: each of those
 changes the request, so the old recording no longer matches and replay fails
-loudly until a new one exists. Commit the files written to fixtures/llm/.
+loudly until a new one exists. Commit the files written to fixtures/extraction/.
 """
 
 from evals.runs.shared.golden_cases import DATASETS_DIR, load_dataset

@@ -53,7 +53,7 @@ def test_any_change_to_the_request_needs_a_new_recording(tmp_path: Path, change:
 def test_fixture_file_name_shows_prompt_and_version(tmp_path: Path) -> None:
     RecordingLLMClient(FakeLLMClient(output={}), tmp_path).complete(llm_request())
 
-    [fixture] = tmp_path.iterdir()
+    [fixture] = (tmp_path / "extraction").iterdir()
 
     assert fixture.name.startswith("extract_spec-v1-")
 
@@ -61,9 +61,25 @@ def test_fixture_file_name_shows_prompt_and_version(tmp_path: Path) -> None:
 def test_fixture_stores_the_request_for_human_review(tmp_path: Path) -> None:
     RecordingLLMClient(FakeLLMClient(output={}), tmp_path).complete(llm_request(user="Bitte 25 t St37-2"))
 
-    [fixture] = tmp_path.iterdir()
+    [fixture] = (tmp_path / "extraction").iterdir()
 
     assert "Bitte 25 t St37-2" in fixture.read_text(encoding="utf-8")
+
+
+# Recordings are grouped by what they answer: extraction, quote letters, agent conversations
+
+
+@pytest.mark.parametrize(("prompt_id", "folder"), [("extract_spec", "extraction"), ("quote_letter", "quote_letter")])
+def test_recording_is_stored_in_the_folder_of_its_prompt(tmp_path: Path, prompt_id: str, folder: str) -> None:
+    RecordingLLMClient(FakeLLMClient(output={}), tmp_path).complete(llm_request(prompt_id=prompt_id))
+
+    assert [path.parent.name for path in tmp_path.rglob("*.json")] == [folder]
+
+
+def test_recording_for_an_unknown_prompt_is_refused(tmp_path: Path) -> None:
+    """A new prompt must be given its folder on purpose, not land somewhere nobody looks."""
+    with pytest.raises(ValueError, match="no recordings folder for prompt 'summarise'"):
+        RecordingLLMClient(FakeLLMClient(output={}), tmp_path).complete(llm_request(prompt_id="summarise"))
 
 
 # Agent conversations are recorded per golden case (finding F-007)

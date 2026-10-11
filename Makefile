@@ -36,7 +36,7 @@ eval-matching:
 eval-duplicates:
 	uv run python -m evals.runs.duplicates
 
-## Same, calling Claude for extraction and recording the answers (costs money). Commit fixtures/llm/.
+## Same, calling Claude for extraction and recording the answers (costs money). Commit fixtures/extraction/.
 eval-duplicates-live:
 	uv run --env-file .env python -m evals.runs.duplicates --live
 
@@ -45,7 +45,7 @@ eval-duplicates-live:
 eval-agent:
 	uv run --env-file .env python -m evals.runs.agent
 
-## Calls Claude for every agent case (costs money), records the answers to fixtures/llm/ (commit them),
+## Calls Claude for every agent case (costs money), records the answers to fixtures/agent/ (commit them),
 ## and adds the judged metrics (gpt-6-sol, report-only).
 eval-agent-live:
 	uv run --env-file .env python -m evals.runs.agent --live
@@ -66,7 +66,7 @@ eval-quote-letter-live:
 eval-quote-letter-judge-recorded:
 	uv run --env-file .env python -m evals.runs.quote_letter --judge-recorded
 
-## Calls Claude for every extraction golden case and saves the answers to fixtures/llm/. Commit them.
+## Calls Claude for every extraction golden case and saves the answers to fixtures/extraction/. Commit them.
 record-fixtures:
 	uv run --env-file .env python -m scripts.record_fixtures
 
@@ -78,7 +78,7 @@ prune-fixtures:
 run-agent:
 	uv run python -m scripts.run_agent --case $(CASE)
 
-## Same, calling Claude (costs money) and recording every turn to fixtures/llm/. Commit them.
+## Same, calling Claude (costs money) and recording every turn to fixtures/agent/<case>/. Commit them.
 run-agent-live:
 	uv run --env-file .env python -m scripts.run_agent --case $(CASE) --live
 

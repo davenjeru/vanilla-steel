@@ -4,7 +4,7 @@ Usage: uv run --env-file .env python -m evals.runs.agent [--live | --judge-recor
 
 Each case runs in the sandbox (fresh seed database, predictable IDs), with its
 earlier enquiries on file. Replay is the default; --live calls Claude and
-records every answer to fixtures/llm/, so the run can be replayed later.
+records every answer to fixtures/agent/<case>/, so the run can be replayed later.
 --live and --judge-recorded add the judged metrics (gpt-6-sol); see
 evals/runs/shared/run_modes.py.
 

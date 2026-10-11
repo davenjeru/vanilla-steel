@@ -185,7 +185,7 @@ tool-call IDs that belong to agent-012's conversation.
 session, reuse an existing answer for an identical request (a later single-case re-record
 can still overwrite); (c) give each case a distinct enquiry ID (works by accident, not design).
 **Fixed (owner chose a):** agent conversations recorded for a golden case live in
-`fixtures/llm/agent/<case>/`; a live re-record clears the case's folder first; extraction
+`fixtures/llm/agent/<case>/` (now `fixtures/agent/<case>/`); a live re-record clears the case's folder first; extraction
 recordings stay shared (D16 updated). Existing recordings were migrated by replaying each
 case from the shared store, so the analysed live run is kept unchanged: 30 of 31 agent cases
 replay with identical outcomes. agent-007 needs one live re-record. The 186 shared agent

@@ -1,5 +1,8 @@
 """Record live LLM answers once, then replay them so tests, CI and evals need no API key.
 
+Recordings are grouped by what they answer: extraction/, quote_letter/ and agent/.
+Matching has no folder because it calls no model.
+
 Extraction recordings are shared: one request has one answer, and API enquiries
 reuse the golden recordings (decision D16).
 
@@ -22,7 +25,13 @@ from steel.llm.client import ConversationRequest, ConversationResponse, LLMClien
 Request = LLMRequest | ConversationRequest
 Response = TypeVar("Response", bound=BaseModel)
 
-AGENT_RECORDINGS_DIR = "agent"
+# Keyed by the prompt_id each caller sends (extractor, cover letter, agent runner).
+RECORDINGS_DIR_BY_PROMPT = {
+    "extract_spec": "extraction",
+    "quote_letter": "quote_letter",
+    "agent": "agent",
+}
+AGENT_RECORDINGS_DIR = RECORDINGS_DIR_BY_PROMPT["agent"]
 
 
 class MissingFixture(LookupError):
@@ -34,7 +43,13 @@ def fixture_path(fixtures_dir: Path, request: Request, case: str | None = None) 
     file_name = f"{request.prompt_id}-{request.prompt_version}-{request.fixture_key()[:16]}.json"
     if case is not None and isinstance(request, ConversationRequest):
         return case_recordings_dir(fixtures_dir, case) / file_name
-    return fixtures_dir / file_name
+    return prompt_recordings_dir(fixtures_dir, request.prompt_id) / file_name
+
+
+def prompt_recordings_dir(fixtures_dir: Path, prompt_id: str) -> Path:
+    if prompt_id not in RECORDINGS_DIR_BY_PROMPT:
+        raise ValueError(f"no recordings folder for prompt {prompt_id!r}; add it to RECORDINGS_DIR_BY_PROMPT")
+    return fixtures_dir / RECORDINGS_DIR_BY_PROMPT[prompt_id]
 
 
 def case_recordings_dir(fixtures_dir: Path, case: str) -> Path:

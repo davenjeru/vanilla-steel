@@ -6,7 +6,7 @@ Usage:
 
 Works for extraction cases and agent cases. Agent cases also get their earlier
 enquiries (for duplicate and data separation cases) and show the expected outcome.
---live calls Claude and saves every answer to fixtures/llm/, so the case replays later without a key.
+--live calls Claude and saves every answer to fixtures/agent/<case>/, so the case replays later without a key.
 """
 
 import argparse

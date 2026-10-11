@@ -41,7 +41,7 @@ def test_replay_notes_every_recording_it_reads(tmp_path: Path) -> None:
 
 def test_recordings_no_eval_reads_are_stale(tmp_path: Path) -> None:
     in_use = recorded(tmp_path)
-    old_prompt = write_stale(tmp_path, "extract_spec-v2-0123456789abcdef.json")
+    old_prompt = write_stale(tmp_path, "extraction/extract_spec-v2-0123456789abcdef.json")
 
     assert stale_recordings(tmp_path, in_use={in_use.resolve()}) == [old_prompt.resolve()]
 
@@ -67,7 +67,7 @@ def test_deleting_keeps_a_case_folder_that_still_has_recordings(tmp_path: Path) 
 def test_nothing_is_deleted_when_an_eval_cannot_replay(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A replay that stops at a missing recording never reaches that case's later recordings,
     so they would look unused. Better to delete nothing than a recording an eval needs."""
-    stale = write_stale(tmp_path, "extract_spec-v2-0123456789abcdef.json")
+    stale = write_stale(tmp_path, "extraction/extract_spec-v2-0123456789abcdef.json")
 
     def replay_stops_early(fixtures_dir: Path) -> set[Path]:
         raise MissingFixture("no recorded answer for agent-041")
