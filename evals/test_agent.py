@@ -13,11 +13,11 @@ import pytest
 from deepeval import assert_test
 
 from evals.harness.agent import DATASET, agent_metrics, handle_case, print_run_reports, run_hyperparameters
-from evals.harness.datasets import goldens_for_run
+from evals.harness.datasets import dataset_link, goldens_for_run
 from evals.harness.golden_cases import DATASETS_DIR, GoldenCase, load_dataset
 from evals.harness.prompts import PromptRegistry, link_prompt_commits
 from evals.harness.quote_letter import letter_metrics
-from evals.harness.run_labels import log_run_hyperparameters
+from evals.harness.run_labels import link_run_to_dataset, log_run_hyperparameters
 from evals.harness.spans import attach_metrics_to_spans
 from evals.harness.trace_tags import trace_tags
 from steel.llm.anthropic_client import AnthropicClient
@@ -33,6 +33,7 @@ LETTER_SPAN = "write_cover_letter"
 @pytest.fixture(scope="module", autouse=True)
 def labelled_run() -> None:
     log_run_hyperparameters(run_hyperparameters())
+    link_run_to_dataset(dataset_link(GOLDENS))
 
 
 @pytest.fixture(scope="module")

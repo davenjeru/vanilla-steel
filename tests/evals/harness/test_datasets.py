@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from deepeval.dataset import Golden
 
-from evals.harness.datasets import DatasetDiffersFromGit, goldens_for_run
+from evals.harness.datasets import DatasetDiffersFromGit, DatasetLink, dataset_link, goldens_for_run
 from evals.harness.golden_cases import GoldenCase, load_dataset, load_manifest
 from tests.factories.golden_cases import valid_case_labels, write_case
 
@@ -84,6 +84,22 @@ def test_a_case_not_on_confident_ai_runs_from_git_unlinked(
         "de-001-reviewed",
         True,
     )
+
+
+def test_the_link_is_read_from_a_pulled_golden(dataset_with_one_case: list[GoldenCase]) -> None:
+    """As `pull` leaves a golden: the alias and dataset id on it. DeepEval drops them on the way to the run
+    (4.2.8), so the run is stamped from here."""
+    [case] = dataset_with_one_case
+    pulled = as_pulled(case)
+    pulled._dataset_alias, pulled._dataset_id = "extraction-v4", "ds_1"
+
+    assert dataset_link({"de-001-reviewed": pulled}) == DatasetLink(alias="extraction-v4", dataset_id="ds_1")
+
+
+def test_goldens_from_git_give_no_link(dataset_with_one_case: list[GoldenCase]) -> None:
+    [case] = dataset_with_one_case
+
+    assert dataset_link({"de-001-reviewed": Golden(**case.as_golden_fields())}) is None
 
 
 def test_without_a_confident_ai_key_nothing_is_pulled(

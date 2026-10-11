@@ -20,6 +20,7 @@ from typing import Protocol
 
 from deepeval.confident.types import ConfidentApiError
 from deepeval.dataset import EvaluationDataset, Golden
+from pydantic import BaseModel
 
 from evals.harness.golden_cases import DATASETS_DIR, DatasetManifest, GoldenCase, load_manifest
 
@@ -86,6 +87,24 @@ def case_name(golden: Golden) -> str | None:
 
 class DatasetDiffersFromGit(ValueError):
     pass
+
+
+class DatasetLink(BaseModel):
+    alias: str
+    dataset_id: str
+
+
+def dataset_link(goldens: dict[str, Golden]) -> DatasetLink | None:
+    """The dataset the run's goldens were pulled from, or None when they came from git.
+
+    Read from the fields `pull` sets on a golden, the same ones DeepEval reads to stamp a run. DeepEval
+    4.2.8 loses them on the trace-scoped path (it hands them to a pydantic model as private keywords,
+    which are dropped), so the run is stamped by hand (evals/harness/run_labels.py).
+    """
+    for golden in goldens.values():
+        if golden._dataset_alias and golden._dataset_id:
+            return DatasetLink(alias=golden._dataset_alias, dataset_id=golden._dataset_id)
+    return None
 
 
 def goldens_for_run(dataset: str, cases: list[GoldenCase], store: DatasetStore | None = None) -> dict[str, Golden]:

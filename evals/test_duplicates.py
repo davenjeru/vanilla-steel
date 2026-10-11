@@ -8,11 +8,11 @@ from collections.abc import Iterator
 import pytest
 from deepeval import assert_test
 
-from evals.harness.datasets import goldens_for_run
+from evals.harness.datasets import dataset_link, goldens_for_run
 from evals.harness.duplicates import DATASET, check_and_trace, describe_rates, pair_result, run_hyperparameters
 from evals.harness.golden_cases import DATASETS_DIR, GoldenCase, load_dataset
 from evals.harness.prompts import PromptRegistry, link_prompt_commits
-from evals.harness.run_labels import log_run_hyperparameters
+from evals.harness.run_labels import link_run_to_dataset, log_run_hyperparameters
 from evals.metrics.duplicates.detection_rates import PairResult, detection_rates
 from evals.metrics.duplicates.duplicate_decision_is_correct import DuplicateDecisionIsCorrect
 from steel.llm.anthropic_client import AnthropicClient
@@ -26,6 +26,7 @@ REGISTRY = PromptRegistry.load()
 @pytest.fixture(scope="module", autouse=True)
 def labelled_run() -> None:
     log_run_hyperparameters(run_hyperparameters())
+    link_run_to_dataset(dataset_link(GOLDENS))
 
 
 @pytest.fixture(scope="module")

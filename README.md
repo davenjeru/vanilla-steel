@@ -92,9 +92,10 @@ on request: `.github/workflows/live-evals.yml` runs the verified cases and uploa
 - `agent-024` (F-013) fails on every run so far: after a refused stock search the agent still
   writes the guessed Incoterm into its hand-over note. The agent eval is red until the prompt is
   fixed.
-- DeepEval 4.2.8 drops a span's prompt fields inside a test run and would re-push a `Prompt`
-  hyperparameter on every keyed run; the prompt link therefore lives in span metadata and the
-  hyperparameters carry text (D42).
+- DeepEval 4.2.8 drops a span's prompt fields inside a test run, would re-push a `Prompt`
+  hyperparameter on every keyed run, and loses a pulled golden's dataset link on the trace-scoped
+  path; the prompt link therefore lives in span metadata, the hyperparameters carry text, and the
+  run is stamped with its dataset by hand (D42, D44).
 - Every eval run spends money (about $0.30 for the 18 verified agent cases, $0.75 for all 44 with
   the judge), so there is no free check that the agent still behaves; `make check` covers the
   code around the model.

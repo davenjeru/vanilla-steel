@@ -9,7 +9,11 @@ import subprocess
 from typing import Any
 
 import deepeval
+from deepeval.test_run import global_test_run_manager
+from deepeval.test_run.test_run import TEMP_FILE_PATH
 from deepeval.utils import get_is_running_deepeval
+
+from evals.harness.datasets import DatasetLink
 
 
 def run_identifier(dataset: str, dataset_version: str, component_version: str, revision: str) -> str:
@@ -31,6 +35,21 @@ def log_run_hyperparameters(values: dict[str, Any]) -> None:
     """Under `deepeval test run` the values label the run on Confident AI; under plain pytest there is no run."""
     if get_is_running_deepeval():
         deepeval.log_hyperparameters(lambda: values)
+
+
+def link_run_to_dataset(link: DatasetLink | None) -> None:
+    """Stamp the run with the dataset its goldens came from, the way `log_hyperparameters` stamps its field.
+
+    DeepEval 4.2.8 does this itself for goldens scored as test cases, but not on the trace-scoped path
+    (the link is handed to a pydantic model as private keywords and dropped), so the run would show
+    "Create dataset" on Confident AI. None, for goldens from git, leaves the run unlinked.
+    """
+    if link is None or not get_is_running_deepeval():
+        return
+    test_run = global_test_run_manager.get_test_run()
+    test_run.dataset_alias = link.alias
+    test_run.dataset_id = link.dataset_id
+    global_test_run_manager.save_test_run(TEMP_FILE_PATH)
 
 
 def _git(*arguments: str) -> str:
