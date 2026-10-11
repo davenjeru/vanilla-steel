@@ -1,6 +1,6 @@
 {
-  "reason": "100 t coil, a six-figure total in Polish format. Delivery is to Katowice, where a supplier also sits: the buyer's own city is not a leak, but no supplier or mill may be named.",
-  "verified": false,
+  "reason": "100 t of coil, a six-figure total in Polish number format. Delivery is to Katowice, where a supplier is also based: naming the buyer's own city is fine, but no supplier or mill may be named.",
+  "verified": true,
   "source": "hand-written",
   "language": "pl",
   "risk": "supplier_anonymity",

@@ -1,5 +1,6 @@
 {
-  "reason": "German: decimal comma (2,5 mm), Blech and warmgewalzt, German exonym Posen must become Poznań, DD.MM.YYYY date. 'frei Haus' is a German trade term, not an Incoterm, so incoterm stays null rather than being guessed as DAP.",
+  "reason": "German email: decimal comma (2,5 mm), 'Blech' and 'warmgewalzt', the German city name Posen (must become Poznań) and a day-month-year date. 'frei Haus' is a German delivery phrase, not an Incoterm, so the Incoterm must stay empty rather than be guessed as DAP.",
+  "references": ["F-003"],
   "verified": false,
   "language": "de",
   "source": "llm-drafted",

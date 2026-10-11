@@ -1,11 +1,12 @@
 {
-  "version": "0",
+  "version": "1",
   "kind": "quote_letter",
   "description": "Priced quotes with the customer's language: the cover letter must use only the quoted figures, name no supplier, be in the right language and be commercially sensible.",
   "changelog": [
     {
       "version": "0",
       "change": "First 8 cases (hand-written, unverified), priced from seed stock."
-    }
+    },
+    {"version": "1", "change": "Reasons rewritten in plain words; finding and decision codes moved to the new references field. Owner instruction (2026-10-11): 4 of 8 cases marked verified (at least 40%). Chosen by Claude to cover every risk, language and outcome, including known failures; counterfactual groups are verified whole. Labels were not re-reviewed case by case."}
   ]
 }

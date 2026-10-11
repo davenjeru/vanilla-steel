@@ -26,7 +26,14 @@ from evals.metrics.quote_letter.uses_only_the_quoted_figures import UsesOnlyTheQ
 from evals.runs.shared.golden_cases import DATASETS_DIR, GoldenCase, QuoteLetterInput, load_dataset, load_manifest
 from evals.runs.shared.judge import JUDGE_MODEL
 from evals.runs.shared.run_labels import current_git_revision, run_identifier
-from evals.runs.shared.run_modes import Mode, is_judged, parse_mode
+from evals.runs.shared.run_modes import (
+    Mode,
+    evaluate_each,
+    exit_if_replay_failed,
+    is_judged,
+    only_verified,
+    parse_run_options,
+)
 from steel.llm.anthropic_client import AnthropicClient
 from steel.llm.client import LLMClient
 from steel.llm.replay import MissingFixture, RecordingLLMClient, ReplayLLMClient
@@ -94,18 +101,24 @@ def run_hyperparameters(mode: Mode) -> dict[str, Any]:
 
 
 def main() -> None:
-    mode = parse_mode("Run the quote-letter eval.")
+    options = parse_run_options("Run the quote-letter eval.", modes=("replay", "live", "judge-recorded"))
+    mode = options.mode
     dataset_dir = DATASETS_DIR / DATASET
     manifest = load_manifest(dataset_dir)
     cases = load_dataset(dataset_dir)
+    if options.verified_only:
+        cases = only_verified(cases)
     letters = write_every_letter(cases, make_llm(mode))
     dataset = EvaluationDataset(goldens=[Golden(**case.as_golden_fields()) for case in cases if case.name in letters])
-    for golden in dataset.evals_iterator(
-        metrics=letter_metrics(mode),
-        hyperparameters=run_hyperparameters(mode),
-        identifier=run_identifier(DATASET, manifest.version, COMPONENT_VERSION, current_git_revision()),
-    ):
-        trace_letter(golden, letters[golden.name])
+    result = evaluate_each(
+        dataset.evals_iterator(
+            metrics=letter_metrics(mode),
+            hyperparameters=run_hyperparameters(mode),
+            identifier=run_identifier(DATASET, manifest.version, COMPONENT_VERSION, current_git_revision()),
+        ),
+        lambda golden: trace_letter(golden, letters[golden.name]),
+    )
+    exit_if_replay_failed(result, mode)
 
 
 if __name__ == "__main__":

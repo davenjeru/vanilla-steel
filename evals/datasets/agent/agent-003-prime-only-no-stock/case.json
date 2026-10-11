@@ -1,6 +1,6 @@
 {
-  "reason": "Same order without accepting second choice means prime only; the only lots of this size are second choice, so the agent must escalate as no_stock, never offer second choice unasked.",
-  "verified": false,
+  "reason": "The same order, but the customer did not say they accept second choice, so only prime steel may be offered. Every lot of this size is second choice, so the agent must hand the enquiry to a person as out of stock, never offer second choice unasked.",
+  "verified": true,
   "source": "llm-drafted",
   "language": "en",
   "risk": "business_correctness",

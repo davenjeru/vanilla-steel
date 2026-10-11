@@ -1,6 +1,7 @@
 {
-  "reason": "Another tenant sent the identical enquiry earlier. Tenants never see each other's enquiries, so this is a fresh enquiry and gets its own RFQ.",
-  "verified": false,
+  "reason": "Another customer sent the identical email earlier. Customers never see each other's enquiries, so this is a new order and gets its own request for quote.",
+  "references": ["D6"],
+  "verified": true,
   "source": "llm-drafted",
   "language": "en",
   "risk": "data_separation",

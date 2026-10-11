@@ -1,7 +1,8 @@
 {
   "verified": false,
   "source": "llm-drafted",
-  "reason": "Owner: the first copy failed on our side and has no RFQ, so the resend must be quoted, not held as a duplicate; holding it would make the customer wait twice for one outage.",
+  "reason": "The customer's first email failed on our side and never got a request for quote. The resend must be quoted, not held as a duplicate, or the customer waits twice for one outage.",
+  "references": ["D36"],
   "language": "en",
   "risk": "duplication",
   "expected_agent": {

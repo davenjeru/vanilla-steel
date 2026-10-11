@@ -1,6 +1,7 @@
 {
-  "reason": "Polish: 'tony' as the tonne unit, 'blachy gorącowalcowanej' (hot-rolled blacha, the generic word: at 4 mm it is plate by the DIN convention, finding F-011), and the city declined as 'do Krakowa' must be recorded in its base form Kraków.",
-  "verified": false,
+  "reason": "Polish email: 'tony' means tonnes; 'blachy gorącowalcowanej' is hot-rolled 'blacha', the general word, which at 4 mm is plate (DIN); and the city written 'do Krakowa' must be recorded as Kraków.",
+  "references": ["F-011", "D37"],
+  "verified": true,
   "language": "pl",
   "source": "llm-drafted",
   "expected_spec": {

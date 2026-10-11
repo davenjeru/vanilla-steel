@@ -32,8 +32,9 @@ CANDIDATES_DIR = REPO_ROOT / "evals" / "candidates" / "extraction"
 NEEDS_REVIEW = {EnquiryStatus.ESCALATED, EnquiryStatus.FAILED}
 REVIEWER_STEPS = (
     "Before moving into evals/datasets/extraction: anonymise names, companies, addresses and order numbers; "
-    "confirm the tenant's permission to use it; correct every expected_spec field (it is the system's "
-    "extraction, not the truth); set language and rename the folder."
+    "confirm the tenant's permission to use it; correct every expected field (they are the system's "
+    "extraction, not the truth); set the language, rename the folder and rewrite this reason to say what "
+    "the case tests."
 )
 
 
@@ -46,7 +47,7 @@ def candidate_labels(enquiry: Enquiry) -> CaseLabels:
     spec = enquiry.spec or MaterialSpec()
     extracted = spec.model_dump(mode="json")
     return CaseLabels(
-        reason=f"Production candidate {enquiry.tenant_id} {enquiry.id}, {_why_exported(enquiry)}. {REVIEWER_STEPS}",
+        reason=f"Real enquiry, {_why_exported(enquiry)}. {REVIEWER_STEPS}",
         verified=False,
         source="production",
         language=None,
@@ -70,11 +71,16 @@ def export_candidates(
 
 
 def _why_exported(enquiry: Enquiry) -> str:
+    """In plain words: the tenant and enquiry IDs are already in the candidate's folder name."""
     if enquiry.status is EnquiryStatus.ESCALATED:
-        return f"escalated: {enquiry.escalation_reason} ({enquiry.escalation_detail or 'no detail'})"
+        return f"handed to a person: {_plain(enquiry.escalation_reason)} ({enquiry.escalation_detail or 'no detail'})"
     if enquiry.status is EnquiryStatus.FAILED:
-        return f"failed: {enquiry.failure_reason}"
+        return f"failed on our side: {_plain(enquiry.failure_reason)}"
     return f"flagged by a trader while {enquiry.status}"
+
+
+def _plain(code: str | None) -> str:
+    return (code or "no reason recorded").replace("_", " ")
 
 
 def _write_candidate(folder: Path, enquiry: Enquiry, attachments: list[Attachment]) -> None:

@@ -1,6 +1,6 @@
 """Run the matching eval and upload the run to Confident AI.
 
-Usage: uv run python -m evals.runs.matching
+Usage: uv run python -m evals.runs.matching [--verified-only]
 
 No LLM is involved: the matcher is deterministic code. It runs against the
 deterministic seed stock (not the database), the same stock the golden labels
@@ -20,6 +20,7 @@ from evals.metrics.matching.no_unsuitable_offers import NoUnsuitableOffers
 from evals.metrics.matching.offers_in_the_right_order import OffersInTheRightOrder
 from evals.runs.shared.golden_cases import DATASETS_DIR, load_dataset, load_manifest
 from evals.runs.shared.run_labels import current_git_revision, run_identifier
+from evals.runs.shared.run_modes import evaluate_each, exit_if_replay_failed, only_verified, parse_run_options
 from steel.domain.geography import locate_delivery
 from steel.domain.matching import FREIGHT_EUR_PER_TONNE_KM, find_matches
 from steel.domain.models import MaterialSpec
@@ -52,25 +53,32 @@ def match_and_trace(golden: Golden) -> str:
 
 
 def main() -> None:
+    options = parse_run_options("Run the matching eval.", modes=("replay",))
     dataset_dir = DATASETS_DIR / DATASET
     manifest = load_manifest(dataset_dir)
-    dataset = EvaluationDataset(goldens=[Golden(**case.as_golden_fields()) for case in load_dataset(dataset_dir)])
+    cases = load_dataset(dataset_dir)
+    if options.verified_only:
+        cases = only_verified(cases)
+    dataset = EvaluationDataset(goldens=[Golden(**case.as_golden_fields()) for case in cases])
 
-    for golden in dataset.evals_iterator(
-        metrics=[
-            NoUnsuitableOffers(),
-            BestOfferComesFirst(),
-            BestOfferInTheTopThree(),
-            OffersInTheRightOrder(),
-            FindsEverySuitableOffer(),
-        ],
-        hyperparameters={
-            "freight_eur_per_tonne_km": str(FREIGHT_EUR_PER_TONNE_KM),
-            "stock_seed": DEFAULT_SEED,
-        },
-        identifier=run_identifier(DATASET, manifest.version, COMPONENT_VERSION, current_git_revision()),
-    ):
-        match_and_trace(golden)
+    result = evaluate_each(
+        dataset.evals_iterator(
+            metrics=[
+                NoUnsuitableOffers(),
+                BestOfferComesFirst(),
+                BestOfferInTheTopThree(),
+                OffersInTheRightOrder(),
+                FindsEverySuitableOffer(),
+            ],
+            hyperparameters={
+                "freight_eur_per_tonne_km": str(FREIGHT_EUR_PER_TONNE_KM),
+                "stock_seed": DEFAULT_SEED,
+            },
+            identifier=run_identifier(DATASET, manifest.version, COMPONENT_VERSION, current_git_revision()),
+        ),
+        match_and_trace,
+    )
+    exit_if_replay_failed(result, options.mode)
 
 
 if __name__ == "__main__":

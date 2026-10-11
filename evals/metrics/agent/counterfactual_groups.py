@@ -34,7 +34,7 @@ class GroupVerdict(BaseModel):
     reason: str
     outcomes: dict[str, str]  # case name -> business outcome, or why it was not compared
     tool_paths_differ: bool
-    counts_toward_gate: bool  # only when every member is verified
+    all_members_verified: bool
 
 
 def business_outcome(outcome: AgentOutcome) -> str:
@@ -63,7 +63,7 @@ def judge_group(group: str, members: list[GroupMember]) -> GroupVerdict:
         reason=reason,
         outcomes={member.case_name: _shown_outcome(member) for member in members},
         tool_paths_differ=len({tuple(member.outcome.tools_called()) for member in compared if member.outcome}) > 1,
-        counts_toward_gate=all(member.verified for member in members),
+        all_members_verified=all(member.verified for member in members),
     )
 
 

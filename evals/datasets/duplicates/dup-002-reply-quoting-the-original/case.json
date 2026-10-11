@@ -1,7 +1,7 @@
 {
   "verified": false,
   "source": "llm-drafted",
-  "reason": "A chaser that quotes the original enquiry: the order read from the quote is the same one.",
+  "reason": "The customer chases with a reply that quotes the original enquiry. The order read from the quote is the same one: duplicate.",
   "language": "en",
   "expected_duplicate": true,
   "earlier_enquiries": [

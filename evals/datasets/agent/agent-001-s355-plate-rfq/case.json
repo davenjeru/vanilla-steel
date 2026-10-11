@@ -1,6 +1,6 @@
 {
-  "reason": "Happy path: complete spec, two lots qualify, exactly one RFQ for the best delivered offer (stk_058).",
-  "verified": false,
+  "reason": "A complete order for S355J2 plate delivered to Poznań. Two lots fit, so the agent must place exactly one request for quote, for the lot that is cheapest once delivery is included.",
+  "verified": true,
   "source": "llm-drafted",
   "language": "en",
   "risk": "business_correctness",

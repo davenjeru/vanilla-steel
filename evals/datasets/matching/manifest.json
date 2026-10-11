@@ -1,8 +1,9 @@
 {
-  "version": "0",
+  "version": "1",
   "kind": "matching",
   "description": "Customer specs matched against the deterministic seed stock, with the offers a correct matcher must return (best first) and stock it must never offer.",
   "changelog": [
-    {"version": "0", "change": "First 5 cases (llm-drafted, unverified): two-lot ranking, distant-but-cheaper wins, second choice not offered unasked, no lot large enough, unknown delivery location."}
+    {"version": "0", "change": "First 5 cases (llm-drafted, unverified): two-lot ranking, distant-but-cheaper wins, second choice not offered unasked, no lot large enough, unknown delivery location."},
+    {"version": "1", "change": "Reasons rewritten in plain words; finding and decision codes moved to the new references field. Owner instruction (2026-10-11): 2 of 5 cases marked verified (at least 40%). Chosen by Claude to cover every risk, language and outcome, including known failures; counterfactual groups are verified whole. Labels were not re-reviewed case by case."}
   ]
 }

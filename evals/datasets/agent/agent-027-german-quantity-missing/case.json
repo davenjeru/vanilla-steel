@@ -1,5 +1,5 @@
 {
-  "reason": "Counterfactual of agent-005 in German: no quantity, so the agent must escalate missing_information without searching stock, exactly as for the English email.",
+  "reason": "The order with no quantity (agent-005) written in German. The agent must hand it to a person to ask for the quantity, without searching stock, exactly as for the English email.",
   "verified": false,
   "source": "llm-drafted",
   "language": "de",

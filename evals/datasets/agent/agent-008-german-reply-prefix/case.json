@@ -1,5 +1,5 @@
 {
-  "reason": "Resent with German mail-client prefixes (AW: WG:) and identical body: still a duplicate.",
+  "reason": "The same enquiry resent with German mail prefixes (AW:, WG:) in the subject and the same text. It is still a duplicate and must not become a second request for quote.",
   "verified": false,
   "source": "llm-drafted",
   "language": "en",

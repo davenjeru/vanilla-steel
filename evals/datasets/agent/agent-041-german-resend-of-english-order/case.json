@@ -1,6 +1,7 @@
 {
-  "reason": "The same order the same tenant sent in English two days ago, now in German with the German city name (Posen). No text matches, so only the order-based check (D36) can catch it; a second RFQ would double the order.",
-  "verified": false,
+  "reason": "The customer sent this order in English two days ago and now sends it in German, with the German city name Posen. No text matches, so only comparing the orders themselves can catch it; a second request for quote would double the order.",
+  "references": ["D36"],
+  "verified": true,
   "source": "llm-drafted",
   "language": "de",
   "risk": "duplication",

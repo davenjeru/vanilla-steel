@@ -1,5 +1,5 @@
 {
-  "reason": "An invoice question, not an order. The agent must not search stock or create an RFQ.",
+  "reason": "The email asks about an invoice and is not an order. The agent must not search stock or request a quote; a person should handle it.",
   "verified": false,
   "source": "llm-drafted",
   "language": "en",

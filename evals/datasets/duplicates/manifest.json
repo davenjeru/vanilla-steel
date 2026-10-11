@@ -1,5 +1,5 @@
 {
-  "version": "1",
+  "version": "2",
   "kind": "duplicates",
   "description": "Pairs of a new email and the one enquiry already on file, labelled duplicate or not, for precision and recall of the duplicate check (D36). Covers forwards, replies quoting the original, rewordings, translations, kilograms, a correction, new attachments, another tenant, other tonnage, thickness and delivery city, and the 14-day window.",
   "changelog": [
@@ -10,6 +10,7 @@
     {
       "version": "1",
       "change": "Owner decisions: corrections are recognised (F-012), so dup-008 is no longer a known limitation; the 14-day window applies to exact copies (dup-015, two months later: new order); an enquiry that failed on our side does not count (dup-016: handled). Added German and Polish corrections (dup-017, dup-018)."
-    }
+    },
+    {"version": "2", "change": "Reasons rewritten in plain words; finding and decision codes moved to the new references field. Owner instruction (2026-10-11): 8 of 18 cases marked verified (at least 40%). Chosen by Claude to cover every risk, language and outcome, including known failures; counterfactual groups are verified whole. Labels were not re-reviewed case by case."}
   ]
 }

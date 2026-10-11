@@ -13,7 +13,7 @@ accidental switch to a dearer model. Latency has a real ceiling: the agent runs 
 POST /v1/enquiries, and many HTTP clients give up after 30 seconds.
 
 Currency: USD, the currency Anthropic bills in (owner's choice of EUR would need a fixed rate).
-Revisit these against the official baseline once the release gate exists (Slice 6).
+Revisit these against live runs in Confident AI (there is no release gate, D39).
 """
 
 from pydantic import BaseModel

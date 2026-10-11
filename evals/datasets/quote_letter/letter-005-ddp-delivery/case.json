@@ -1,6 +1,6 @@
 {
-  "reason": "DDP puts import duties on the seller. The letter states the term but must give no customs or tax advice (NonAdvice) and must not explain or promise duty amounts.",
-  "verified": false,
+  "reason": "Under DDP the seller pays import duties. The letter states the term but must give no customs or tax advice and must not explain or promise duty amounts.",
+  "verified": true,
   "source": "hand-written",
   "language": "en",
   "risk": "business_correctness",

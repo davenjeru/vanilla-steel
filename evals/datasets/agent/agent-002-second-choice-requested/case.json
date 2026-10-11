@@ -1,5 +1,5 @@
 {
-  "reason": "Second choice is acceptable to this customer, so the second-choice lots qualify; the RFQ goes to the cheapest delivered one (stk_083, Gent), not the nearest.",
+  "reason": "The customer accepts second-choice steel, so second-choice lots may be offered. The request for quote must go to the lot that is cheapest delivered (in Gent), even though another lot is nearer.",
   "verified": false,
   "source": "llm-drafted",
   "language": "en",

@@ -1,7 +1,8 @@
 {
-  "verified": false,
+  "verified": true,
   "source": "llm-drafted",
-  "reason": "Owner: the first enquiry failed on our side (an outage) and has no RFQ, so the resend cannot double anything and must be handled, not held as a duplicate.",
+  "reason": "The first enquiry failed on our side and never got a request for quote, so the resend cannot double anything: not a duplicate.",
+  "references": ["D36"],
   "language": "en",
   "expected_duplicate": false,
   "earlier_enquiries": [

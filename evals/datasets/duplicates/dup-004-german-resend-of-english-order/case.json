@@ -1,7 +1,8 @@
 {
-  "verified": false,
+  "verified": true,
   "source": "llm-drafted",
-  "reason": "The English order resent in German, with the generic word Blech (plate at 15 mm, F-011) and the German city name Posen.",
+  "reason": "The English order resent in German, using the general word 'Blech' (plate at 15 mm) and the German city name Posen: duplicate.",
+  "references": ["F-011"],
   "language": "de",
   "expected_duplicate": true,
   "earlier_enquiries": [

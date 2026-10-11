@@ -1,6 +1,6 @@
 {
-  "reason": "Same quote in German: the letter must be German, with German number and date formats allowed.",
-  "verified": false,
+  "reason": "The same quote in German: the letter must be in German, and German number and date formats are allowed.",
+  "verified": true,
   "source": "hand-written",
   "language": "de",
   "risk": "fairness",

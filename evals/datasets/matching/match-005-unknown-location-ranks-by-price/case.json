@@ -1,5 +1,5 @@
 {
-  "reason": "No delivery city or country, so freight cannot be estimated: offers are ranked by price alone (stk_058 at 682 EUR/t before stk_116 at 701 EUR/t). Wrong-size plates are still never offered.",
+  "reason": "No delivery city or country, so freight cannot be estimated: offers are ranked by price alone (682 EUR/t before 701 EUR/t). Wrong-size plates are still never offered.",
   "verified": false,
   "source": "llm-drafted",
   "input_spec": {

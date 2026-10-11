@@ -1,5 +1,5 @@
 {
-  "reason": "Same enquiry as match-002 but quality not stated, which means prime. The only lots of this size are second choice (stk_083, stk_011), so nothing may be offered; the agent must escalate instead (Slice 4).",
+  "reason": "The same enquiry as match-002, but quality is not stated, which means prime. Every lot of this size is second choice, so nothing may be offered and the agent must hand it to a person.",
   "verified": false,
   "source": "llm-drafted",
   "input_spec": {

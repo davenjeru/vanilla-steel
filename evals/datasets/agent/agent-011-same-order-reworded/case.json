@@ -1,5 +1,5 @@
 {
-  "reason": "The same order rewritten in different words by the same tenant on the same day.",
+  "reason": "The same customer rewrites the same order in different words on the same day. It is a duplicate and must not be ordered twice.",
   "verified": false,
   "source": "llm-drafted",
   "language": "en",

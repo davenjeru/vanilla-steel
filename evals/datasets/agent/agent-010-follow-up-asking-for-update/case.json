@@ -1,5 +1,5 @@
 {
-  "reason": "'Any update?' with the original quoted below is a follow-up, not a new order. It must never become a second RFQ.",
+  "reason": "The customer asks 'Any update?' with the original enquiry quoted below. This chases the first order; it must never become a second request for quote.",
   "verified": false,
   "source": "llm-drafted",
   "language": "en",

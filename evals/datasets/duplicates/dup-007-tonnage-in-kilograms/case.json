@@ -1,7 +1,7 @@
 {
   "verified": false,
   "source": "llm-drafted",
-  "reason": "The same tonnage written in kilograms: 30,000 kg is 30 t after normalisation.",
+  "reason": "The same order with the tonnage written as 30,000 kg instead of 30 t: duplicate.",
   "language": "en",
   "expected_duplicate": true,
   "earlier_enquiries": [

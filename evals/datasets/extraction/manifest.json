@@ -1,5 +1,5 @@
 {
-  "version": "3",
+  "version": "4",
   "kind": "extraction",
   "description": "Customer enquiry emails and attachments with the MaterialSpec a correct extractor must produce.",
   "changelog": [
@@ -18,6 +18,7 @@
     {
       "version": "3",
       "change": "Finding F-011 (owner: DIN convention): generic Blech/blacha is sheet under 3 mm and plate from 3 mm. Added de-004 (Blech, 15 mm: plate). pl-001 relabelled: blacha at 4 mm is plate, not sheet."
-    }
+    },
+    {"version": "4", "change": "Reasons rewritten in plain words; finding and decision codes moved to the new references field. Owner instruction (2026-10-11): 5 of 11 cases marked verified (at least 40%). Chosen by Claude to cover every risk, language and outcome, including known failures; counterfactual groups are verified whole. Labels were not re-reviewed case by case."}
   ]
 }

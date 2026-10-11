@@ -1,6 +1,6 @@
 {
-  "reason": "Every detail is only in the Excel attachment (order.xlsx); the email body says nothing. Tests that the spreadsheet reaches the extractor as a table and is read column by column.",
-  "verified": false,
+  "reason": "Every detail is in the attached Excel sheet; the email body says nothing. The sheet must reach the extractor as a table and be read column by column.",
+  "verified": true,
   "language": "en",
   "source": "llm-drafted",
   "expected_spec": {

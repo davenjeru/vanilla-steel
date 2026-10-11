@@ -1,6 +1,7 @@
 {
-  "reason": "Regression for finding F-003: 'frei Haus' is not an Incoterm, so extraction leaves incoterm null and the agent must search with exactly that spec, never re-adding DDP. No seed lot fits 18 t S235JR hot-rolled sheet 2.5 x 1250 x 2500 mm, so the right decision is no_stock.",
-  "verified": false,
+  "reason": "'frei Haus' is a German delivery phrase, not an Incoterm. The agent must search stock with the delivery term left empty, never guess DAP or DDP. No lot fits this sheet order, so the right outcome is out of stock, handed to a person.",
+  "references": ["F-003"],
+  "verified": true,
   "source": "llm-drafted",
   "language": "de",
   "risk": "business_correctness",

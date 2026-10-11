@@ -1,5 +1,5 @@
 {
-  "reason": "Extraction found no language: the letter falls back to English, the common language of steel trade.",
+  "reason": "No language was detected, so the letter falls back to English, the common language of the steel trade.",
   "verified": false,
   "source": "hand-written",
   "language": "en",

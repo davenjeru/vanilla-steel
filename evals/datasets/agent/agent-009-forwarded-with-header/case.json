@@ -1,5 +1,5 @@
 {
-  "reason": "A colleague forwards the original with a 'Forwarded message' header. Same order, so no second RFQ.",
+  "reason": "A colleague forwards the original enquiry with a 'Forwarded message' header. It is the same order, so no second request for quote.",
   "verified": false,
   "source": "llm-drafted",
   "language": "en",

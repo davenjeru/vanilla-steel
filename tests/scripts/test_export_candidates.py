@@ -68,7 +68,14 @@ def test_candidate_reason_says_why_it_was_exported_and_what_the_reviewer_must_do
 
     reason = candidate_labels(escalated).reason
 
-    assert all(part in reason for part in ["tnt_bauer enq_0001", "escalated: no_stock", "anonymise", "permission"])
+    assert all(part in reason for part in ["handed to a person: no stock (No lot fits.)", "anonymise", "permission"])
+
+
+def test_candidate_for_a_failed_enquiry_says_why_in_plain_words(seeded_connection: sqlite3.Connection) -> None:
+    """Tenant and enquiry IDs stay in the candidate's folder name; the reason is read by people."""
+    failed = handled_enquiry(seeded_connection, "enq_0002", [EnquiryStatus.FAILED], failure_reason="extraction_failed")
+
+    assert "failed on our side: extraction failed" in candidate_labels(failed).reason
 
 
 def test_exported_candidate_round_trips_like_a_golden_case(

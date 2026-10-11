@@ -54,7 +54,14 @@ from evals.metrics.agent.stays_within_the_token_budget import StaysWithinTheToke
 from evals.runs.shared.golden_cases import DATASETS_DIR, GoldenCase, load_dataset, load_manifest
 from evals.runs.shared.judge import JUDGE_MODEL
 from evals.runs.shared.run_labels import current_git_revision, run_identifier
-from evals.runs.shared.run_modes import Mode, is_judged, parse_mode
+from evals.runs.shared.run_modes import (
+    Mode,
+    evaluate_each,
+    exit_if_replay_failed,
+    is_judged,
+    only_verified,
+    parse_run_options,
+)
 from evals.runs.shared.tool_contracts import describe_arguments
 from steel.agent.runner import MAX_TURNS, PROMPT_VERSION
 from steel.agent.tools import TOOLS
@@ -413,22 +420,28 @@ def _tool_description(name: str) -> str | None:
 
 
 def main() -> None:
-    mode = parse_mode("Run the agent eval.")
+    options = parse_run_options("Run the agent eval.", modes=("replay", "live", "judge-recorded"))
+    mode = options.mode
     dataset_dir = DATASETS_DIR / DATASET
     manifest = load_manifest(dataset_dir)
     cases = load_dataset(dataset_dir)
+    if options.verified_only:
+        cases = only_verified(cases)
     results = run_every_case(cases, llm_for_case(live=mode == "live"))
     dataset = EvaluationDataset(goldens=[Golden(**case.as_golden_fields()) for case in cases if case.name in results])
 
-    for golden in dataset.evals_iterator(
-        metrics=agent_metrics(mode),
-        hyperparameters=run_hyperparameters(mode),
-        identifier=run_identifier(DATASET, manifest.version, COMPONENT_VERSION, current_git_revision()),
-    ):
-        trace_agent_run(golden, results[golden.name])
+    result = evaluate_each(
+        dataset.evals_iterator(
+            metrics=agent_metrics(mode),
+            hyperparameters=run_hyperparameters(mode),
+            identifier=run_identifier(DATASET, manifest.version, COMPONENT_VERSION, current_git_revision()),
+        ),
+        lambda golden: trace_agent_run(golden, results[golden.name]),
+    )
 
     print_counterfactual_report(judge_counterfactual_groups(group_members(cases, results)))
     print_latency_report(judge_latency(model_seconds_by_case(results), live=mode == "live"))
+    exit_if_replay_failed(result, mode)
 
 
 def run_hyperparameters(mode: Mode) -> dict[str, Any]:
@@ -468,7 +481,7 @@ def model_seconds_by_case(results: dict[str, SandboxResult]) -> dict[str, float]
 
 
 def print_latency_report(verdict: LatencyVerdict) -> None:
-    """Printed, not uploaded: a run-wide check, read later by the release gate."""
+    """Printed, not uploaded: a run-wide check, not a per-case DeepEval result, so it never fails CI."""
     print(f"\nLatency: model time per enquiry\n  {verdict.verdict.upper():<9} {verdict.reason}")
 
 
@@ -480,7 +493,7 @@ def group_members(cases: list[GoldenCase], results: dict[str, SandboxResult]) ->
             group=case.labels.counterfactual_group,
             outcome=agent_outcome(results[case.name]) if case.name in results else None,
             known_limitation=case.labels.known_limitation is not None,
-            verified=case.labels.verified is True,
+            verified=case.is_verified,
         )
         for case in cases
         if case.labels.counterfactual_group is not None
@@ -488,12 +501,12 @@ def group_members(cases: list[GoldenCase], results: dict[str, SandboxResult]) ->
 
 
 def print_counterfactual_report(verdicts: list[GroupVerdict]) -> None:
-    """Printed, not uploaded: Confident AI scores single cases; the release gate will read these verdicts."""
+    """Printed, not uploaded: Confident AI scores single cases, so group verdicts never fail CI."""
     print("\nFairness: counterfactual groups")
     for verdict in verdicts:
-        gate_note = "" if verdict.counts_toward_gate else " [unverified, does not count]"
+        verified_note = "" if verdict.all_members_verified else " [not every member verified]"
         path_note = " (tool paths differ)" if verdict.tool_paths_differ else ""
-        print(f"  {verdict.verdict.upper():<9} {verdict.group}: {verdict.reason}{path_note}{gate_note}")
+        print(f"  {verdict.verdict.upper():<9} {verdict.group}: {verdict.reason}{path_note}{verified_note}")
         for case_name, outcome in verdict.outcomes.items():
             print(f"            {case_name}: {outcome}")
 

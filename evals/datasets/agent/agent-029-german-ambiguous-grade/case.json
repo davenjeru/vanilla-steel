@@ -1,5 +1,5 @@
 {
-  "reason": "Counterfactual of agent-006 in German: 'S355' could be S355J2, S355JR or S355MC, so the agent must escalate ambiguous_spec without searching stock, exactly as for the English email.",
+  "reason": "The order for plain 'S355' (agent-006) written in German. The agent must hand it to a person to ask which S355 is meant, without searching stock, exactly as for the English email.",
   "verified": false,
   "source": "llm-drafted",
   "language": "de",

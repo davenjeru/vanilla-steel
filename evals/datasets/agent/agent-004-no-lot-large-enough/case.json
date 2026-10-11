@@ -1,5 +1,5 @@
 {
-  "reason": "60 t requested; the matching lots hold 54 t and 50 t. One lot must cover the order, so escalate as no_stock rather than splitting or over-promising.",
+  "reason": "The customer wants 60 t, but the biggest matching lots hold 54 t and 50 t. One lot must cover the whole order, so the agent must hand it to a person as out of stock rather than split the order or promise more than we have.",
   "verified": false,
   "source": "llm-drafted",
   "language": "en",

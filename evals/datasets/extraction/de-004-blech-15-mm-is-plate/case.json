@@ -1,5 +1,6 @@
 {
-  "reason": "Finding F-011: 'Blech' is the generic German word for flat steel. At 15 mm it is plate by the DIN convention (Feinblech under 3 mm, Grobblech from 3 mm); prompt v3 read it as sheet, so the order found no stock.",
+  "reason": "'Blech' is the general German word for flat steel. At 15 mm it is plate (DIN: sheet under 3 mm, plate from 3 mm); reading it as sheet meant the order found no stock.",
+  "references": ["F-011", "D37"],
   "verified": false,
   "language": "de",
   "source": "hand-written",

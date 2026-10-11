@@ -37,10 +37,10 @@ import json
 import mimetypes
 import re
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from deepeval.test_case import ToolCall
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StringConstraints, ValidationError, model_validator
 
 from steel.agent.tools import TOOLS, AgentEscalationReason
 from steel.domain.models import MaterialSpec
@@ -61,6 +61,11 @@ MATCHING_NAME_PATTERN = re.compile(r"^match-\d{3}-[a-z0-9-]+$")
 AGENT_NAME_PATTERN = re.compile(r"^agent-\d{3}-[a-z0-9-]+$")
 QUOTE_LETTER_NAME_PATTERN = re.compile(r"^letter-\d{3}-[a-z0-9-]+$")
 DUPLICATE_NAME_PATTERN = re.compile(r"^dup-\d{3}-[a-z0-9-]+$")
+
+# Findings (docs/findings.md) are F-012, decisions (docs/plan.md) are D36.
+Reference = Annotated[str, StringConstraints(pattern=r"^(F-\d{3}|D\d+)$")]
+# Codes a reviewer cannot read: finding and decision IDs, and snake_case names such as stk_058 or no_stock.
+CODE_IN_REASON = re.compile(r"\bF-\d{3}\b|\bD\d+\b|\b[a-z]+_[a-z0-9_]+\b")
 
 DatasetKind = Literal["extraction", "matching", "agent", "quote_letter", "duplicates"]
 Verification = StrictBool | Literal["back-translated"]
@@ -176,6 +181,19 @@ class CaseLabels(BaseModel):
     known_limitation: str | None = Field(
         default=None, description="Why this case is expected to fail today, e.g. a feature planned for a later slice"
     )
+    references: list[Reference] | None = Field(
+        default=None, description="Findings and decisions this case relates to, e.g. F-012, D36"
+    )
+
+    @model_validator(mode="after")
+    def reason_is_plain_words(self) -> "CaseLabels":
+        # Reviewers read the reason in Confident AI; codes belong in references.
+        code = CODE_IN_REASON.search(self.reason)
+        if code:
+            raise ValueError(
+                f"reason must be plain words, found {code.group()!r}; put finding and decision codes in references"
+            )
+        return self
 
     @model_validator(mode="after")
     def back_translation_is_only_for_non_english_cases(self) -> "CaseLabels":
@@ -199,8 +217,8 @@ class GoldenCase(BaseModel):
     directory: Path
 
     @property
-    def counts_toward_gate(self) -> bool:
-        """Unverified cases are recorded but never count (back-translated is decided per metric)."""
+    def is_verified(self) -> bool:
+        """A person reviewed the labels (or back-translated a German or Polish case). A filter, not a gate (D39)."""
         return self.labels.verified is not False
 
     def earlier_enquiries_for_sandbox(self) -> list[EarlierEnquiry]:

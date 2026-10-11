@@ -1,7 +1,8 @@
 {
-  "verified": false,
+  "verified": true,
   "source": "llm-drafted",
-  "reason": "The same lot in other words three weeks later: outside the 14-day window (D36), most likely a repeat order.",
+  "reason": "The same order in other words three weeks later. After 14 days it is most likely a repeat order: not a duplicate.",
+  "references": ["D36"],
   "language": "en",
   "expected_duplicate": false,
   "earlier_enquiries": [

@@ -1,6 +1,6 @@
 {
-  "reason": "Incomplete grade 'S355' could be S355J2, S355JR or S355MC: grade must stay null and grade_ambiguous true so the agent escalates instead of guessing. Coil, so no length.",
-  "verified": false,
+  "reason": "The grade 'S355' could be S355J2, S355JR or S355MC, so the grade must stay empty and be marked ambiguous, letting the agent ask instead of guess. A coil, so no length.",
+  "verified": true,
   "language": "en",
   "source": "llm-drafted",
   "expected_spec": {

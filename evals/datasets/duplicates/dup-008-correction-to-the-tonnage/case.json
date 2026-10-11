@@ -1,7 +1,8 @@
 {
-  "verified": false,
+  "verified": true,
   "source": "llm-drafted",
-  "reason": "Finding F-012: a correction revises the enquiry on file; it must go to a human, not become a second RFQ. The changed tonnage makes it a different lot, so only recognising the correction connects the two.",
+  "reason": "The customer corrects the tonnage of the earlier enquiry. The new tonnage makes the order look different, so only recognising the correction links the two; it must go to a person, not become a second request for quote.",
+  "references": ["F-012"],
   "language": "en",
   "expected_duplicate": true,
   "earlier_enquiries": [

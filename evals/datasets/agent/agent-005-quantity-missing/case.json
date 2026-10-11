@@ -1,5 +1,5 @@
 {
-  "reason": "No quantity: the agent must ask (escalate missing_information) and must not search stock for an incomplete spec.",
+  "reason": "The email gives no quantity. The agent must hand it to a person to ask the customer, and must not search stock for an incomplete order.",
   "verified": false,
   "source": "llm-drafted",
   "language": "en",

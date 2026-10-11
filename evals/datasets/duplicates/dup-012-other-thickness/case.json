@@ -1,7 +1,7 @@
 {
   "verified": false,
   "source": "llm-drafted",
-  "reason": "The same customer and wording, but 20 mm instead of 15 mm: a different lot.",
+  "reason": "The same customer and wording, but 20 mm instead of 15 mm: a different lot, not a duplicate.",
   "language": "en",
   "expected_duplicate": false,
   "earlier_enquiries": [

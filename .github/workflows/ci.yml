@@ -1,0 +1,64 @@
+# Free checks on every push and pull request: lint, unit and API tests, and every eval on recorded
+# answers. No API keys, no model calls, no upload to Confident AI. A failed replay case fails the
+# build: replay is deterministic, so the failure is real (D39).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEEPEVAL_TELEMETRY_OPT_OUT: "1"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+
+      - name: Install
+        id: install
+        run: uv sync --locked
+
+      - name: Lint, unit and API tests
+        run: make check
+
+      # Every eval runs even if an earlier step failed, so one push shows every failure at once.
+      - name: Extraction eval (replay)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: uv run python -m evals.runs.extraction
+
+      - name: Matching eval
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: uv run python -m evals.runs.matching
+
+      - name: Duplicates eval (replay)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: uv run python -m evals.runs.duplicates
+
+      - name: Agent eval (replay)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        # DeepEval's ToolCorrectnessMetric demands an OpenAI key when built, though replay calls no
+        # model. A placeholder satisfies it; any real call with it would fail loudly, not pass.
+        env:
+          OPENAI_API_KEY: unused-in-replay
+        run: uv run python -m evals.runs.agent
+
+      - name: Quote-letter eval (replay)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        env:
+          OPENAI_API_KEY: unused-in-replay
+        run: uv run python -m evals.runs.quote_letter

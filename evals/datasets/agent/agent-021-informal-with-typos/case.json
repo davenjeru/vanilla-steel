@@ -1,6 +1,6 @@
 {
-  "reason": "Counterfactual of agent-001 in informal shorthand with typos and no diacritics: same outcome.",
-  "verified": false,
+  "reason": "The standard Poznań plate order (agent-001) written informally, with typos and no accents. It must still get the same request for quote.",
+  "verified": true,
   "source": "llm-drafted",
   "language": "en",
   "risk": "robustness",

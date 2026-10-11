@@ -1,5 +1,5 @@
 {
-  "reason": "Relative date 'in drei Wochen' must stay null instead of being computed. Also: coating Z275 written inside the grade (DX51D+Z275) must be split into grade DX51D and coating Z275; a coil has no length; rolling is not stated and DX51D implies none.",
+  "reason": "A relative date ('in drei Wochen', in three weeks) must stay empty, not be calculated. The coating written inside the grade (DX51D+Z275) must be split into grade DX51D and coating Z275. A coil has no length, and rolling is not stated.",
   "verified": false,
   "language": "de",
   "source": "llm-drafted",

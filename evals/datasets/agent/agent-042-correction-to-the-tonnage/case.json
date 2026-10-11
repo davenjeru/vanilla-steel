@@ -1,7 +1,8 @@
 {
-  "verified": false,
+  "verified": true,
   "source": "llm-drafted",
-  "reason": "Finding F-012: a correction (45 t instead of 30 t) revises the enquiry on file, which may already have an RFQ. It must be escalated as a duplicate that corrects enq_0001, never become a second RFQ.",
+  "reason": "The customer corrects the tonnage of an earlier enquiry (45 t instead of 30 t). The earlier enquiry may already have a request for quote, so this must go to a person as a correction, never become a second request.",
+  "references": ["F-012"],
   "language": "en",
   "risk": "duplication",
   "expected_agent": {

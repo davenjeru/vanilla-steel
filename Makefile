@@ -3,7 +3,8 @@
 install:
 	uv sync
 
-## Exactly what CI runs. Run before every push.
+## Lint and tests. CI runs this plus every eval on recorded answers (.github/workflows/ci.yml).
+## Add --verified-only to any eval module to run only reviewed cases.
 check: lint test
 
 lint:

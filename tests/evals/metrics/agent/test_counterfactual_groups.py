@@ -90,10 +90,10 @@ def test_different_tool_paths_to_the_same_outcome_pass_but_are_reported() -> Non
     assert (verdict.verdict, verdict.tool_paths_differ) == ("pass", True)
 
 
-def test_group_with_an_unverified_member_does_not_count_toward_the_gate() -> None:
+def test_group_with_an_unverified_member_is_not_fully_verified() -> None:
     members = [group_member("english", RFQ_FOR_STK_058), group_member("polish", RFQ_FOR_STK_058, verified=False)]
 
-    assert judge_group("s355-plate-poznan", members).counts_toward_gate is False
+    assert judge_group("s355-plate-poznan", members).all_members_verified is False
 
 
 def test_each_group_is_judged_on_its_own_members() -> None:

@@ -1,7 +1,8 @@
 {
   "verified": false,
   "source": "llm-drafted",
-  "reason": "Owner (D36 amended): the 14-day window applies to exact copies too. The identical email two months later is most likely a repeat order and must be quoted.",
+  "reason": "The identical email two months later. The 14-day window applies to exact copies too: a repeat order, not a duplicate.",
+  "references": ["D36"],
   "language": "en",
   "expected_duplicate": false,
   "earlier_enquiries": [

@@ -1,7 +1,8 @@
 {
-  "verified": false,
+  "verified": true,
   "source": "llm-drafted",
-  "reason": "The English order resent in Polish, with the generic word blacha (plate at 15 mm, F-011) and 'ton'.",
+  "reason": "The English order resent in Polish, using the general word 'blacha' (plate at 15 mm) and 'ton': duplicate.",
+  "references": ["F-011"],
   "language": "pl",
   "expected_duplicate": true,
   "earlier_enquiries": [

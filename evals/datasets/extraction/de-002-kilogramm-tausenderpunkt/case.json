@@ -1,6 +1,6 @@
 {
-  "reason": "German thousands dot: '25.000 kg' is 25 000 kg, so 25 t. Reading it as 25.0 kg (0.025 t) is the classic error. Also kaltgewalzt with a cold-rolled grade, and Wien is the official local name of Vienna.",
-  "verified": false,
+  "reason": "German thousands separator: '25.000 kg' is 25,000 kg, so 25 t. Reading it as 25.0 kg (0.025 t) is the classic mistake. Also cold-rolled ('kaltgewalzt') with a cold-rolled grade, and the city stays 'Wien', its official local name.",
+  "verified": true,
   "language": "de",
   "source": "llm-drafted",
   "expected_spec": {

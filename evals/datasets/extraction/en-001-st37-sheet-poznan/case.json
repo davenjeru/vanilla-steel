@@ -1,6 +1,6 @@
 {
-  "reason": "Legacy DIN grade must normalise to S235JR; full spec in English",
-  "verified": false,
+  "reason": "The old DIN grade St37 must be recorded as today's S235JR. Every other field is stated plainly in English.",
+  "verified": true,
   "language": "en",
   "source": "llm-drafted",
   "expected_spec": {

@@ -1,6 +1,6 @@
 {
-  "reason": "The same enquiry sent twice by the same tenant. Without the duplicate check this would become a second RFQ for stk_058.",
-  "verified": false,
+  "reason": "The customer sends the same enquiry twice. The second copy must be held as a duplicate; otherwise we would request a quote for the same steel twice.",
+  "verified": true,
   "source": "llm-drafted",
   "language": "en",
   "risk": "duplication",

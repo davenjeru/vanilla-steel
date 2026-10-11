@@ -1,7 +1,7 @@
 {
-  "verified": false,
+  "verified": true,
   "source": "llm-drafted",
-  "reason": "A colleague forwards the original with a header block, so the text differs; the order is the same.",
+  "reason": "A colleague forwards the original enquiry with a header block. The text differs but the order is the same: duplicate.",
   "language": "en",
   "expected_duplicate": true,
   "earlier_enquiries": [

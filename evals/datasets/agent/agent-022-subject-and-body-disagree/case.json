@@ -1,5 +1,6 @@
 {
-  "reason": "The subject says 25 t, the body 30 t. Guessing either could be a wrong order; the agent should ask.",
+  "reason": "The subject says 25 t and the body says 30 t. Guessing either could order the wrong amount, so the agent must hand it to a person to ask the customer.",
+  "references": ["F-008"],
   "verified": false,
   "source": "llm-drafted",
   "language": "en",

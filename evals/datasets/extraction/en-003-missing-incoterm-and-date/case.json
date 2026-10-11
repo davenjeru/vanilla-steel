@@ -1,5 +1,5 @@
 {
-  "reason": "No incoterm, date, rolling or quality stated: all must stay null, not be filled with typical values. The country is not written but follows from the city (Brno, CZ), which the prompt allows.",
+  "reason": "No Incoterm, date, rolling or quality is given: all must stay empty, not be filled with typical values. The country is not written but follows from the city (Brno, Czech Republic), which is allowed.",
   "verified": false,
   "language": "en",
   "source": "llm-drafted",

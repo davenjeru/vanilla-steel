@@ -1,6 +1,6 @@
 {
-  "reason": "Standard quote for an English-speaking customer: 30 t S355J2 plate, DAP Poznań.",
-  "verified": false,
+  "reason": "A standard quote for an English-speaking customer: 30 t S355J2 plate, delivered (DAP) to Poznań.",
+  "verified": true,
   "source": "hand-written",
   "language": "en",
   "risk": "business_correctness",

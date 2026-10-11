@@ -1,6 +1,6 @@
 {
-  "reason": "Two prime lots qualify. Dąbrowa Górnicza (682 EUR/t, 280 km) beats the nearer Eisenhüttenstadt (701 EUR/t, 158 km) on delivered cost. Same-grade plates of the wrong thickness (stk_026, 20 mm) or width (stk_052 2000 mm, stk_110 1500 mm) must never be offered.",
-  "verified": false,
+  "reason": "Two prime lots fit. The one in Dąbrowa Górnicza (682 EUR/t, 280 km) beats the nearer Eisenhüttenstadt lot (701 EUR/t, 158 km) once delivery is costed. Plates of the right grade but the wrong thickness or width must never be offered.",
+  "verified": true,
   "source": "llm-drafted",
   "input_spec": {
     "grade": "S355J2",

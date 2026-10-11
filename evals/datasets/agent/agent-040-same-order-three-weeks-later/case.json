@@ -1,5 +1,6 @@
 {
-  "reason": "The same lot as an enquiry from three weeks ago, in other words. Outside the 14-day duplicate window (D36) a repeat is most likely a new order, so it must get an RFQ, not wait for a human.",
+  "reason": "The customer orders the same lot as three weeks ago, in other words. After 14 days a repeat is most likely a new order, so it gets a request for quote rather than waiting for a person.",
+  "references": ["D36"],
   "verified": false,
   "source": "llm-drafted",
   "language": "en",

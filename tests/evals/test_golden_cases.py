@@ -95,6 +95,14 @@ def test_golden_fields_carry_input_labels_and_dataset_version(extraction_dataset
     }
 
 
+def test_findings_and_decisions_a_case_relates_to_travel_in_metadata(extraction_dataset_dir: Path) -> None:
+    write_case(extraction_dataset_dir, labels=valid_case_labels(references=["F-011", "D37"]))
+
+    [case] = load_dataset(extraction_dataset_dir)
+
+    assert case.as_golden_fields()["additional_metadata"]["references"] == ["F-011", "D37"]
+
+
 def test_expected_spec_travels_as_json_in_expected_output(extraction_dataset_dir: Path) -> None:
     """expected_output is the only golden field a metric sees inside evals_iterator."""
     write_case(extraction_dataset_dir, labels=valid_case_labels(expected_spec={"grade": "S235JR", "quantity_t": 25}))
@@ -121,9 +129,9 @@ def test_attachments_load_with_their_content_type(extraction_dataset_dir: Path) 
     assert (attachment.filename, attachment.content_type) == ("order.csv", "text/csv")
 
 
-@pytest.mark.parametrize(("verified", "counts"), [(True, True), ("back-translated", True), (False, False)])
-def test_only_unverified_cases_are_excluded_from_the_gate(
-    extraction_dataset_dir: Path, verified: bool | str, counts: bool
+@pytest.mark.parametrize(("verified", "is_verified"), [(True, True), ("back-translated", True), (False, False)])
+def test_a_back_translated_case_counts_as_verified(
+    extraction_dataset_dir: Path, verified: bool | str, is_verified: bool
 ) -> None:
     write_case(
         extraction_dataset_dir, name="de-001-sample-case", labels=valid_case_labels(verified=verified, language="de")
@@ -131,7 +139,7 @@ def test_only_unverified_cases_are_excluded_from_the_gate(
 
     [case] = load_dataset(extraction_dataset_dir)
 
-    assert case.counts_toward_gate is counts
+    assert case.is_verified is is_verified
 
 
 # Datasets that must be rejected
@@ -180,6 +188,31 @@ def test_rejects_blank_reason(extraction_dataset_dir: Path) -> None:
     write_case(extraction_dataset_dir, labels=valid_case_labels(reason="   "))
 
     with pytest.raises(InvalidGoldenCase, match="reason"):
+        load_dataset(extraction_dataset_dir)
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "Finding F-012: a correction revises the enquiry on file.",
+        "Outside the 14-day window (D36) a repeat is a new order.",
+        "The agent must escalate as missing_information.",
+        "Exactly one RFQ for stk_058.",
+    ],
+)
+def test_rejects_reason_with_codes_instead_of_plain_words(extraction_dataset_dir: Path, reason: str) -> None:
+    """Reviewers read the reason in Confident AI; finding and decision codes go in references."""
+    write_case(extraction_dataset_dir, labels=valid_case_labels(reason=reason))
+
+    with pytest.raises(InvalidGoldenCase, match="plain words"):
+        load_dataset(extraction_dataset_dir)
+
+
+@pytest.mark.parametrize("reference", ["F12", "F-12", "D-36", "prompt v3"])
+def test_rejects_reference_that_is_not_a_finding_or_decision(extraction_dataset_dir: Path, reference: str) -> None:
+    write_case(extraction_dataset_dir, labels=valid_case_labels(references=[reference]))
+
+    with pytest.raises(InvalidGoldenCase, match="references"):
         load_dataset(extraction_dataset_dir)
 
 

@@ -1,5 +1,5 @@
 {
-  "reason": "'S355' could be S355J2, S355JR or S355MC: escalate as ambiguous_spec without searching stock.",
+  "reason": "The customer writes only 'S355', which could mean S355J2, S355JR or S355MC. The agent must hand it to a person to ask which one, without searching stock, rather than guess.",
   "verified": false,
   "source": "llm-drafted",
   "language": "en",

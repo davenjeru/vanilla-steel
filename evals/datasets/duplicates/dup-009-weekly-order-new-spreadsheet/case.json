@@ -1,7 +1,8 @@
 {
-  "verified": false,
+  "verified": true,
   "source": "llm-drafted",
-  "reason": "Finding F-005: the same email text each week with a new order in the spreadsheet (last week S235JR sheet, this week S355J2 plate) is a new order.",
+  "reason": "The same email text as last week, but the attached spreadsheet holds a new order (S355J2 plate instead of S235JR sheet): a new order, not a duplicate.",
+  "references": ["F-005"],
   "language": "en",
   "expected_duplicate": false,
   "earlier_enquiries": [

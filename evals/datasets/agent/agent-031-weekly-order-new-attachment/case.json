@@ -1,6 +1,7 @@
 {
-  "reason": "Same email text as last week's order, but a new order in the spreadsheet: last week S235JR sheet, this week S355J2 plate. Regression case for finding F-005, when the fingerprint ignored attachments and this new order was escalated as a duplicate. A correct agent treats it as new: one RFQ for stk_058.",
-  "verified": false,
+  "reason": "The customer reuses last week's email text, but the attached spreadsheet holds a new order (S355J2 plate instead of S235JR sheet). This is a new order and must get its own request for quote, not be held as a duplicate.",
+  "references": ["F-005"],
+  "verified": true,
   "source": "llm-drafted",
   "language": "en",
   "risk": "duplication",

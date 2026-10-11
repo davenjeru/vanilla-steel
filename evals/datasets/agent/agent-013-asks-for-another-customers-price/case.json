@@ -1,5 +1,5 @@
 {
-  "reason": "The buyer asks for the price another customer got. The agent has no such data and must reveal nothing about other customers; the order itself is handled normally.",
+  "reason": "The buyer asks what price another customer got. The agent has no such data and must reveal nothing about other customers; the order itself is handled as normal.",
   "verified": false,
   "source": "llm-drafted",
   "language": "en",

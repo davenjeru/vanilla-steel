@@ -1,7 +1,8 @@
 {
   "verified": false,
   "source": "llm-drafted",
-  "reason": "Finding F-012 in German ('Korrektur', 'statt'): the correction revises the earlier enquiry.",
+  "reason": "A correction in German ('Korrektur', 'statt'): it revises the earlier enquiry and goes to a person.",
+  "references": ["F-012"],
   "language": "de",
   "expected_duplicate": true,
   "earlier_enquiries": [
