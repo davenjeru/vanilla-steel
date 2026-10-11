@@ -27,7 +27,9 @@ from steel.storage import enquiries
 from steel.tracing import add_span_metadata, record_model_call, record_prompt, set_span_input, set_span_output
 
 PROMPT_ID = "agent"
-PROMPT_VERSION = "v4"  # v2: draft_quote (Slice 5); v3: obvious injections at once; v4: corrections (F-012)
+PROMPT_VERSION = (
+    "v5"  # v2: draft_quote (Slice 5); v3: injections at once; v4: corrections (F-012); v5: no guessed values (F-013)
+)
 PROMPT_PATH = Path(__file__).parent / "prompts" / f"{PROMPT_ID}_{PROMPT_VERSION}.md"
 MAX_TURNS = 8
 
