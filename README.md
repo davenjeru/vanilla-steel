@@ -76,8 +76,9 @@ once pushed, the Prompt Studio commit), and the run's hyperparameters name the s
 
 `.github/workflows/ci.yml` runs `make check` on each push: lint, the unit and API tests and the
 matcher's golden cases, with no keys and no model calls. The evals call live models, so they run
-on purpose: `.github/workflows/live-evals.yml` runs the verified cases on every pull request against
-`main` and by hand (one eval or all), and `.github/workflows/pre-release.yml`, by hand only, runs
+on purpose: `.github/workflows/live-evals.yml` runs the verified cases on a pull request against
+`main` once it carries the label `ready-for-live-verified`, and by hand (one eval or all);
+`.github/workflows/pre-release.yml`, by hand only, runs
 every case of every eval, unverified ones included, as the last look before a release. Both upload
 to Confident AI (D43). There is no schedule.
 

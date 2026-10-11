@@ -47,8 +47,8 @@ Five datasets, one folder per case, each dataset with a versioned manifest and a
 | quote_letter | 8 | 4 | Letters in three languages, DDP, second choice, coated coil, a large coil to a supplier city |
 
 `verified: true` means a person reviewed the labels; `back-translated` means a translation was
-checked that way. The pull-request workflow runs verified cases only, so the spend goes to labels a
-person stands behind; the pre-release workflow runs every case, and a failure on an unverified one
+checked that way. The pull-request workflow (on the label `ready-for-live-verified`) runs verified
+cases only, so the spend goes to labels a person stands behind; the pre-release workflow runs every case, and a failure on an unverified one
 is a question for the reviewer before it is a verdict on the product. A review on Confident AI (finalizing the golden) flows back to git with
 `make pull-verified`; a label edit is a commit, through the loader's validation.
 
