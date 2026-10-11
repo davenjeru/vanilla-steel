@@ -10,6 +10,10 @@
       "v4": {
         "commit_hash": "868d551",
         "text_sha256": "bc60f0b82fb9f1ec2a4e33fff8d8cd57b2c52f8a4cf1180314c6b14120061820"
+      },
+      "v5": {
+        "commit_hash": "3fc2978",
+        "text_sha256": "6fb2a5fb3d5a54efb004ed0cf578895b93e84fe9d72f9a42663754831aeb565b"
       }
     },
     "quote_letter": {
