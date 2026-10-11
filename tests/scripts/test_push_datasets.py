@@ -2,11 +2,12 @@
 
 from pathlib import Path
 
+import pytest
 from deepeval.dataset import Golden
 
 from evals.harness.datasets import dataset_alias
 from evals.harness.golden_cases import load_dataset, load_manifest
-from scripts.push_datasets import sync_dataset
+from scripts.push_datasets import chosen_datasets, sync_dataset
 from tests.factories.golden_cases import valid_case_labels, write_case
 
 
@@ -32,6 +33,20 @@ class FakeStore:
 def two_cases(dataset_dir: Path) -> None:
     write_case(dataset_dir, name="de-001-reviewed", labels=valid_case_labels(verified=True, language="de"))
     write_case(dataset_dir, name="de-002-drafted", labels=valid_case_labels(verified=False, language="de"))
+
+
+def test_the_bare_command_chooses_every_dataset() -> None:
+    """Regression: a list default was checked against the choices as one name and rejected (owner's first run)."""
+    assert chosen_datasets("Push.", []) == ["extraction", "duplicates", "agent", "quote_letter"]
+
+
+def test_named_datasets_are_the_only_ones_chosen() -> None:
+    assert chosen_datasets("Push.", ["agent", "extraction"]) == ["agent", "extraction"]
+
+
+def test_an_unknown_dataset_is_rejected() -> None:
+    with pytest.raises(SystemExit):
+        chosen_datasets("Push.", ["matching"])
 
 
 def test_alias_carries_the_dataset_and_its_manifest_version(extraction_dataset_dir: Path) -> None:

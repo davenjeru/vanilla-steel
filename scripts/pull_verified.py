@@ -7,13 +7,12 @@ Only `verified: false` becomes `true`; a case already verified, or back-translat
 nothing on Confident AI ever makes a case less verified. Commit the changed case.json files.
 """
 
-import argparse
 import json
 from pathlib import Path
 
 from evals.harness.datasets import ConfidentDatasets, DatasetStore, dataset_alias
 from evals.harness.golden_cases import CASE_FILE, DATASETS_DIR, load_manifest
-from scripts.push_datasets import DATASETS
+from scripts.push_datasets import chosen_datasets
 
 
 def mark_verified(dataset_dir: Path, finalized_names: set[str]) -> list[str]:
@@ -36,10 +35,8 @@ def pull_verified(dataset: str, store: DatasetStore) -> list[str]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Mark cases verified from their review on Confident AI.")
-    parser.add_argument("datasets", nargs="*", choices=DATASETS, default=DATASETS)
     store = ConfidentDatasets()
-    for dataset in parser.parse_args().datasets:
+    for dataset in chosen_datasets("Mark cases verified from their review on Confident AI."):
         changed = pull_verified(dataset, store)
         print(f"{dataset}: {len(changed)} newly verified" + (f": {', '.join(changed)}" if changed else ""))
 

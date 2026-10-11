@@ -53,11 +53,20 @@ def _golden(case: GoldenCase) -> Golden:
     return Golden(**case.as_golden_fields())
 
 
+def chosen_datasets(description: str, arguments: list[str] | None = None) -> list[str]:
+    """The datasets named on the command line, or all of them when none is named.
+
+    The default is applied after parsing: argparse checks a list default against `choices` as if it
+    were one name, and rejects it.
+    """
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument("datasets", nargs="*", choices=DATASETS, metavar="dataset")
+    return parser.parse_args(arguments).datasets or list(DATASETS)
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Push golden datasets to Confident AI.")
-    parser.add_argument("datasets", nargs="*", choices=DATASETS, default=DATASETS)
     store = ConfidentDatasets()
-    for dataset in parser.parse_args().datasets:
+    for dataset in chosen_datasets("Push golden datasets to Confident AI."):
         dataset_dir = DATASETS_DIR / dataset
         alias = dataset_alias(dataset, load_manifest(dataset_dir))
         print(sync_dataset(alias, load_dataset(dataset_dir), store).describe())
