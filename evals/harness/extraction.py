@@ -13,7 +13,7 @@ from deepeval.tracing import observe, update_current_trace
 from evals.harness.golden_cases import GoldenCase
 from evals.harness.prompts import EXTRACTION_PROMPT, PromptLinks
 from evals.harness.trace_tags import trace_tags
-from evals.metrics.extraction.field_match import SCORED_FIELDS, FieldMatch
+from evals.metrics.extraction.spec_match import ExtractionMatchesTheLabels
 from steel.extraction.extractor import PROMPT_VERSION, EnquiryDocument, extract_spec
 from steel.llm.client import LLMClient
 from steel.settings import Settings
@@ -25,7 +25,7 @@ SETTINGS = Settings()
 
 
 def extraction_metrics() -> list[BaseMetric]:
-    return [FieldMatch(field) for field in SCORED_FIELDS]
+    return [ExtractionMatchesTheLabels()]
 
 
 def run_hyperparameters(prompts: PromptLinks) -> dict[str, Any]:

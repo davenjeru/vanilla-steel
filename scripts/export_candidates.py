@@ -19,7 +19,7 @@ import sqlite3
 from pathlib import Path
 
 from evals.harness.golden_cases import CASE_FILE, EMAIL_FILE, REPO_ROOT, CaseLabels
-from evals.metrics.extraction.field_match import SCORED_FIELDS
+from evals.metrics.extraction.spec_match import SCORED_FIELDS
 from steel.domain.enquiry import Enquiry
 from steel.domain.models import EnquiryStatus, MaterialSpec
 from steel.extraction.attachments import Attachment
