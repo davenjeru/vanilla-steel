@@ -1,4 +1,4 @@
-.PHONY: install check lint format test seed eval-extraction eval-duplicates eval-agent eval-quote-letter push-prompts push-datasets pull-verified run-agent export-candidates
+.PHONY: install check lint format test seed eval-extraction eval-duplicates eval-agent eval-quote-letter push-prompts push-datasets pull-verified serve demo run-agent export-candidates
 
 install:
 	uv sync
@@ -57,6 +57,15 @@ push-datasets:
 ## Mark cases verified in git when their golden was finalized on Confident AI. Commit the changed case.json files.
 pull-verified:
 	uv run --env-file .env python -m scripts.pull_verified
+
+## Hands-on demo. `make seed` first, then `make serve` in one terminal and `make demo` in another (PAUSE=1 to
+## step through by hand). The demo sends golden emails as the three tenants: happy path, duplicates, injection,
+## missing and ambiguous fields, tenant separation, idempotency, supplier anonymity.
+serve:
+	uv run --env-file .env python -m scripts.serve
+
+demo:
+	uv run python -m scripts.demo $(if $(PAUSE),--pause,)
 
 ## Run one golden case through the agent with Claude and print its trace: make run-agent CASE=agent-001-s355-plate-rfq
 ## Not an eval run, so its trace is not posted even with a Confident AI key in .env.
