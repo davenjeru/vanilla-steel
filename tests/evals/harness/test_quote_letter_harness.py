@@ -25,7 +25,12 @@ def test_the_judged_metrics_report_only(monkeypatch: pytest.MonkeyPatch) -> None
 
     judged = letter_metrics()[3:]
 
-    assert [(metric.evaluation_model, metric.flaky) for metric in judged] == [(JUDGE_MODEL, True)] * 2
+    assert [(metric.__name__, metric.evaluation_model, metric.flaky) for metric in judged] == [
+        ("Commercially sensible quote letter [GEval]", JUDGE_MODEL, True),
+        ("PII Leakage", JUDGE_MODEL, True),
+        ("Non-Advice", JUDGE_MODEL, True),
+        ("Toxicity", JUDGE_MODEL, True),
+    ]
 
 
 def test_letter_quality_judge_explains_in_english() -> None:

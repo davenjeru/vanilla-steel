@@ -15,18 +15,55 @@ golden to its case and checks it says what git says; a difference stops the run,
 the source and the copy must agree with it. Without a key the run uses git's goldens, unlinked.
 """
 
+import json
 import os
+from pathlib import Path
 from typing import Protocol
 
 from deepeval.confident.types import ConfidentApiError
 from deepeval.dataset import EvaluationDataset, Golden
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
-from evals.harness.golden_cases import DATASETS_DIR, DatasetManifest, GoldenCase, load_manifest
+from evals.harness.golden_cases import DATASETS_DIR, REPO_ROOT, DatasetManifest, GoldenCase, load_manifest
+
+REGISTRY_PATH = REPO_ROOT / "evals" / "datasets.json"
 
 
 def dataset_alias(dataset: str, manifest: DatasetManifest) -> str:
     return f"{dataset}-v{manifest.version}"
+
+
+class DatasetRecord(BaseModel):
+    """One pushed dataset version: its alias on Confident AI and how many cases it held after the push."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    alias: str
+    cases: int
+
+
+class DatasetRegistry(BaseModel):
+    """Which manifest versions were pushed, kept in git beside the datasets (D47, the twin of evals/prompts.json).
+
+    A bumped manifest or a new case that was never pushed only showed as an unlinked run; a test in
+    `make check` reads this file instead, so the gap fails the build."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    datasets: dict[str, dict[str, DatasetRecord]] = {}  # dataset -> manifest version -> record
+
+    def find(self, dataset: str, version: str) -> DatasetRecord | None:
+        return self.datasets.get(dataset, {}).get(version)
+
+    def record(self, dataset: str, version: str, pushed: DatasetRecord) -> None:
+        self.datasets.setdefault(dataset, {})[version] = pushed
+
+    @classmethod
+    def load(cls, path: Path = REGISTRY_PATH) -> "DatasetRegistry":
+        return cls.model_validate_json(path.read_text(encoding="utf-8"))
+
+    def save(self, path: Path = REGISTRY_PATH) -> None:
+        path.write_text(json.dumps(self.model_dump(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 class DatasetStore(Protocol):
