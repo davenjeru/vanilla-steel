@@ -1,14 +1,16 @@
 # Live evals on the verified cases only. Costs money (Claude for the system, OpenAI for the judge),
-# so it runs on two occasions: a pull request against main (all four evals, so the change is seen to pass
-# before it merges) and by hand, Actions > Live evals > Run workflow, with a choice of eval.
-# Results go to Confident AI, linked to the dataset alias of each manifest version (D44); a failed deterministic
-# check fails the run, judged metrics only report (D35). Secrets reach a pull request only from this
-# repository's own branches, never from a fork.
+# so it runs on two occasions: a pull request against main that carries the label "ready-for-live-verified"
+# (all four evals, so the change is seen to pass before it merges; adding the label starts the run, every
+# later push runs again while the label stays) and by hand, Actions > Live evals > Run workflow, with a
+# choice of eval. Results go to Confident AI, linked to the dataset alias of each manifest version (D44);
+# a failed deterministic check fails the run, judged metrics only report (D35). Secrets reach a pull request
+# only from this repository's own branches, never from a fork.
 name: Live evals
 
 on:
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
     inputs:
       eval:
@@ -36,6 +38,8 @@ env:
 
 jobs:
   live:
+    # A pull request pays for a live run only once someone says it is ready; by hand it always runs.
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ready-for-live-verified') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30  # caps the cost of a run that hangs or loops
     steps:
