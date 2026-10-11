@@ -1,5 +1,5 @@
 {
-  "reason": "The email asks about an invoice and is not an order. The agent must not search stock or request a quote; a person should handle it.",
+  "reason": "The email asks about an invoice and is not an order. The agent must not search stock or request a quote; a person should handle it. The hand-over reason is other, not missing information: nothing about a steel order is missing, because there is no order.",
   "verified": false,
   "source": "llm-drafted",
   "language": "en",
@@ -7,8 +7,7 @@
   "expected_agent": {
     "decision": "escalate",
     "escalation_reasons": [
-      "other",
-      "missing_information"
+      "other"
     ],
     "tool_path": [
       "extract_specs",

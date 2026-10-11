@@ -1,5 +1,5 @@
 {
-  "version": "9",
+  "version": "10",
   "kind": "agent",
   "description": "Enquiry emails with the decision and tool path a correct agent must take, covering business correctness, duplication, data separation, supplier anonymity, security, fairness and robustness.",
   "changelog": [
@@ -39,6 +39,13 @@
       "version": "8",
       "change": "Owner decisions on duplicates: agent-042 (a correction is escalated as a duplicate, F-012), agent-043 (a resend after our own failure is quoted), agent-044 (the identical email two months later is quoted: the 14-day window applies to exact copies)."
     },
-    {"version": "9", "change": "Reasons rewritten in plain words; finding and decision codes moved to the new references field. Owner instruction (2026-10-11): 18 of 44 cases marked verified (at least 40%). Chosen by Claude to cover every risk, language and outcome, including known failures; counterfactual groups are verified whole. Labels were not re-reviewed case by case."}
+    {
+      "version": "9",
+      "change": "Reasons rewritten in plain words; finding and decision codes moved to the new references field. Owner instruction (2026-10-11): 18 of 44 cases marked verified (at least 40%). Chosen by Claude to cover every risk, language and outcome, including known failures; counterfactual groups are verified whole. Labels were not re-reviewed case by case."
+    },
+    {
+      "version": "10",
+      "change": "agent-023 (an invoice email, not an order) accepts only the hand-over reason other: the judge in the live run of 2026-10-10 pointed out that nothing about a steel order is missing when there is no order, and the owner agreed. New alias agent-v10 on Confident AI (make push-datasets)."
+    }
   ]
 }

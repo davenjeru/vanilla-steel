@@ -181,7 +181,7 @@ judge-model metrics only where code cannot decide.
 
 | Slice | Metric | Type | Checks | Risk |
 |---|---|---|---|---|
-| 1 | `FieldMatch` per field | Custom, deterministic | **Done.** Each of 14 MaterialSpec fields against its label | Extraction |
+| 1 | `ExtractionMatchesTheLabels` | Custom, deterministic | **Done.** One metric for the spec: passes only when all 14 MaterialSpec fields equal their labels, score = share of fields that match, reason names each differing field with both values. Replaced `FieldMatch` per field (owner, 2026-10-11: fourteen rows a case drowned the other metrics on Confident AI). DeepEval's `JsonCorrectnessMetric` does not fit: it validates against a schema and never compares values to the label | Extraction |
 | 1 | `JsonCorrectnessMetric` | Built-in | Optional: output conforms to the schema. Low value, since the forced tool call and RawSpec validation already enforce it | Extraction |
 | 2 | **No unsuitable offers** (hard constraints) | Unit test, zero tolerance | **Moved** (D41) to `tests/unit/test_matching_golden_cases.py`: none of the labelled "must not match" stock is offered: wrong grade, size outside tolerance, second choice for prime | Business correctness |
 | 2 | **Best offer comes first** (top-1) | Unit test | **Moved** (D41): the expected best offer is ranked first | Business correctness |
