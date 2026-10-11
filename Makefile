@@ -1,4 +1,4 @@
-.PHONY: install check lint format test seed eval-extraction eval-extraction-live eval-matching eval-duplicates eval-duplicates-live eval-agent eval-agent-live eval-agent-judge-recorded eval-quote-letter eval-quote-letter-live eval-quote-letter-judge-recorded record-fixtures run-agent run-agent-live export-candidates
+.PHONY: install check lint format test seed eval-extraction eval-extraction-live eval-matching eval-duplicates eval-duplicates-live eval-agent eval-agent-live eval-agent-judge-recorded eval-quote-letter eval-quote-letter-live eval-quote-letter-judge-recorded record-fixtures prune-fixtures run-agent run-agent-live export-candidates
 
 install:
 	uv sync
@@ -69,6 +69,10 @@ eval-quote-letter-judge-recorded:
 ## Calls Claude for every extraction golden case and saves the answers to fixtures/llm/. Commit them.
 record-fixtures:
 	uv run --env-file .env python -m scripts.record_fixtures
+
+## Delete recordings no eval reads any more (old prompt versions). Run after a live re-record; commit the deletions.
+prune-fixtures:
+	uv run python -m scripts.prune_fixtures
 
 ## Run one extraction golden case through the agent and print its trace: make run-agent CASE=en-001-st37-sheet-poznan
 run-agent:
