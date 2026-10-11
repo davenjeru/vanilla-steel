@@ -1,3 +1,22 @@
 {
-  "prompts": {}
+  "prompts": {
+    "agent": {
+      "v4": {
+        "commit_hash": "6fb714b",
+        "text_sha256": "022d53b4bca48cf32efa6a618057fffe79fb531ace155d2e4be4d074c4f79e76"
+      }
+    },
+    "extract_spec": {
+      "v4": {
+        "commit_hash": "868d551",
+        "text_sha256": "bc60f0b82fb9f1ec2a4e33fff8d8cd57b2c52f8a4cf1180314c6b14120061820"
+      }
+    },
+    "quote_letter": {
+      "v2": {
+        "commit_hash": "ad06f8e",
+        "text_sha256": "2b9683be77e81e02278646e948af5b239c6ff544b74c98a8d8030f8f89574e74"
+      }
+    }
+  }
 }
