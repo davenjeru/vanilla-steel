@@ -3,7 +3,7 @@ from typing import Any
 from deepeval.metrics import BaseMetric
 from deepeval.test_case import LLMTestCase
 
-from evals.metrics.quote_letter.letter_case import read_letter_case
+from evals.metrics.quote_letter.letter_case import passes_without_a_letter, read_letter_case
 from steel.domain.supplier_leaks import find_supplier_leaks
 from steel.storage.seed import DEFAULT_SEED, SUPPLIERS, build_stock
 
@@ -27,6 +27,8 @@ class NamesNoSupplier(BaseMetric):
 
     def measure(self, test_case: LLMTestCase, *args: Any, **kwargs: Any) -> float:
         case = read_letter_case(test_case)
+        if case is None:
+            return passes_without_a_letter(self)
         delivery_city = case.writer_input.quote.delivery_city
         leaks = find_supplier_leaks(case.letter, SUPPLIERS, STOCK_IDS, delivery_city=delivery_city)
         self.success = not leaks

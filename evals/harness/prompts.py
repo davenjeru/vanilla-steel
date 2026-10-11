@@ -1,22 +1,28 @@
-"""The product's prompts in Prompt Studio, linked from git and never pulled at run time (D11, D42).
+"""The product's prompts in Prompt Studio, linked from git (D11, D42).
 
 Git holds each prompt's text (src/steel/<component>/prompts/<id>_<version>.md). Confident AI holds a
 copy, pushed once per version by scripts/push_prompts.py, and evals/prompts.json records the commit
-hash each version became. At run time the product names the prompt on every LLM span (alias and
-version, steel.tracing.record_prompt); the eval adds the commit hash from the registry, and the
-run's hyperparameters name the same commits. Nothing here calls Confident AI.
+hash each version became.
 
-Two DeepEval 4.2.8 limits shape this. A span's own prompt fields (alias, version, commit hash) are
-lost inside a test run, which reloads the run from disk between tests and reads those fields back
-under another name; span metadata survives, so the link is written there too. And a `Prompt`
-object given as a hyperparameter is pushed again on every keyed run unless DeepEval's private
-prompt id is set, so hyperparameters carry the alias and commit hash as plain text instead.
+A run links to those prompts the way it links to its dataset (D44): it pulls each registered commit,
+checks the text equals git's, and stops the run if not. The pulled `Prompt` objects go into the run's
+hyperparameters and onto every LLM span the product stamped with that alias (steel.tracing.record_prompt),
+which is how DeepEval registers prompts on a run. Without a key nothing is pulled: the hyperparameters
+name the version and commit as text, and spans keep alias, version and commit in their metadata.
+
+DeepEval 4.2.8 limits, for the record: a span's own prompt fields are lost inside a test run (serialised
+under one name, read back under another), so the metadata carries them; and a `Prompt` that was never
+pulled or pushed in the process is pushed again on every keyed run, which is why only pulled ones are
+passed on.
 """
 
 import hashlib
 import json
+import os
+from collections.abc import Callable
 from pathlib import Path
 
+from deepeval.prompt import Prompt
 from deepeval.tracing import current_trace_context
 from deepeval.tracing.types import BaseSpan, LlmSpan
 from pydantic import BaseModel, ConfigDict
@@ -80,37 +86,82 @@ LETTER_PROMPT = ProductPrompt(
 )
 PRODUCT_PROMPTS = [EXTRACTION_PROMPT, AGENT_PROMPT, LETTER_PROMPT]
 
+Puller = Callable[[str, str], Prompt]  # (alias, commit hash) -> the prompt as Prompt Studio holds it
 
-def link_prompt_commits(registry: PromptRegistry) -> int:
-    """Add the registered commit hash to every LLM span in the live trace that names a prompt.
 
-    Returns how many spans were linked. A version not in the registry stays alias-only: the span
-    still says which prompt ran, Confident AI just cannot open it.
-    """
-    trace = current_trace_context.get()
-    if trace is None:
-        return 0
-    linked = 0
-    for span in _llm_spans(trace.root_spans or []):
-        pushed = _registered(registry, span)
-        if pushed is not None:
-            span.prompt_commit_hash = pushed.commit_hash
+class PromptDiffersFromGit(ValueError):
+    pass
+
+
+def pull_from_studio(alias: str, commit_hash: str) -> Prompt:
+    """One commit of a prompt from Prompt Studio, once; no background refresh."""
+    prompt = Prompt(alias=alias)
+    prompt.pull(hash=commit_hash, refresh=0)
+    return prompt
+
+
+class PromptLinks:
+    """What a run knows about its prompts: the registry, and the Prompt Studio copies it could pull."""
+
+    def __init__(self, registry: PromptRegistry, studio: dict[str, Prompt]) -> None:
+        self.registry = registry
+        self.studio = studio  # alias -> the pulled prompt, for the versions the product runs
+
+    @classmethod
+    def load(cls, puller: Puller | None = None, registry: PromptRegistry | None = None) -> "PromptLinks":
+        """Pull every registered prompt the product runs when a key is present; otherwise link by text only."""
+        registry = registry or PromptRegistry.load()
+        if puller is None and not os.environ.get("CONFIDENT_API_KEY"):
+            return cls(registry, {})
+        studio = {}
+        for prompt in PRODUCT_PROMPTS:
+            pushed = registry.find(prompt.alias, prompt.version)
+            if pushed is not None:
+                studio[prompt.alias] = _same_as_git(
+                    prompt, (puller or pull_from_studio)(prompt.alias, pushed.commit_hash)
+                )
+        return cls(registry, studio)
+
+    def hyperparameters(self, prompts: list[ProductPrompt]) -> dict[str, Prompt | str]:
+        """One entry per prompt a run used: the Prompt Studio prompt when pulled, else the version and commit
+        as text, or a note that the version was never pushed."""
+        entries: dict[str, Prompt | str] = {}
+        for prompt in prompts:
+            pushed = self.registry.find(prompt.alias, prompt.version)
+            if prompt.alias in self.studio:
+                entries[f"{prompt.alias}_prompt"] = self.studio[prompt.alias]
+            elif pushed is not None:
+                entries[f"{prompt.alias}_prompt"] = f"{prompt.version} = {prompt.alias}@{pushed.commit_hash}"
+            else:
+                entries[f"{prompt.alias}_prompt"] = f"{prompt.version} (not in Prompt Studio)"
+        return entries
+
+    def link_spans(self) -> int:
+        """On every LLM span of the live trace that names a registered prompt: the commit hash in the
+        metadata, and the pulled Prompt on the span when there is one. Returns how many spans were linked."""
+        trace = current_trace_context.get()
+        if trace is None:
+            return 0
+        linked = 0
+        for span in _llm_spans(trace.root_spans or []):
+            pushed = _registered(self.registry, span)
+            if pushed is None:
+                continue
             span.metadata = {**(span.metadata or {}), "prompt_commit_hash": pushed.commit_hash}
+            span.prompt_commit_hash = pushed.commit_hash
+            if span.prompt_alias in self.studio:
+                span.prompt = self.studio[span.prompt_alias]
             linked += 1
-    return linked
+        return linked
 
 
-def prompt_hyperparameters(registry: PromptRegistry, prompts: list[ProductPrompt]) -> dict[str, str]:
-    """One entry per prompt a run used: alias and Prompt Studio commit when the version was pushed,
-    else the version from git and a note that it was not."""
-    entries: dict[str, str] = {}
-    for prompt in prompts:
-        pushed = registry.find(prompt.alias, prompt.version)
-        if pushed is None:
-            entries[f"{prompt.alias}_prompt"] = f"{prompt.version} (not in Prompt Studio)"
-        else:
-            entries[f"{prompt.alias}_prompt"] = f"{prompt.version} = {prompt.alias}@{pushed.commit_hash}"
-    return entries
+def _same_as_git(prompt: ProductPrompt, pulled: Prompt) -> Prompt:
+    if pulled.text_template != prompt.text():
+        raise PromptDiffersFromGit(
+            f"{prompt.alias} {prompt.version} in Prompt Studio differs from git; git is the source of truth: "
+            "bump PROMPT_VERSION and push, or bring the edit back as a commit"
+        )
+    return pulled
 
 
 def _registered(registry: PromptRegistry, span: LlmSpan) -> PromptRecord | None:

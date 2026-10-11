@@ -108,7 +108,11 @@ def rfq_calls(
         tool_call("check_duplicate", result={"duplicate_of": None, "is_correction": False}),
         tool_call("search_stock", searched_spec or extracted, result={"offers": [{"stock_item_id": stock_item_id}]}),
         tool_call("create_rfq", {"stock_item_id": stock_item_id}, result={"rfq_id": "rfq_0001"}),
-        tool_call("draft_quote", {"rfq_id": "rfq_0001"}, result={"quote_id": "quo_0001", "cover_letter": letter}),
+        tool_call(
+            "draft_quote",
+            {"rfq_id": "rfq_0001"},
+            result={"quote_id": "quo_0001", "cover_letter": letter, "language": "en", "quote": PRICED_S355_PLATE},
+        ),
     ]
 
 

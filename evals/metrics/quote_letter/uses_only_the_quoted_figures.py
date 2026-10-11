@@ -6,7 +6,7 @@ from typing import Any
 from deepeval.metrics import BaseMetric
 from deepeval.test_case import LLMTestCase
 
-from evals.metrics.quote_letter.letter_case import read_letter_case
+from evals.metrics.quote_letter.letter_case import passes_without_a_letter, read_letter_case
 from steel.domain.quote import QUOTE_VALID_WORKING_DAYS, PricedQuote
 
 # Dates, checked before numbers so that 15.10.2026 is not read as the number 15.10.
@@ -39,6 +39,8 @@ class UsesOnlyTheQuotedFigures(BaseMetric):
 
     def measure(self, test_case: LLMTestCase, *args: Any, **kwargs: Any) -> float:
         case = read_letter_case(test_case)
+        if case is None:
+            return passes_without_a_letter(self)
         quote = case.writer_input.quote
         wrong_dates, text_without_dates = _check_dates(case.letter, quote.valid_until)
         numbers = NUMBER.findall(text_without_dates)

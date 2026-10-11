@@ -1,7 +1,9 @@
-"""Prompts linked from git to Prompt Studio: the registry, the span link, and the run's hyperparameters."""
+"""Prompts linked from git to Prompt Studio: the registry, the pulled copies, the span link, the run's labels."""
 
 from pathlib import Path
 
+import pytest
+from deepeval.prompt import Prompt
 from deepeval.tracing import current_trace_context, observe
 from deepeval.tracing.types import LlmSpan
 
@@ -9,10 +11,10 @@ from evals.harness.prompts import (
     AGENT_PROMPT,
     EXTRACTION_PROMPT,
     PRODUCT_PROMPTS,
+    PromptDiffersFromGit,
+    PromptLinks,
     PromptRecord,
     PromptRegistry,
-    link_prompt_commits,
-    prompt_hyperparameters,
 )
 from steel.tracing import record_prompt
 
@@ -23,6 +25,13 @@ def registry_with_agent_v4() -> PromptRegistry:
     registry = PromptRegistry()
     registry.record("agent", "v4", AGENT_V4)
     return registry
+
+
+def studio_copy(alias: str, text: str, commit_hash: str) -> Prompt:
+    """A prompt as a pull leaves it: the text and the commit hash set, nothing fetched."""
+    prompt = Prompt(alias=alias, text_template=text)
+    prompt.hash = commit_hash
+    return prompt
 
 
 def test_registry_round_trips_through_its_file(tmp_path: Path) -> None:
@@ -43,11 +52,12 @@ def test_every_product_prompt_names_a_file_that_exists() -> None:
 def test_a_registered_version_links_the_span_to_its_commit() -> None:
     """On the span's prompt field and in its metadata: a test run keeps only the metadata (DeepEval 4.2.8)."""
     seen: dict[str, object] = {}
+    links = PromptLinks(registry_with_agent_v4(), studio={})
 
     @observe(name="enquiry")
     def run() -> int:
         turn(AGENT_PROMPT.alias, AGENT_PROMPT.version)
-        linked = link_prompt_commits(registry_with_agent_v4())
+        linked = links.link_spans()
         [span] = _llm_spans()
         seen.update({"alias": span.prompt_alias, "hash": span.prompt_commit_hash, "metadata": span.metadata})
         return linked
@@ -62,13 +72,31 @@ def test_a_registered_version_links_the_span_to_its_commit() -> None:
     )
 
 
+def test_a_pulled_prompt_goes_onto_the_span_so_deepeval_registers_it_on_the_run() -> None:
+    studio = studio_copy("agent", AGENT_PROMPT.text(), "abc123")
+    links = PromptLinks(registry_with_agent_v4(), studio={"agent": studio})
+    seen: dict[str, object] = {}
+
+    @observe(name="enquiry")
+    def run() -> None:
+        turn(AGENT_PROMPT.alias, AGENT_PROMPT.version)
+        links.link_spans()
+        [span] = _llm_spans()
+        seen["prompt"] = span.prompt
+
+    run()
+
+    assert seen["prompt"] is studio
+
+
 def test_an_unpushed_version_keeps_its_alias_but_no_commit() -> None:
-    seen: dict[str, str | None] = {}
+    seen: dict[str, object] = {}
+    links = PromptLinks(registry_with_agent_v4(), studio={})
 
     @observe(name="enquiry")
     def run() -> int:
         turn("agent", "v99")
-        linked = link_prompt_commits(registry_with_agent_v4())
+        linked = links.link_spans()
         [span] = _llm_spans()
         seen.update({"alias": span.prompt_alias, "hash": span.prompt_commit_hash})
         return linked
@@ -76,14 +104,47 @@ def test_an_unpushed_version_keeps_its_alias_but_no_commit() -> None:
     assert (run(), seen) == (0, {"alias": "agent", "hash": None})
 
 
-def test_hyperparameters_name_the_studio_commit_or_say_the_version_was_not_pushed() -> None:
-    """Plain text, never a Prompt object: DeepEval would push that again on every keyed run."""
-    entries = prompt_hyperparameters(registry_with_agent_v4(), [AGENT_PROMPT, EXTRACTION_PROMPT])
+def test_hyperparameters_carry_the_pulled_prompt_else_its_commit_else_a_note() -> None:
+    studio = studio_copy("agent", AGENT_PROMPT.text(), "abc123")
+    registry = registry_with_agent_v4()
+    registry.record("extract_spec", EXTRACTION_PROMPT.version, PromptRecord(commit_hash="def456", text_sha256="x"))
+    letter_prompt = PRODUCT_PROMPTS[2]
+
+    entries = PromptLinks(registry, studio={"agent": studio}).hyperparameters(
+        [AGENT_PROMPT, EXTRACTION_PROMPT, letter_prompt]
+    )
 
     assert entries == {
-        "agent_prompt": "v4 = agent@abc123",
-        "extract_spec_prompt": f"{EXTRACTION_PROMPT.version} (not in Prompt Studio)",
+        "agent_prompt": studio,
+        "extract_spec_prompt": f"{EXTRACTION_PROMPT.version} = extract_spec@def456",
+        "quote_letter_prompt": f"{letter_prompt.version} (not in Prompt Studio)",
     }
+
+
+def test_loading_pulls_each_registered_prompt_by_its_commit() -> None:
+    pulled: list[tuple[str, str]] = []
+
+    def puller(alias: str, commit_hash: str) -> Prompt:
+        pulled.append((alias, commit_hash))
+        return studio_copy(alias, AGENT_PROMPT.text(), commit_hash)
+
+    links = PromptLinks.load(puller, registry=registry_with_agent_v4())
+
+    assert (pulled, sorted(links.studio)) == ([("agent", "abc123")], ["agent"])
+
+
+def test_a_studio_copy_that_differs_from_git_stops_the_run() -> None:
+    """An edit in Prompt Studio never silently changes what a run reports; git is the source of truth."""
+    edited = lambda alias, commit_hash: studio_copy(alias, "edited in the studio", commit_hash)  # noqa: E731
+
+    with pytest.raises(PromptDiffersFromGit, match="agent v4 in Prompt Studio differs from git"):
+        PromptLinks.load(edited, registry=registry_with_agent_v4())
+
+
+def test_without_a_key_nothing_is_pulled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CONFIDENT_API_KEY", raising=False)
+
+    assert PromptLinks.load(registry=registry_with_agent_v4()).studio == {}
 
 
 @observe(type="llm", name="agent turn")

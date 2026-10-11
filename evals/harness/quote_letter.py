@@ -3,9 +3,9 @@
 The letter writer (steel.quotes.cover_letter) is evaluated on its own: each golden case is exactly
 what the writer sees (the customer's language and the priced quote), so letters for products and
 terms the agent cases never reach (coils, coatings, DDP, an unknown language) are still checked.
-The same checks run on every letter the agent writes, attached to its "write_cover_letter" span
-(evals/harness/spans.py). The deterministic checks decide; the judged ones (gpt-6-sol,
-evals/harness/judge.py) report (D35).
+The deterministic checks also run in the agent eval on every letter the agent writes, read from
+draft_quote's result at trace level (D45). Here the deterministic checks decide; the judged ones
+(gpt-6-sol, evals/harness/judge.py) report (D35).
 """
 
 from typing import Any
@@ -16,7 +16,7 @@ from deepeval.tracing import observe, update_current_trace
 
 from evals.harness.golden_cases import GoldenCase, QuoteLetterInput
 from evals.harness.judge import JUDGE_MODEL
-from evals.harness.prompts import LETTER_PROMPT, PromptRegistry, prompt_hyperparameters
+from evals.harness.prompts import LETTER_PROMPT, PromptLinks
 from evals.harness.trace_tags import trace_tags
 from evals.metrics.quote_letter.judged import judged_letter_metrics
 from evals.metrics.quote_letter.names_no_supplier import NamesNoSupplier
@@ -38,12 +38,12 @@ def letter_metrics() -> list[BaseMetric]:
     return deterministic + judged_letter_metrics()
 
 
-def run_hyperparameters() -> dict[str, Any]:
+def run_hyperparameters(prompts: PromptLinks) -> dict[str, Any]:
     return {
         "model": SETTINGS.quote_model,
         "prompt_version": PROMPT_VERSION,
         "judge_model": JUDGE_MODEL,
-        **prompt_hyperparameters(PromptRegistry.load(), [LETTER_PROMPT]),
+        **prompts.hyperparameters([LETTER_PROMPT]),
     }
 
 

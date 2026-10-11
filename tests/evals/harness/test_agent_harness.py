@@ -61,10 +61,14 @@ def case_payload(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 def test_tools_called_are_the_agents_calls_in_order_with_their_results(rfq_run: SandboxResult) -> None:
     calls = tools_called(rfq_run.run)
 
-    assert [(call.name, call.output) for call in calls][-2:] == [
-        ("create_rfq", {"rfq_id": "rfq_0001"}),
-        ("draft_quote", {"quote_id": "quo_0001", "cover_letter": PLAIN_COVER_LETTER}),
-    ]
+    [rfq, quote] = calls[-2:]
+    assert (rfq.name, rfq.output, quote.name, quote.output["cover_letter"], sorted(quote.output)) == (
+        "create_rfq",
+        {"rfq_id": "rfq_0001"},
+        "draft_quote",
+        PLAIN_COVER_LETTER,
+        ["cover_letter", "language", "quote", "quote_id"],
+    )
 
 
 def test_tools_called_leaves_out_a_step_code_took() -> None:
@@ -173,6 +177,9 @@ def test_the_deterministic_metrics_decide(monkeypatch: pytest.MonkeyPatch) -> No
         "Searches with the extracted spec",
         "Reveals no supplier to the buyer",
         "Agent Loop Detection",
+        "Uses only the quoted figures",
+        "Names no supplier",
+        "Names only products we sell",
     ]
 
 

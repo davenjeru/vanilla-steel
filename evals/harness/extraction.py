@@ -11,7 +11,7 @@ from deepeval.metrics import BaseMetric
 from deepeval.tracing import observe, update_current_trace
 
 from evals.harness.golden_cases import GoldenCase
-from evals.harness.prompts import EXTRACTION_PROMPT, PromptRegistry, prompt_hyperparameters
+from evals.harness.prompts import EXTRACTION_PROMPT, PromptLinks
 from evals.harness.trace_tags import trace_tags
 from evals.metrics.extraction.field_match import SCORED_FIELDS, FieldMatch
 from steel.extraction.extractor import PROMPT_VERSION, EnquiryDocument, extract_spec
@@ -28,11 +28,11 @@ def extraction_metrics() -> list[BaseMetric]:
     return [FieldMatch(field) for field in SCORED_FIELDS]
 
 
-def run_hyperparameters() -> dict[str, Any]:
+def run_hyperparameters(prompts: PromptLinks) -> dict[str, Any]:
     return {
         "model": SETTINGS.extraction_model,
         "prompt_version": PROMPT_VERSION,
-        **prompt_hyperparameters(PromptRegistry.load(), [EXTRACTION_PROMPT]),
+        **prompts.hyperparameters([EXTRACTION_PROMPT]),
     }
 
 

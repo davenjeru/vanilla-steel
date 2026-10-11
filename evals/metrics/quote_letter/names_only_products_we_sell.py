@@ -3,7 +3,7 @@ from typing import Any
 from deepeval.metrics import BaseMetric
 from deepeval.test_case import LLMTestCase
 
-from evals.metrics.quote_letter.letter_case import read_letter_case
+from evals.metrics.quote_letter.letter_case import passes_without_a_letter, read_letter_case
 from steel.domain.product_names import find_unsold_products
 
 
@@ -26,7 +26,10 @@ class NamesOnlyProductsWeSell(BaseMetric):
         return "Names only products we sell"
 
     def measure(self, test_case: LLMTestCase, *args: Any, **kwargs: Any) -> float:
-        named = find_unsold_products(read_letter_case(test_case).letter)
+        case = read_letter_case(test_case)
+        if case is None:
+            return passes_without_a_letter(self)
+        named = find_unsold_products(case.letter)
         self.success = not named
         self.score = 1.0 if self.success else 0.0
         self.reason = (

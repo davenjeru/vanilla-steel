@@ -11,7 +11,7 @@ from deepeval import assert_test
 from evals.harness.datasets import dataset_link, goldens_for_run
 from evals.harness.duplicates import DATASET, check_and_trace, describe_rates, pair_result, run_hyperparameters
 from evals.harness.golden_cases import DATASETS_DIR, GoldenCase, load_dataset
-from evals.harness.prompts import PromptRegistry, link_prompt_commits
+from evals.harness.prompts import PromptLinks
 from evals.harness.run_labels import link_run_to_dataset, log_run_hyperparameters
 from evals.metrics.duplicates.detection_rates import PairResult, detection_rates
 from evals.metrics.duplicates.duplicate_decision_is_correct import DuplicateDecisionIsCorrect
@@ -20,12 +20,12 @@ from steel.llm.client import LLMClient
 
 CASES = load_dataset(DATASETS_DIR / DATASET)
 GOLDENS = goldens_for_run(DATASET, CASES)  # Confident AI's copies, checked against git, so the run links (D44)
-REGISTRY = PromptRegistry.load()
+PROMPTS = PromptLinks.load()  # Prompt Studio's copies, checked against git, so the run links (D42)
 
 
 @pytest.fixture(scope="module", autouse=True)
 def labelled_run() -> None:
-    log_run_hyperparameters(run_hyperparameters())
+    log_run_hyperparameters(run_hyperparameters(PROMPTS))
     link_run_to_dataset(dataset_link(GOLDENS))
 
 
@@ -47,7 +47,7 @@ def test_duplicate_check_decides_as_labelled(case: GoldenCase, llm: LLMClient, p
     golden = GOLDENS[case.name]
 
     result = check_and_trace(golden, case, llm)
-    link_prompt_commits(REGISTRY)
+    PROMPTS.link_spans()
     pair_results.append(pair_result(golden, result))
 
     assert_test(golden=golden, metrics=[DuplicateDecisionIsCorrect()])

@@ -6,9 +6,10 @@ one agent span with an LLM span per turn, a tool span per call and the model cal
 inside them. Each case is one trace, rooted in a span for the whole sandbox run, so the earlier
 enquiries' extraction calls sit next to the agent's run rather than in traces of their own. The
 metrics read the trace's public fields: the one-line outcome, the golden's expectations and the
-tools the agent called (evals/metrics/agent/agent_test_case.py). The cover letter is checked on
-its own LLM span (evals/harness/spans.py), so the agent eval covers what the letter eval covers for
-every quote.
+tools the agent called (evals/metrics/agent/agent_test_case.py), the cover letter included, which
+draft_quote returns with the quote it presents. So the agent eval covers what the letter eval covers
+for every quote, with every check at trace level: a metric on a span makes Confident AI present that
+span as the system (D45).
 """
 
 from typing import Any
@@ -20,7 +21,7 @@ from deepeval.tracing import observe, update_current_trace
 
 from evals.harness.golden_cases import GoldenCase
 from evals.harness.judge import JUDGE_MODEL
-from evals.harness.prompts import PRODUCT_PROMPTS, PromptRegistry, prompt_hyperparameters
+from evals.harness.prompts import PRODUCT_PROMPTS, PromptLinks
 from evals.metrics.agent.agent_test_case import decision
 from evals.metrics.agent.budget import ModelCall, enquiry_cost, input_tokens, model_seconds, output_tokens
 from evals.metrics.agent.cost import CostVerdict, judge_cost
@@ -35,6 +36,9 @@ from evals.metrics.agent.latency import LatencyVerdict, judge_latency
 from evals.metrics.agent.reaches_the_right_decision import ReachesTheRightDecision
 from evals.metrics.agent.reveals_no_supplier_to_the_buyer import RevealsNoSupplierToTheBuyer
 from evals.metrics.agent.searches_with_the_extracted_spec import SearchesWithTheExtractedSpec
+from evals.metrics.quote_letter.names_no_supplier import NamesNoSupplier
+from evals.metrics.quote_letter.names_only_products_we_sell import NamesOnlyProductsWeSell
+from evals.metrics.quote_letter.uses_only_the_quoted_figures import UsesOnlyTheQuotedFigures
 from steel.agent.runner import MAX_TURNS, PROMPT_VERSION, describe_outcome
 from steel.agent.tools import TOOLS
 from steel.agent.trace import AgentRun, TraceEvent
@@ -141,7 +145,7 @@ def enquiry_totals(calls: list[ModelCall]) -> dict[str, Any]:
     }
 
 
-def run_hyperparameters() -> dict[str, Any]:
+def run_hyperparameters(prompts: PromptLinks) -> dict[str, Any]:
     return {
         "model": SETTINGS.agent_model,
         "extraction_model": SETTINGS.extraction_model,
@@ -149,7 +153,7 @@ def run_hyperparameters() -> dict[str, Any]:
         "prompt_version": PROMPT_VERSION,
         "max_turns": MAX_TURNS,
         "judge_model": JUDGE_MODEL,
-        **prompt_hyperparameters(PromptRegistry.load(), PRODUCT_PROMPTS),
+        **prompts.hyperparameters(PRODUCT_PROMPTS),
     }
 
 
@@ -170,13 +174,17 @@ def shared_agent_metrics() -> list[BaseMetric]:
 
 
 def deterministic_agent_metrics() -> list[BaseMetric]:
-    """Per-case metrics that call no judge model."""
+    """Per-case metrics that call no judge model. The three letter checks read the letter from draft_quote's
+    result in tools_called, at trace level like the rest (D45); a run that wrote no letter passes them."""
     return [
         ReachesTheRightDecision(),
         ToolCorrectnessMetric(should_exact_match=True, threshold=1.0),
         SearchesWithTheExtractedSpec(),
         RevealsNoSupplierToTheBuyer(),
         AgentLoopDetectionMetric(threshold=1.0),
+        UsesOnlyTheQuotedFigures(),
+        NamesNoSupplier(),
+        NamesOnlyProductsWeSell(),
     ]
 
 
