@@ -11,6 +11,7 @@ from evals.harness.prompts import (
     AGENT_PROMPT,
     EXTRACTION_PROMPT,
     PRODUCT_PROMPTS,
+    ProductPrompt,
     PromptDiffersFromGit,
     PromptLinks,
     PromptRecord,
@@ -47,6 +48,23 @@ def test_every_product_prompt_names_a_file_that_exists() -> None:
         ("agent", True),
         ("quote_letter", True),
     ]
+
+
+@pytest.mark.parametrize("prompt", PRODUCT_PROMPTS, ids=[prompt.alias for prompt in PRODUCT_PROMPTS])
+def test_the_version_the_product_runs_is_in_prompt_studio_with_the_text_git_holds(prompt: ProductPrompt) -> None:
+    """A prompt bump is finished only when the version is pushed and evals/prompts.json carries its commit:
+    otherwise every run goes unlinked on Confident AI, quietly (the v5 demo, PR #3). An edit under the
+    same version fails here too, so a prompt never changes without a new version."""
+    registered = PromptRegistry.load().find(prompt.alias, prompt.version)
+
+    assert registered is not None, (
+        f"{prompt.alias} {prompt.version} is not in evals/prompts.json: "
+        "run `make push-prompts` and commit the registry with the prompt"
+    )
+    assert registered.text_sha256 == prompt.text_sha256(), (
+        f"{prompt.alias} {prompt.version} differs from the text pushed to Prompt Studio: "
+        "bump PROMPT_VERSION, then `make push-prompts`"
+    )
 
 
 def test_a_registered_version_links_the_span_to_its_commit() -> None:

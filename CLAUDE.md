@@ -11,3 +11,5 @@ Readability is the top priority. A reviewer should understand any file in one re
 - Tests read as specifications: `test_rejects_cross_tenant_rfq_read`, arrange/act/assert, one behaviour per test.
 - Keep dependencies minimal. Ask before adding a library.
 - After each change, run `ruff check` and `ruff format`.
+- A prompt change is a new `PROMPT_VERSION`, pushed with `make push-prompts` (needs a key, so the owner runs it)
+  and its `evals/prompts.json` entry committed in the same pull request; `make check` fails until it is.

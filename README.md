@@ -72,6 +72,17 @@ make pull-verified     # a golden finalized on Confident AI marks its case verif
 Nothing is pulled at run time. Every LLM span names the prompt it ran (alias, git version and,
 once pushed, the Prompt Studio commit), and the run's hyperparameters name the same.
 
+### Changing a prompt
+
+A prompt never changes under its version. The whole change is one pull request:
+
+1. Add the new text as `<id>_<version>.md` beside the old one and bump `PROMPT_VERSION` in the
+   module that runs it, with a note of what the version is for.
+2. `make push-prompts` (needs `CONFIDENT_API_KEY`): the text goes to Prompt Studio once and
+   `evals/prompts.json` records the commit. Commit that file with the prompt.
+3. Open the pull request; `make check` fails until step 2 is in it. Add `ready-for-live-verified`
+   to see the new version against the verified cases, linked to its Prompt Studio commit.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs `make check` on each push: lint, the unit and API tests and the
