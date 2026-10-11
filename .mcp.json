@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "confident-ai": {
+      "type": "http",
+      "url": "https://eu.mcp.confident-ai.com/mcp"
+    }
+  }
+}
