@@ -45,7 +45,7 @@ tokens and agreed price, a tool span per call, a refusal as an errored span), th
   (a denylist per case), the stock search uses exactly the extracted spec, no supplier named to
   the buyer, no loop; for letters, only the quoted figures, no supplier, only products we sell.
   A failed case fails the run, in every mode.
-- **Judged metrics report.** Task completion, role violation and misuse on the agent; letter
+- **Judged metrics report.** Task completion and role violation on the agent; letter
   quality (G-Eval), PII leakage, non-advice and toxicity on letters. All judged by `gpt-6-sol`
   and `flaky` in DeepEval's sense: scored and shown, never deciding a case. No calibration is
   claimed for them. The safety ones are read together with the trace tag `risk:security`.

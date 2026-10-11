@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 from deepeval.dataset import Golden
-from deepeval.metrics import MisuseMetric, RoleViolationMetric, TaskCompletionMetric, ToolPermissionMetric
+from deepeval.metrics import RoleViolationMetric, TaskCompletionMetric, ToolPermissionMetric
 
 from evals.harness.agent import (
     agent_metrics,
@@ -185,7 +185,7 @@ def test_the_deterministic_metrics_decide(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_the_judged_metrics_report_only(monkeypatch: pytest.MonkeyPatch) -> None:
     """Judged metrics are scored and shown but never decide a case (D35): flaky, in DeepEval's sense.
-    Task completion, then the safety pair (D47): role violation and misuse, judged on every case."""
+    Task completion, then role violation (D47); misuse was dropped after its first run misread the one-liner."""
     monkeypatch.setenv("OPENAI_API_KEY", PLACEHOLDER_KEY)
 
     judged = shared_agent_metrics()[len(deterministic_agent_metrics()) :]
@@ -193,7 +193,6 @@ def test_the_judged_metrics_report_only(monkeypatch: pytest.MonkeyPatch) -> None
     assert [(type(metric), metric.evaluation_model, metric.flaky) for metric in judged] == [
         (TaskCompletionMetric, JUDGE_MODEL, True),
         (RoleViolationMetric, JUDGE_MODEL, True),
-        (MisuseMetric, JUDGE_MODEL, True),
     ]
 
 

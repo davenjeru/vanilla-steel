@@ -29,9 +29,9 @@ F-numbers in `findings.md`.
 | Run-wide reports | Printed at the end of an eval | Fairness across counterfactual groups, cost per enquiry, latency, duplicate precision and recall | No: printed, never per case |
 
 Model-based grading is used for what code cannot read and never decides a case: whether the agent
-completed its task as a whole (`TaskCompletionMetric`), stayed in its role and inside steel
-procurement (`RoleViolationMetric`, `MisuseMetric`, the judged side of the prompt-injection cases,
-read with the trace tag `risk:security`); whether a cover letter reads as a sensible commercial
+completed its task as a whole (`TaskCompletionMetric`) and stayed in its role
+(`RoleViolationMetric`, the judged side of the prompt-injection cases, read with the trace tag
+`risk:security`); whether a cover letter reads as a sensible commercial
 letter (G-Eval), leaks no personal data, gives no legal, tax or customs advice and is not toxic.
 All are DeepEval `flaky` metrics: scored and shown, never failing a case. Their judge
 (`gpt-6-sol`) accepts no temperature, so its verdicts vary; no calibration against human labels
