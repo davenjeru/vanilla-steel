@@ -44,6 +44,20 @@ eval-agent:
 eval-quote-letter:
 	uv run --env-file .env python -m evals.run quote_letter $(VERIFIED_FLAG)
 
+## Prompt Studio and datasets on Confident AI (D42). Git stays the source of truth; nothing is pulled at run time.
+## Push each product prompt once per version and record its commit in evals/prompts.json (commit the file).
+push-prompts:
+	uv run --env-file .env python -m scripts.push_prompts
+
+## Push golden datasets, one alias per manifest version: verified cases finalized, the rest queued for review.
+## All datasets, or some: make push-datasets DATASETS="agent extraction"
+push-datasets:
+	uv run --env-file .env python -m scripts.push_datasets $(DATASETS)
+
+## Mark cases verified in git when their golden was finalized on Confident AI. Commit the changed case.json files.
+pull-verified:
+	uv run --env-file .env python -m scripts.pull_verified
+
 ## Run one golden case through the agent with Claude and print its trace: make run-agent CASE=agent-001-s355-plate-rfq
 ## Not an eval run, so its trace is not posted even with a Confident AI key in .env.
 run-agent:
