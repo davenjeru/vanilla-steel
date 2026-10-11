@@ -2,10 +2,11 @@
 
 One alias per dataset version (`agent-v9`): a case folder is the source of truth (D11), Confident AI
 is where a person reviews it. Verified cases are pushed finalized; unverified ones are queued for
-review, and scripts/pull_verified.py writes a review back to case.json. A golden's name is the
-case folder's name, which is how the two sides are matched.
+review, and scripts/pull_verified.py writes a review back to case.json. The case folder's name
+travels in the golden's metadata (`case`), which is how the two sides are matched: Confident AI
+keeps no name on a golden (seen on the first push, 2026-10-11), although the SDK sends one.
 
-Pushing appends: a golden pushed twice is two goldens. So a push first reads which names the alias
+Pushing appends: a golden pushed twice is two goldens. So a push first reads which cases the alias
 already holds, finalized and queued, and sends only the rest.
 """
 
@@ -63,7 +64,12 @@ def _pull(alias: str, finalized: bool) -> EvaluationDataset:
 
 
 def _names(dataset: EvaluationDataset) -> set[str]:
-    return {golden.name for golden in dataset.goldens if golden.name}
+    return {name for name in (case_name(golden) for golden in dataset.goldens) if name}
+
+
+def case_name(golden: Golden) -> str | None:
+    """The case a golden came from: its metadata `case`, or the name for a golden that still carries one."""
+    return (golden.additional_metadata or {}).get("case") or golden.name
 
 
 def _is_missing(error: ConfidentApiError) -> bool:

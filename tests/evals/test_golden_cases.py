@@ -88,6 +88,7 @@ def test_golden_fields_carry_input_labels_and_dataset_version(extraction_dataset
     assert fields["name"] == "en-001-sample-case"
     assert fields["input"] == case.email
     assert fields["additional_metadata"] == {
+        "case": "en-001-sample-case",
         "dataset": "extraction",
         "version": "7",
         "attachments": ["order.csv"],

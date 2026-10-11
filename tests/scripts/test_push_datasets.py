@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from deepeval.dataset import Golden
 
-from evals.harness.datasets import dataset_alias
+from evals.harness.datasets import case_name, dataset_alias
 from evals.harness.golden_cases import load_dataset, load_manifest
 from scripts.push_datasets import chosen_datasets, sync_dataset
 from tests.factories.golden_cases import valid_case_labels, write_case
@@ -84,16 +84,24 @@ def test_a_golden_already_on_the_alias_is_not_sent_again(extraction_dataset_dir:
     )
 
 
-def test_pushed_goldens_carry_the_case_name_and_its_labels(extraction_dataset_dir: Path) -> None:
-    """The name is how a review on Confident AI finds its way back to the case folder."""
+def test_pushed_goldens_carry_the_case_name_in_their_metadata(extraction_dataset_dir: Path) -> None:
+    """Confident AI keeps no name on a golden (seen on the first push), so the metadata `case` is how a
+    review finds its way back to the case folder, and how a second push knows what is already there."""
     two_cases(extraction_dataset_dir)
     store = FakeStore()
 
     sync_dataset("extraction-v3", load_dataset(extraction_dataset_dir), store)
 
     [golden] = store.pushed["extraction-v3"]
-    assert (golden.name, golden.expected_output is not None, (golden.additional_metadata or {})["verified"]) == (
+    assert (case_name(golden), (golden.additional_metadata or {})["case"], golden.expected_output is not None) == (
+        "de-001-reviewed",
         "de-001-reviewed",
         True,
-        True,
     )
+
+
+def test_a_golden_that_lost_its_name_is_still_matched_by_its_metadata() -> None:
+    """Shaped like Confident AI returns a golden: no name, metadata intact."""
+    pulled = Golden(input="email", additional_metadata={"case": "de-001-reviewed", "dataset": "extraction"})
+
+    assert case_name(pulled) == "de-001-reviewed"

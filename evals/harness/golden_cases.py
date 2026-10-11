@@ -256,6 +256,9 @@ class GoldenCase(BaseModel):
             "expected_tools": self._expected_tools(),
             "context": self._context(),
             "additional_metadata": {
+                # Confident AI keeps no name on a golden, so the case folder's name travels here and is
+                # how a pushed golden is matched back to its case (evals/harness/datasets.py).
+                "case": self.name,
                 "dataset": self.dataset,
                 "version": self.dataset_version,
                 "attachments": [path.name for path in self.attachments],
