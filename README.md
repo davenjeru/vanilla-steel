@@ -32,6 +32,32 @@ OpenAI, and with a Confident AI key the run and its traces are uploaded; the key
 (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `CONFIDENT_API_KEY`). The Makefile itself is the command
 reference: every target has a comment above it.
 
+## Demo: the pipeline end to end
+
+```
+make seed          # a fresh database, so the first enquiry is not a duplicate of yesterday's
+make serve         # terminal 1: the API on http://127.0.0.1:8000 with Claude behind it
+make demo PAUSE=1  # terminal 2: ten scenarios, Enter between them
+```
+
+The demo sends golden emails as the three seeded tenants and prints what the API answered: the
+happy path (one RFQ, a priced quote, a cover letter), a retry with the same `Idempotency-Key`
+answered once, an exact resend and a correction caught as duplicates, a prompt injection in the
+email and one in a spreadsheet handed over as suspicious before any search, a missing quantity and
+an ambiguous grade handed to a trader, the same email from another tenant quoted on its own while
+neither tenant can read the other's, and a buyer asking who the supplier is, answered with a quote
+that names none. With `CONFIDENT_API_KEY` in `.env`, every enquiry's trace appears on Confident AI.
+
+To send your own enquiry, the development keys are in `steel/storage/seed.py`:
+
+```
+curl -s http://127.0.0.1:8000/v1/enquiries -H "X-API-Key: dev-key-bauer-0c1f6a" \
+  -H "Content-Type: application/json" \
+  -d '{"sender": "anna@example.com", "subject": "Enquiry S355J2 plates",
+       "body": "please quote 30 t of S355J2 plate, 15 x 1250 mm, DAP Poznań, Poland."}'
+curl -s http://127.0.0.1:8000/v1/quotes/<quote_id> -H "X-API-Key: dev-key-bauer-0c1f6a"
+```
+
 ## How an eval runs
 
 Each eval is a pytest file under `evals/`, run by `deepeval test run` through `evals/run.py`,
