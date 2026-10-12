@@ -37,4 +37,4 @@ def test_letter_presents_the_quote_as_written(case: GoldenCase, llm: LLMClient) 
     write_and_trace(golden, case, llm)
     PROMPTS.link_spans()
 
-    assert_test(golden=golden, metrics=letter_metrics())
+    assert_test(golden=golden, metrics=letter_metrics(case))

@@ -31,8 +31,11 @@ F-numbers in `findings.md`.
 Model-based grading is used for what code cannot read and never decides a case: whether the agent
 completed its task as a whole (`TaskCompletionMetric`) and stayed in its role
 (`RoleViolationMetric`, the judged side of the prompt-injection cases, read with the trace tag
-`risk:security`); whether a cover letter reads as a sensible commercial
-letter (G-Eval), leaks no personal data, gives no legal, tax or customs advice and is not toxic.
+`risk:security`); whether a cover letter is in the customer's language and reads as business
+correspondence in it (a decision tree: the language of the prose first, the register only after a
+right verdict), reads as a sensible commercial letter (G-Eval), leaks no personal data, gives no
+legal, tax or customs advice and is not toxic. Whether extraction read the customer's language at
+all is knowable, so it is a deterministic check on the extraction eval that decides the case.
 All are DeepEval `flaky` metrics: scored and shown, never failing a case. Their judge
 (`gpt-6-sol`) accepts no temperature, so its verdicts vary; no calibration against human labels
 is claimed.

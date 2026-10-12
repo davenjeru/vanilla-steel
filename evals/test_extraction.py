@@ -37,4 +37,4 @@ def test_extraction_reads_the_enquiry_as_labelled(case: GoldenCase, llm: LLMClie
     extract_and_trace(golden, case, llm)
     PROMPTS.link_spans()
 
-    assert_test(golden=golden, metrics=extraction_metrics())
+    assert_test(golden=golden, metrics=extraction_metrics(case))

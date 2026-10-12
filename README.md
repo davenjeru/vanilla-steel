@@ -13,7 +13,7 @@ release, and how golden data, prompts and runs stay traceable.
 
 | Risk | What must hold | Where it is checked |
 |---|---|---|
-| Extraction accuracy | Grade, dimensions, tonnage, coating, Incoterm, delivery place and date are correct and normalised (St37-2 is S235JR, kg becomes t); nothing is guessed | `tests/unit/` (normalisation), `evals/test_extraction.py` (14 fields per golden case) |
+| Extraction accuracy | Grade, dimensions, tonnage, coating, Incoterm, delivery place and date are correct and normalised (St37-2 is S235JR, kg becomes t); nothing is guessed; the customer's language is read, since the quote letter is written in it | `tests/unit/` (normalisation), `evals/test_extraction.py` (14 fields and the language per golden case) |
 | Data separation | No tenant reads or affects another's data; a buyer never learns who the supplier is | `tests/api/` (cross-tenant reads, idempotency keys), `tests/agent/test_runner.py` (the run acts for one tenant), "Reveals no supplier to the buyer" and the letter checks in `evals/test_agent.py` |
 | Duplication | A resend, forward or reworded repeat never becomes a second RFQ; a correction is handed over, not re-ordered | `tests/unit/test_duplicates.py`, `evals/test_duplicates.py` (18 labelled pairs, precision and recall), the duplicate cases in `evals/test_agent.py` |
 | Business correctness | Matches respect hard constraints, ranking is by delivered cost, the agent escalates when unsure instead of guessing | `tests/unit/test_matching_golden_cases.py`, `evals/test_agent.py` (decision, exact tool path, denylist per case, spec passed on unchanged), run-wide fairness, cost and latency reports |
@@ -45,8 +45,10 @@ tokens and agreed price, a tool span per call, a refusal as an errored span), th
   (a denylist per case), the stock search uses exactly the extracted spec, no supplier named to
   the buyer, no loop; for letters, only the quoted figures, no supplier, only products we sell.
   A failed case fails the run, in every mode.
-- **Judged metrics report.** Task completion and role violation on the agent; letter
-  quality (G-Eval), PII leakage, non-advice and toxicity on letters. All judged by `gpt-6-sol`
+- **Judged metrics report.** Task completion and role violation on the agent; on letters, a
+  decision tree for the language (which language is the prose in, and only then: does it read as
+  a business letter in that language), letter quality (G-Eval), PII leakage, non-advice and
+  toxicity. All judged by `gpt-6-sol`
   and `flaky` in DeepEval's sense: scored and shown, never deciding a case. No calibration is
   claimed for them. The safety ones are read together with the trace tag `risk:security`.
 - **Run-wide reports print at the end.** Fairness across counterfactual groups (the same order in
@@ -99,7 +101,7 @@ to Confident AI (D43). There is no schedule.
 
 ## Where things are decided
 
-- `docs/plan.md`: every design decision, numbered (D1 to D42), the interfaces per slice and the
+- `docs/plan.md`: every design decision, numbered (D1 to D48), the interfaces per slice and the
   planned metrics with their status.
 - `docs/findings.md`: every failure the harness found, its cause, and what was done (F-001 to F-013).
 - `docs/test-strategy.md`: the layers, what gates, and what is deliberately not covered.

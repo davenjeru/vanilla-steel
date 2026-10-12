@@ -32,10 +32,18 @@ COMPONENT_VERSION = "quote-letter-v2"  # v2: letter prompt v2
 SETTINGS = Settings()
 
 
-def letter_metrics() -> list[BaseMetric]:
-    """Fresh instances each call: a metric keeps its last score, and the same list serves every letter."""
+def letter_metrics(case: GoldenCase) -> list[BaseMetric]:
+    """Fresh instances per case: a metric keeps its last score, and the language check is the case's."""
     deterministic: list[BaseMetric] = [UsesOnlyTheQuotedFigures(), NamesNoSupplier(), NamesOnlyProductsWeSell()]
-    return deterministic + judged_letter_metrics()
+    return deterministic + judged_letter_metrics(customer_language(case))
+
+
+def customer_language(case: GoldenCase) -> str:
+    """The language the letter must be in: the case's label, English for a customer whose language was
+    not detected (letter-004). The loader requires it on every letter case."""
+    if case.labels.language is None:
+        raise ValueError(f"{case.name}: quote-letter case has no language")
+    return case.labels.language
 
 
 def run_hyperparameters(prompts: PromptLinks) -> dict[str, Any]:
