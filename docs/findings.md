@@ -296,9 +296,14 @@ expected path without the repeat) and "Searches with the extracted spec" fails w
 `incoterm: extracted None, searched 'DAP'`. Decision and reason (`no_stock`) pass. This is the one
 red case in CI (D39: replay failures fail the build) and serves as the regression demo for Slice 6.
 
-**Open.** Proposed fix, agent prompt v5: after a refused tool call, the agent restates the facts
-from the tool's answer before acting, and a hand-over note may only contain values the extracted
-spec holds. Needs a re-record of agent-024 and the counterfactual German cases.
+**Fix in agent prompt v5** (2026-10-11): the spec is the only account of the order; a warning that
+names a value means the value was rejected, not that it applies; the search carries the spec's
+fields and nothing more; an escalation detail states only what the spec holds and writes a lacking
+field as "not stated"; after a refusal, the refused value is dropped from everything said afterwards.
+The root of this case was the second rule: extraction had rejected DAP with the warning
+"incoterm: DAP is not stated in the enquiry", and the agent read the warning as the value. Verified
+by the labelled live run of the pull request that carries v5; agent-024's expectations are
+unchanged, so the same eval that found the bug confirms the fix.
 
 ## F-014: The eval's root span uploaded the sandbox result, suppliers included
 
